@@ -3,6 +3,8 @@ import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
+import { deleteObject, ref as storageRef } from 'firebase/storage';
+import { storage } from '../firebase';
 import {
   TrendingUp,
   Users,
@@ -609,14 +611,34 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     reader.readAsDataURL(file);
   };
 
+  const safeDeleteStorageFile = async (url?: string) => {
+    if (!url || !url.startsWith('http') || !url.includes('firebasestorage')) {
+      return;
+    }
+    try {
+      const fileRef = storageRef(storage, url);
+      await deleteObject(fileRef);
+      console.log('Firebase Storage payment receipt deleted successfully:', url);
+    } catch (err) {
+      console.warn('Failed to delete payment receipt from Firebase Storage:', err);
+    }
+  };
+
   const handleVerifyPayment = (orderId: string) => {
     const currentOrders = dbLocal.getOrders();
     const idx = currentOrders.findIndex(o => o.id === orderId);
     if (idx > -1) {
       const originalOrder = currentOrders[idx];
+      
+      // Auto-delete screenshot from storage
+      if (originalOrder.paymentProofUrl) {
+        safeDeleteStorageFile(originalOrder.paymentProofUrl);
+      }
+
       const updatedOrder: Order = {
         ...originalOrder,
         status: 'Paid',
+        paymentProofUrl: '', // Auto delete/clear payment receipt
         timeline: [
           ...(originalOrder.timeline || []),
           {
@@ -632,7 +654,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             performedBy: currentUser?.name || 'Administrator',
             performedByRole: 'admin',
             timestamp: new Date().toISOString(),
-            note: `Validated transaction and cleared receipt.`
+            note: `Validated transaction and cleared receipt. Payment screenshot auto-deleted.`
           }
         ]
       };
@@ -668,9 +690,16 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     const idx = currentOrders.findIndex(o => o.id === orderId);
     if (idx > -1) {
       const originalOrder = currentOrders[idx];
+
+      // Auto-delete screenshot from storage
+      if (originalOrder.paymentProofUrl) {
+        safeDeleteStorageFile(originalOrder.paymentProofUrl);
+      }
+
       const updatedOrder: Order = {
         ...originalOrder,
         status: 'Pending Payment',
+        paymentProofUrl: '', // Auto delete/clear payment receipt
         paymentRejectionReason: rejectionReasonText.trim(),
         timeline: [
           ...(originalOrder.timeline || []),
@@ -687,7 +716,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             performedBy: currentUser?.name || 'Administrator',
             performedByRole: 'admin',
             timestamp: new Date().toISOString(),
-            note: `Rejected payment receipt. Reason: ${rejectionReasonText.trim()}`
+            note: `Rejected payment receipt. Reason: ${rejectionReasonText.trim()}. Payment screenshot auto-deleted.`
           }
         ]
       };

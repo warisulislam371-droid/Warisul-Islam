@@ -60,6 +60,14 @@ export default function VendorProductManager({
   const [showBrandRequestModal, setShowBrandRequestModal] = useState(false);
   const [analyticsModalProduct, setAnalyticsModalProduct] = useState<Product | null>(null);
 
+  // Bulk Upload CSV Modal States
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [csvProducts, setCsvProducts] = useState<Partial<Product>[]>([]);
+  const [csvErrors, setCsvErrors] = useState<string[]>([]);
+  const [csvWarnings, setCsvWarnings] = useState<string[]>([]);
+  const [importStatus, setImportStatus] = useState<'idle' | 'parsing' | 'validated' | 'success'>('idle');
+  const [bulkImportAs, setBulkImportAs] = useState<'Draft' | 'Pending'>('Draft');
+
   // New Category / Brand Request Form State
   const [reqCatName, setReqCatName] = useState('');
   const [reqCatDesc, setReqCatDesc] = useState('');
@@ -431,6 +439,400 @@ export default function VendorProductManager({
     showToast('Exported product catalog to CSV.');
   };
 
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'Product Name',
+      'SKU',
+      'Model Number',
+      'Brand',
+      'Category',
+      'Subcategory',
+      'Description',
+      'Vendor Price',
+      'Stock',
+      'MOQ',
+      'HSN Code',
+      'GST Rate',
+      'Warranty',
+      'Country of Origin',
+      'Unit',
+      'Image URLs'
+    ];
+    
+    const sampleRows = [
+      [
+        'Premium Clinical Ventilator V1',
+        `VENT-${Math.floor(1000 + Math.random() * 9000)}`,
+        'V1-PRO',
+        brands[0]?.name || 'Philips',
+        categories[0]?.name || 'Critical Care',
+        'Ventilators',
+        'Clinical-grade medical ventilator with micro-processor control and multi-mode support.',
+        '95000',
+        '15',
+        '1',
+        '9018',
+        '12',
+        '2 Years Warranty',
+        'India',
+        'Piece',
+        'https://images.unsplash.com/photo-1516549655169-df83a0774514'
+      ],
+      [
+        'Digital Upper Arm BP Monitor',
+        `BPM-${Math.floor(1000 + Math.random() * 9000)}`,
+        'BP-702',
+        brands[1]?.name || 'Omron',
+        categories[1]?.name || 'Diagnostics',
+        'Monitors',
+        'Fully automatic BP monitor with Intellisense technology and irregular heartbeat detector.',
+        '1800',
+        '120',
+        '5',
+        '9018',
+        '18',
+        '1 Year Manufacturer Warranty',
+        'India',
+        'Piece',
+        'https://images.unsplash.com/photo-1584036561566-baf241f29422'
+      ]
+    ];
+
+    const csvContent = 'data:text/csv;charset=utf-8,' 
+      + [
+          headers.join(','), 
+          ...sampleRows.map(r => r.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+        
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'healnex_bulk_products_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Download started for Healnex Bulk Products CSV Template!');
+  };
+
+  const findHeaderIndex = (headers: string[], matches: string[]): number => {
+    return headers.findIndex(h => matches.includes(h.toLowerCase().trim()));
+  };
+
+  const parseCSVString = (text: string): string[][] => {
+    const lines: string[][] = [];
+    let row: string[] = [];
+    let inQuotes = false;
+    let currentVal = '';
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          currentVal += '"';
+          i++; // skip next quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        row.push(currentVal.trim());
+        currentVal = '';
+      } else if ((char === '\r' || char === '\n') && !inQuotes) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        row.push(currentVal.trim());
+        if (row.length > 1 || row[0] !== '') {
+          lines.push(row);
+        }
+        row = [];
+        currentVal = '';
+      } else {
+        currentVal += char;
+      }
+    }
+    if (currentVal || row.length > 0) {
+      row.push(currentVal.trim());
+      lines.push(row);
+    }
+    return lines;
+  };
+
+  const handleCsvFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportStatus('parsing');
+    setCsvErrors([]);
+    setCsvWarnings([]);
+    setCsvProducts([]);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) {
+        setCsvErrors(['Could not read file content. Please ensure it is a valid CSV.']);
+        setImportStatus('idle');
+        return;
+      }
+
+      try {
+        const rows = parseCSVString(text);
+        if (rows.length < 2) {
+          setCsvErrors(['The CSV file must contain a header row and at least one product row.']);
+          setImportStatus('idle');
+          return;
+        }
+
+        const headers = rows[0].map(h => h.trim().toLowerCase());
+        
+        // Find indices
+        const nameIdx = findHeaderIndex(headers, ['product name', 'name', 'title', 'producttitle']);
+        const skuIdx = findHeaderIndex(headers, ['sku', 'productsku', 'part number']);
+        const brandIdx = findHeaderIndex(headers, ['brand', 'manufacturer', 'mfr']);
+        const catIdx = findHeaderIndex(headers, ['category', 'productcategory']);
+        const vendorPriceIdx = findHeaderIndex(headers, ['vendor price', 'vendorprice', 'price', 'cost', 'purchase price']);
+        
+        // Optional indices
+        const modelIdx = findHeaderIndex(headers, ['model number', 'model', 'modelno']);
+        const subcatIdx = findHeaderIndex(headers, ['subcategory', 'subcat']);
+        const descIdx = findHeaderIndex(headers, ['description', 'shortdescription', 'short description', 'details']);
+        const stockIdx = findHeaderIndex(headers, ['stock', 'stock quantity', 'stockquantity', 'quantity', 'qty']);
+        const moqIdx = findHeaderIndex(headers, ['moq', 'minimum order qty', 'min order']);
+        const hsnIdx = findHeaderIndex(headers, ['hsn', 'hsn code', 'hsncode']);
+        const gstIdx = findHeaderIndex(headers, ['gst', 'gst rate', 'gstrate', 'tax']);
+        const warrantyIdx = findHeaderIndex(headers, ['warranty']);
+        const countryIdx = findHeaderIndex(headers, ['country', 'country of origin', 'countryoforigin', 'made in']);
+        const unitIdx = findHeaderIndex(headers, ['unit', 'packaging']);
+        const imagesIdx = findHeaderIndex(headers, ['images', 'image urls', 'image', 'imageurl']);
+
+        // Check required fields
+        const missingRequired: string[] = [];
+        if (nameIdx === -1) missingRequired.push('Product Name');
+        if (skuIdx === -1) missingRequired.push('SKU');
+        if (brandIdx === -1) missingRequired.push('Brand');
+        if (catIdx === -1) missingRequired.push('Category');
+        if (vendorPriceIdx === -1) missingRequired.push('Vendor Price');
+
+        if (missingRequired.length > 0) {
+          setCsvErrors([
+            `Missing required column headers: ${missingRequired.join(', ')}.`,
+            'Please use the provided template to ensure matching column headers.'
+          ]);
+          setImportStatus('idle');
+          return;
+        }
+
+        const parsedProducts: any[] = [];
+        const errorsList: string[] = [];
+        const warningsList: string[] = [];
+        const uniqueSkusInCsv = new Set<string>();
+        const existingProducts = dbLocal.getProducts();
+
+        const systemCategories = categories.map(c => c.name.toLowerCase());
+        const systemBrands = brands.map(b => b.name.toLowerCase());
+
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const lineNum = i + 1;
+
+          // Skip empty rows
+          if (row.length === 0 || (row.length === 1 && row[0] === '')) continue;
+
+          const pName = row[nameIdx]?.trim() || '';
+          const pSku = row[skuIdx]?.trim() || '';
+          const pBrand = row[brandIdx]?.trim() || '';
+          const pCat = row[catIdx]?.trim() || '';
+          const pVendorPriceRaw = row[vendorPriceIdx]?.trim() || '';
+
+          // Validate required fields are not empty
+          if (!pName) {
+            errorsList.push(`Line ${lineNum}: "Product Name" is empty.`);
+            continue;
+          }
+          if (!pSku) {
+            errorsList.push(`Line ${lineNum}: "SKU" is empty for "${pName}".`);
+            continue;
+          }
+          if (!pBrand) {
+            errorsList.push(`Line ${lineNum}: "Brand" is empty for "${pName}".`);
+            continue;
+          }
+          if (!pCat) {
+            errorsList.push(`Line ${lineNum}: "Category" is empty for "${pName}".`);
+            continue;
+          }
+          if (!pVendorPriceRaw) {
+            errorsList.push(`Line ${lineNum}: "Vendor Price" is empty for "${pName}".`);
+            continue;
+          }
+
+          const vendorPrice = parseFloat(pVendorPriceRaw);
+          if (isNaN(vendorPrice) || vendorPrice <= 0) {
+            errorsList.push(`Line ${lineNum}: "Vendor Price" must be a positive number (found: "${pVendorPriceRaw}") for "${pName}".`);
+            continue;
+          }
+
+          // Check duplicate SKU in CSV
+          const skuLower = pSku.toLowerCase();
+          if (uniqueSkusInCsv.has(skuLower)) {
+            errorsList.push(`Line ${lineNum}: SKU "${pSku}" is duplicated in this CSV file.`);
+            continue;
+          }
+          uniqueSkusInCsv.add(skuLower);
+
+          // Check duplicate SKU in database
+          const duplicateDb = existingProducts.find(dbProd => dbProd.sku.toLowerCase() === skuLower);
+          if (duplicateDb) {
+            errorsList.push(`Line ${lineNum}: SKU "${pSku}" already exists in the catalog (registered to "${duplicateDb.name}"). SKUs must be unique.`);
+            continue;
+          }
+
+          // Warning check: category exists
+          if (!systemCategories.includes(pCat.toLowerCase())) {
+            warningsList.push(`Line ${lineNum}: Category "${pCat}" is not recognized in HealNex. It will be imported, but we recommend requesting this category to ensure catalog visibility.`);
+          }
+
+          // Warning check: brand exists
+          if (!systemBrands.includes(pBrand.toLowerCase())) {
+            warningsList.push(`Line ${lineNum}: Brand "${pBrand}" is not registered in HealNex. It will be imported, but you may want to submit a Brand Request later.`);
+          }
+
+          // Parse optional fields
+          const modelNumber = modelIdx !== -1 ? row[modelIdx]?.trim() || '' : '';
+          const subcategory = subcatIdx !== -1 ? row[subcatIdx]?.trim() || pCat : pCat;
+          const description = descIdx !== -1 ? row[descIdx]?.trim() || pName : pName;
+          
+          const stockRaw = stockIdx !== -1 ? row[stockIdx]?.trim() || '10' : '10';
+          const stockQuantity = parseInt(stockRaw, 10);
+          
+          const moqRaw = moqIdx !== -1 ? row[moqIdx]?.trim() || '1' : '1';
+          const moq = parseInt(moqRaw, 10);
+
+          const hsnCode = hsnIdx !== -1 ? row[hsnIdx]?.trim() || '9018' : '9018';
+          
+          const gstRaw = gstIdx !== -1 ? row[gstIdx]?.trim() || '12' : '12';
+          const gstRate = parseInt(gstRaw, 10);
+
+          const warranty = warrantyIdx !== -1 ? row[warrantyIdx]?.trim() || '1 Year Manufacturer Warranty' : '1 Year Manufacturer Warranty';
+          const countryOfOrigin = countryIdx !== -1 ? row[countryIdx]?.trim() || 'India' : 'India';
+          const unit = unitIdx !== -1 ? row[unitIdx]?.trim() || 'Piece' : 'Piece';
+
+          // Images
+          let imagesList = ['https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800'];
+          if (imagesIdx !== -1 && row[imagesIdx]) {
+            const rawImgs = row[imagesIdx].split(';').map(u => u.trim()).filter(Boolean);
+            if (rawImgs.length > 0) {
+              imagesList = rawImgs;
+            }
+          }
+
+          const commRate = dbLocal.getProductCommissionRate(vendor.id, pCat, pBrand);
+          const commAmt = Math.round((vendorPrice * commRate) / 100);
+          const custPrice = vendorPrice + commAmt;
+
+          const prodData: Partial<Product> = {
+            id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            vendorId: vendor.id,
+            vendorName: vendor.companyName,
+            name: pName,
+            sku: pSku,
+            modelNumber: modelNumber,
+            brand: pBrand,
+            category: pCat,
+            subcategory: subcategory,
+            description: description,
+            shortDescription: description,
+            fullDescription: description,
+            vendorPrice: vendorPrice,
+            commissionPercent: commRate,
+            commissionAmount: commAmt,
+            customerPrice: custPrice,
+            price: custPrice,
+            mrp: Math.round(custPrice * 1.2),
+            salePrice: custPrice,
+            wholesalePrice: custPrice,
+            stockQuantity: isNaN(stockQuantity) ? 10 : stockQuantity,
+            moq: isNaN(moq) ? 1 : moq,
+            hsnCode: hsnCode,
+            gstRate: isNaN(gstRate) ? 12 : gstRate,
+            warranty: warranty,
+            countryOfOrigin: countryOfOrigin,
+            unit: unit,
+            images: imagesList,
+            specifications: [
+              { key: 'Warranty', value: warranty },
+              { key: 'Country of Origin', value: countryOfOrigin }
+            ],
+            performance: { views: 0, inquiries: 0, sales: 0 }
+          };
+
+          parsedProducts.push(prodData);
+        }
+
+        setCsvProducts(parsedProducts);
+        setCsvErrors(errorsList);
+        setCsvWarnings(warningsList);
+        setImportStatus('validated');
+
+        if (parsedProducts.length === 0 && errorsList.length === 0) {
+          setCsvErrors(['The CSV file contained no valid data rows.']);
+          setImportStatus('idle');
+        }
+      } catch (err) {
+        console.error(err);
+        setCsvErrors(['An error occurred while parsing the CSV. Please check the file formatting.']);
+        setImportStatus('idle');
+      }
+    };
+
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleConfirmImport = () => {
+    if (csvProducts.length === 0) return;
+
+    const now = new Date().toISOString();
+    const finalProductsToImport = csvProducts.map(p => ({
+      ...p,
+      status: bulkImportAs,
+      published: false,
+      isActive: false,
+      createdAt: now,
+      updatedAt: now
+    })) as Product[];
+
+    finalProductsToImport.forEach(prod => {
+      dbLocal.addProduct(prod);
+      
+      if (prod.status === 'Pending') {
+        dbLocal.addNotification(
+          'admin',
+          `Bulk Product uploaded: ${prod.name}`,
+          `Vendor "${vendor.companyName}" has uploaded a bulk product "${prod.name}" (SKU: ${prod.sku}) via CSV.`,
+          'info'
+        );
+      }
+    });
+
+    dbLocal.addNotification(
+      vendor.id,
+      `Bulk CSV Import Successful`,
+      `Successfully imported ${finalProductsToImport.length} products as ${bulkImportAs === 'Draft' ? 'Drafts' : 'Pending Administrative Review'}.`,
+      'success'
+    );
+
+    showToast(`Successfully imported ${finalProductsToImport.length} products into your catalog!`);
+    setShowBulkUploadModal(false);
+    setCsvProducts([]);
+    setCsvErrors([]);
+    setCsvWarnings([]);
+    setImportStatus('idle');
+    onRefresh();
+  };
+
   return (
     <div className="space-y-6">
       {toastMessage && (
@@ -466,6 +868,13 @@ export default function VendorProductManager({
           >
             <Download className="w-4 h-4" />
             Export CSV
+          </button>
+          <button
+            onClick={() => setShowBulkUploadModal(true)}
+            className="bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-xs px-4 py-2.5 rounded-xl transition border border-teal-200 flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Bulk Upload (CSV)
           </button>
           <button
             onClick={() => setShowCategoryRequestModal(true)}
@@ -1374,6 +1783,300 @@ export default function VendorProductManager({
                 >
                   <ShieldCheck className="w-4 h-4" />
                   Submit for Approval
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Bulk CSV Upload Modal */}
+      {showBulkUploadModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden my-auto">
+            
+            {/* Modal Header */}
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-teal-500/20 text-teal-400 rounded-xl border border-teal-500/30">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold">Bulk CSV Product Onboarding Hub</h3>
+                  <p className="text-[11px] text-slate-400">Import hundreds of medical devices, diagnostic monitors, or clinical products in seconds.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowBulkUploadModal(false);
+                  setCsvProducts([]);
+                  setCsvErrors([]);
+                  setCsvWarnings([]);
+                  setImportStatus('idle');
+                }} 
+                className="p-2 text-slate-400 hover:text-white rounded-lg transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto space-y-6 text-xs font-semibold text-slate-700 flex-1">
+              
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Upload Section */}
+                <div className="lg:col-span-2 space-y-5">
+                  <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200/60 space-y-4">
+                    <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-teal-600" />
+                      1. Upload Product CSV File
+                    </h4>
+                    
+                    <div className="border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center bg-white hover:border-teal-600 transition relative group cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleCsvFileSelect}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      />
+                      <div className="space-y-2 pointer-events-none">
+                        <div className="p-3 bg-slate-100 text-slate-600 rounded-full w-12 h-12 flex items-center justify-center mx-auto group-hover:bg-teal-50 group-hover:text-teal-700 transition">
+                          <Upload className="w-6 h-6" />
+                        </div>
+                        <p className="text-xs font-extrabold text-slate-800">
+                          Click to select or drag & drop CSV file
+                        </p>
+                        <p className="text-[10px] text-slate-400">
+                          Only standard .csv files are supported. Maximum file size 10MB.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-teal-50/50 p-4 rounded-xl border border-teal-100 text-[11px] text-teal-900">
+                      <div className="space-y-0.5">
+                        <span className="font-bold block">Need the standard import format?</span>
+                        <span className="text-slate-500">Download our sample template containing the exact columns mapped for HealNex.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDownloadTemplate}
+                        className="bg-white hover:bg-teal-100 text-teal-800 border border-teal-200 font-extrabold px-3 py-2 rounded-lg transition shrink-0 flex items-center gap-1.5"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Download Template
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Parse results and statistics */}
+                  {importStatus !== 'idle' && (
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                      <h4 className="text-sm font-extrabold text-slate-900">Import Verification Results</h4>
+                      
+                      {importStatus === 'parsing' && (
+                        <div className="py-6 flex flex-col items-center justify-center gap-3 text-slate-400">
+                          <div className="w-6 h-6 border-2 border-teal-700 border-t-transparent rounded-full animate-spin"></div>
+                          <span className="text-xs font-bold">Parsing & validating CSV records...</span>
+                        </div>
+                      )}
+
+                      {importStatus === 'validated' && (
+                        <div className="space-y-4">
+                          {/* Stat Grid */}
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl text-center">
+                              <span className="text-lg font-extrabold text-emerald-800 block">{csvProducts.length}</span>
+                              <span className="text-[10px] font-bold text-emerald-600 uppercase">Valid Records</span>
+                            </div>
+                            <div className="bg-rose-50 border border-rose-200 p-3.5 rounded-xl text-center">
+                              <span className="text-lg font-extrabold text-rose-800 block">{csvErrors.length}</span>
+                              <span className="text-[10px] font-bold text-rose-600 uppercase">Errors (Skipped)</span>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl text-center">
+                              <span className="text-lg font-extrabold text-amber-800 block">{csvWarnings.length}</span>
+                              <span className="text-[10px] font-bold text-amber-600 uppercase">Warnings</span>
+                            </div>
+                          </div>
+
+                          {/* Errors log if any */}
+                          {csvErrors.length > 0 && (
+                            <div className="bg-rose-50/70 border border-rose-100 p-4 rounded-xl text-xs space-y-1.5 max-h-40 overflow-y-auto">
+                              <div className="font-extrabold text-rose-800 flex items-center gap-1.5">
+                                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                                <span>Critical Formatting Errors (These rows will be ignored)</span>
+                              </div>
+                              <ul className="list-disc pl-5 space-y-1 text-[11px] text-rose-700 font-medium">
+                                {csvErrors.map((err, idx) => (
+                                  <li key={idx}>{err}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Warnings log if any */}
+                          {csvWarnings.length > 0 && (
+                            <div className="bg-amber-50/70 border border-amber-100 p-4 rounded-xl text-xs space-y-1.5 max-h-40 overflow-y-auto">
+                              <div className="font-extrabold text-amber-800 flex items-center gap-1.5">
+                                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                                <span>Onboarding Advisory Warnings</span>
+                              </div>
+                              <ul className="list-disc pl-5 space-y-1 text-[11px] text-amber-700 font-medium">
+                                {csvWarnings.map((warn, idx) => (
+                                  <li key={idx}>{warn}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Preview Table of valid items */}
+                          {csvProducts.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-extrabold text-slate-800 uppercase tracking-wider">Product Catalog Preview (First 5 Rows)</span>
+                                <span className="text-[10px] text-slate-400 font-medium">Auto-calculates local vendor commission</span>
+                              </div>
+                              
+                              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                <table className="w-full text-left border-collapse">
+                                  <thead>
+                                    <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                                      <th className="p-2.5 pl-3">Product Name</th>
+                                      <th className="p-2.5">SKU</th>
+                                      <th className="p-2.5">Brand</th>
+                                      <th className="p-2.5 text-right">Vendor Cost</th>
+                                      <th className="p-2.5 text-right pr-3">Customer Price</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 text-[11px]">
+                                    {csvProducts.slice(0, 5).map((p, idx) => (
+                                      <tr key={idx} className="hover:bg-slate-50">
+                                        <td className="p-2.5 pl-3 font-bold text-slate-950 max-w-[140px] truncate" title={p.name}>{p.name}</td>
+                                        <td className="p-2.5 font-mono text-slate-500 font-medium">{p.sku}</td>
+                                        <td className="p-2.5 text-slate-700 font-bold">{p.brand}</td>
+                                        <td className="p-2.5 text-right font-bold text-slate-600">₹{(p.vendorPrice || 0).toLocaleString()}</td>
+                                        <td className="p-2.5 text-right font-extrabold text-teal-700 pr-3">₹{(p.customerPrice || 0).toLocaleString()}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                                {csvProducts.length > 5 && (
+                                  <div className="bg-slate-50 p-2 text-center text-[10px] text-slate-500 font-bold border-t border-slate-200">
+                                    + {csvProducts.length - 5} more products in queue...
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                        </div>
+                      )}
+
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Sidebar Rules */}
+                <div className="space-y-5">
+                  <div className="bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 space-y-4">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-teal-400">Onboarding Catalog Rules</h4>
+                    
+                    <div className="space-y-3.5 text-[11px] text-slate-300 leading-relaxed font-medium">
+                      <div className="border-l-2 border-teal-500 pl-3">
+                        <span className="font-bold text-white block mb-0.5">Automated Commission & Tax</span>
+                        The system automatically fetches commission rules based on Category and Brand. Final Customer prices are generated instantly.
+                      </div>
+                      <div className="border-l-2 border-teal-500 pl-3">
+                        <span className="font-bold text-white block mb-0.5">HSN & Regulatory Standards</span>
+                        Default HSN code for medical instruments is set to <code className="bg-slate-800 px-1 py-0.5 rounded font-mono text-teal-300">9018</code> with a default GST tax bracket of <code className="bg-slate-800 px-1 py-0.5 rounded font-mono text-teal-300">12%</code>.
+                      </div>
+                      <div className="border-l-2 border-teal-500 pl-3">
+                        <span className="font-bold text-white block mb-0.5">Image & Brochure Parsing</span>
+                        Use semicolon (<code className="text-teal-300 font-mono">;</code>) to separate multiple image URLs. Standard medical placeholder illustrations are used as a fallback if omitted.
+                      </div>
+                      <div className="border-l-2 border-teal-500 pl-3">
+                        <span className="font-bold text-white block mb-0.5">Safety & Audits</span>
+                        All products submitted directly for approval undergo rigorous Admin inspection. SKUs must be unique across the platform.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Config Setup */}
+                  {csvProducts.length > 0 && (
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/60 space-y-3.5">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">2. Configuration Settings</h4>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-slate-700 font-bold">Import Status Workflow</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setBulkImportAs('Draft')}
+                            className={`p-3 rounded-xl border text-center transition ${
+                              bulkImportAs === 'Draft'
+                                ? 'bg-slate-900 border-slate-950 text-white font-extrabold shadow'
+                                : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-600 font-bold'
+                            }`}
+                          >
+                            Import as Drafts
+                            <span className="block text-[9px] font-medium opacity-80 mt-0.5">Review before submission</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBulkImportAs('Pending')}
+                            className={`p-3 rounded-xl border text-center transition ${
+                              bulkImportAs === 'Pending'
+                                ? 'bg-teal-700 border-teal-800 text-white font-extrabold shadow'
+                                : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-600 font-bold'
+                            }`}
+                          >
+                            Submit for Audit
+                            <span className="block text-[9px] font-medium opacity-80 mt-0.5">Direct admin approval</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+              <span className="text-xs text-slate-500">
+                Bulk onboarding operations comply with standard CSV RFC 4180 specifications.
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBulkUploadModal(false);
+                    setCsvProducts([]);
+                    setCsvErrors([]);
+                    setCsvWarnings([]);
+                    setImportStatus('idle');
+                  }}
+                  className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold px-5 py-3 rounded-xl text-xs transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={csvProducts.length === 0}
+                  onClick={handleConfirmImport}
+                  className={`font-extrabold px-6 py-3 rounded-xl text-xs shadow-lg transition flex items-center gap-2 ${
+                    csvProducts.length > 0
+                      ? 'bg-teal-700 hover:bg-teal-800 text-white cursor-pointer'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  Confirm Import of {csvProducts.length} Products
                 </button>
               </div>
             </div>
