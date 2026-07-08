@@ -617,11 +617,6 @@ export default function CustomerPanel({
       return;
     }
     if (cart.length === 0) return;
-    if (!manualProofUrl) {
-      addToast('Please upload a valid payment proof screenshot before submitting.', 'error');
-      return;
-    }
-
     setCheckoutStep('processing');
 
     try {
@@ -2336,92 +2331,8 @@ export default function CustomerPanel({
                       </div>
                     }
                   </div>
-                )}
-              </div>
-
-                {/* Screenshot Upload with Progress */}
+                 {/* Transaction Inputs */}
                 <div className="space-y-3 pt-3 border-t border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                      <Upload className="w-4 h-4 text-teal-700" />
-                      Upload Payment Screenshot *
-                    </h4>
-                    <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
-                      Mandatory Required *
-                    </span>
-                  </div>
-                  
-                  {/* File Dropzone */}
-                  <div
-                    onDragEnter={handleDrag}
-                    onDragOver={handleDrag}
-                    onDragLeave={handleDrag}
-                    onDrop={handleDrop}
-                    className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition flex flex-col items-center justify-center cursor-pointer ${
-                      dragActive 
-                        ? 'border-teal-600 bg-teal-50/50' 
-                        : manualProofUrl 
-                          ? 'border-emerald-500 bg-emerald-50/20' 
-                          : 'border-slate-300 bg-slate-50 hover:bg-slate-100/50'
-                    }`}
-                    onClick={() => document.getElementById('manual-receipt-input')?.click()}
-                  >
-                    <input
-                      id="manual-receipt-input"
-                      type="file"
-                      accept="image/jpeg,image/png"
-                      className="hidden"
-                      onChange={handleFileChange}
-                    />
-                    
-                    {isUploading ? (
-                      <div className="space-y-3 w-full max-w-xs mx-auto">
-                        <Loader2 className="w-8 h-8 text-teal-700 animate-spin mx-auto" />
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold text-slate-700">Uploading Screenshot to Firebase Storage...</p>
-                          <p className="text-[10px] text-slate-400 font-mono">{uploadProgress}% Complete</p>
-                        </div>
-                        <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                          <div 
-                            className="bg-teal-600 h-full transition-all duration-300" 
-                            style={{ width: `${uploadProgress || 0}%` }}
-                          />
-                        </div>
-                      </div>
-                    ) : manualProofUrl ? (
-                      <div className="space-y-2">
-                        <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-sm animate-bounce">
-                          <Check className="w-6 h-6 animate-pulse" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-800">Payment Screenshot Uploaded!</p>
-                          <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-xs">{manualProofFileName || 'payment_proof_receipt.png'}</p>
-                        </div>
-                        {manualProofUrl && (
-                          <img src={manualProofUrl} alt="Receipt Thumb" className="w-20 h-20 object-cover mx-auto rounded border border-slate-200 mt-2 shadow-sm" />
-                        )}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setManualProofUrl('');
-                            setManualProofFileName('');
-                          }}
-                          className="text-[10px] text-red-500 hover:underline mt-1 cursor-pointer"
-                        >
-                          Remove and Re-upload
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <Upload className="w-8 h-8 text-slate-400 mx-auto" />
-                        <p className="text-xs font-semibold text-slate-700">Drag & drop receipt screenshot or <span className="text-teal-700 hover:underline">browse files</span></p>
-                        <p className="text-[9px] text-slate-400 uppercase">JPG, JPEG or PNG only (Limit 10MB)</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Transaction Inputs */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                     <div>
                       <label className="text-slate-400 block mb-1">Transaction ID / UTR Number *</label>
@@ -2448,11 +2359,6 @@ export default function CustomerPanel({
                 </div>
 
                 <div className="space-y-2 pt-4">
-                  {!manualProofUrl && (
-                    <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-center text-xs font-bold text-rose-700 flex items-center justify-center gap-1.5 animate-pulse">
-                      <span>⚠️ Please upload your payment screenshot to unlock clinical order submission.</span>
-                    </div>
-                  )}
                   <div className="flex gap-3">
                     <button
                       type="button"
@@ -2464,7 +2370,7 @@ export default function CustomerPanel({
                     <button
                       type="button"
                       onClick={handleSubmitOrder}
-                      disabled={!manualProofUrl || isUploading || !manualTxId.trim()}
+                      disabled={!manualTxId.trim()}
                       className="w-2/3 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
                     >
                       <Check className="w-4 h-4" />
@@ -2987,51 +2893,6 @@ export default function CustomerPanel({
                                     )}
                                   </div>
 
-                                  {/* Re-upload uploader zone */}
-                                  <div
-                                    onDragEnter={handleDrag}
-                                    onDragOver={handleDrag}
-                                    onDragLeave={handleDrag}
-                                    onDrop={handleDrop}
-                                    className={`relative border-2 border-dashed rounded-xl p-5 text-center transition flex flex-col items-center justify-center cursor-pointer ${
-                                      dragActive 
-                                        ? 'border-teal-600 bg-teal-50/50' 
-                                        : manualProofUrl 
-                                          ? 'border-emerald-500 bg-emerald-50/20' 
-                                          : 'border-slate-300 bg-white hover:bg-slate-100/50'
-                                    }`}
-                                    onClick={() => document.getElementById(`manual-reupload-input-${order.id}`)?.click()}
-                                  >
-                                    <input
-                                      id={`manual-reupload-input-${order.id}`}
-                                      type="file"
-                                      accept=".jpg,.jpeg,.png,.pdf"
-                                      className="hidden"
-                                      onChange={handleFileChange}
-                                    />
-                                    
-                                    {manualProofUrl ? (
-                                      <div className="space-y-1.5">
-                                        <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-sm">
-                                          <Check className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                          <p className="text-[11px] font-bold text-slate-800">Screenshot Attached</p>
-                                          <p className="text-[9px] text-slate-400 font-mono mt-0.5 truncate max-w-xs">{manualProofFileName || 'payment_receipt.png'}</p>
-                                        </div>
-                                        {manualProofUrl && (
-                                          <img src={manualProofUrl} alt="Receipt Preview" className="w-14 h-14 object-cover mx-auto rounded border border-slate-200 mt-1 shadow-sm" />
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <div className="space-y-1">
-                                        <Upload className="w-6 h-6 text-slate-400 mx-auto" />
-                                        <p className="text-[11px] font-semibold text-slate-700">Drag receipt screenshot or browse files <span className="text-rose-600 font-bold">*</span></p>
-                                        <p className="text-[8px] text-rose-600 font-bold uppercase tracking-wider">Screenshot Required (Max 10MB)</p>
-                                      </div>
-                                    )}
-                                  </div>
-
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
                                       <label className="text-slate-400 block mb-1 text-[10px]">Transaction ID / UTR Number *</label>
@@ -3060,10 +2921,6 @@ export default function CustomerPanel({
                                       // process submit
                                       if (!manualTxId.trim()) {
                                         addToast('Please enter the Transaction ID / UTR Number.', 'error');
-                                        return;
-                                      }
-                                      if (!manualProofUrl) {
-                                        addToast('Payment receipt screenshot is strictly required! Please attach a valid screenshot.', 'error');
                                         return;
                                       }
                                       
