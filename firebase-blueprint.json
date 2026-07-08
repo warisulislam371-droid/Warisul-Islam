@@ -1,0 +1,106 @@
+{
+  "entities": {
+    "products": {
+      "title": "Medical Products",
+      "description": "Catalog of medical equipment and consumables listed by vendors",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "modelNumber": { "type": "string" },
+        "brand": { "type": "string" },
+        "category": { "type": "string" },
+        "subcategory": { "type": "string" },
+        "shortDescription": { "type": "string" },
+        "description": { "type": "string" },
+        "specifications": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "price": { "type": "number" },
+        "salePrice": { "type": "number" },
+        "mrp": { "type": "number" },
+        "gstRate": { "type": "number" },
+        "hsnCode": { "type": "string" },
+        "moq": { "type": "number" },
+        "stockQuantity": { "type": "number" },
+        "warranty": { "type": "string" },
+        "countryOfOrigin": { "type": "string" },
+        "images": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "videoUrl": { "type": "string" },
+        "pdfBrochure": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "vendorId": { "type": "string" },
+        "vendorName": { "type": "string" },
+        "status": { "type": "string" },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "sku", "brand", "category", "price", "salePrice", "vendorId", "status"]
+    },
+    "categories": {
+      "title": "Product Categories",
+      "description": "Dynamic medical equipment categories",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "icon": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "productCount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "isActive"]
+    },
+    "brands": {
+      "title": "Medical Equipment Brands",
+      "description": "Dynamic brands directory for medical products",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "description": { "type": "string" },
+        "country": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "isActive"]
+    },
+    "categoryRequests": {
+      "title": "Vendor Category Requests",
+      "description": "Requests from vendors to add new product categories",
+      "type": "object",
+      "properties": {
+        "categoryName": { "type": "string" },
+        "description": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "vendorName": { "type": "string" },
+        "status": { "type": "string" },
+        "requestedAt": { "type": "string" }
+      },
+      "required": ["categoryName", "vendorId", "status"]
+    },
+    "brandRequests": {
+      "title": "Vendor Brand Requests",
+      "description": "Requests from vendors to register new medical brands",
+      "type": "object",
+      "properties": {
+        "brandName": { "type": "string" },
+        "country": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "vendorName": { "type": "string" },
+        "status": { "type": "string" },
+        "requestedAt": { "type": "string" }
+      },
+      "required": ["brandName", "vendorId", "status"]
+    }
+  }
+}

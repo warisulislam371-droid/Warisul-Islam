@@ -1,0 +1,6 @@
+{
+  "name": "HealNex Medi Bazar",
+  "description": "India's Trusted Medical Equipment Multi-Vendor Marketplace & RFQ Procurement Platform",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
