@@ -894,6 +894,8 @@ export const dbLocal = {
       timeline: newOrder.timeline,
       paymentTxId: newOrder.paymentTxId || '',
       paymentNote: newOrder.paymentNote || '',
+      paymentScreenshotUrl: newOrder.paymentScreenshotUrl || '',
+      paymentScreenshotName: newOrder.paymentScreenshotName || '',
       paymentVerificationLogs: newOrder.paymentVerificationLogs || [],
 
       // Requirement 3 fields (explicitly requested)

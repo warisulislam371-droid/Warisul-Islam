@@ -1595,9 +1595,9 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                     </div>
                   </div>
 
-                  <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-6">
+                   <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {/* Buyer & Consignment Info */}
-                    <div className="space-y-1.5 border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-4">
+                    <div className="space-y-1.5 border-b sm:border-b-0 lg:border-r border-slate-100 pb-4 sm:pb-0 lg:pr-4">
                       <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Procurement Hospital Target</p>
                       <p className="font-bold text-slate-800 text-sm">{order.shippingAddress.address || 'Hospital Center'}</p>
                       <p className="text-slate-500">{order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pincode}</p>
@@ -1605,7 +1605,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                     </div>
 
                     {/* Assigned Vendor Partner */}
-                    <div className="space-y-1.5 border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-4">
+                    <div className="space-y-1.5 border-b sm:border-b-0 lg:border-r border-slate-100 pb-4 sm:pb-0 lg:pr-4">
                       <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Assigned Vendor Supplier</p>
                       <p className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                         <Building2 className="w-4 h-4 text-teal-700" />
@@ -1613,6 +1613,27 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       </p>
                       <p className="text-slate-500 text-[11px] font-medium">Items Count: {order.items.length} product(s)</p>
                       <p className="text-teal-800 font-bold text-sm mt-2 font-mono">Total Value: ₹{order.finalAmount.toLocaleString('en-IN')}</p>
+                    </div>
+
+                    {/* Payment Receipt / UTR Verification info */}
+                    <div className="space-y-1.5 border-b sm:border-b-0 lg:border-r border-slate-100 pb-4 sm:pb-0 lg:pr-4">
+                      <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Manual Payment Verification Info</p>
+                      {(order.paymentTxId || order.paymentScreenshotUrl) ? (
+                        <div className="space-y-1.5">
+                          <p className="font-mono text-[11px]">UTR / TxID: <strong className="text-slate-900 font-bold bg-slate-100 px-1 py-0.5 rounded border select-all">{order.paymentTxId || 'N/A'}</strong></p>
+                          {order.paymentNote && <p className="text-slate-500 text-[10px] italic">"{order.paymentNote}"</p>}
+                          {order.paymentScreenshotUrl && (
+                            <div className="mt-2">
+                              <a href={order.paymentScreenshotUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[10px] font-bold text-teal-700 hover:text-teal-800 hover:underline">
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>View Payment Screenshot</span>
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-slate-400 italic">No manual transaction reference submitted yet.</p>
+                      )}
                     </div>
 
                     {/* Courier Dispatch Coordinates */}
@@ -3135,6 +3156,23 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                             {order.paymentNote && <p>Customer Reference Note: <span className="italic text-slate-800">"{order.paymentNote}"</span></p>}
                           </div>
                         </div>
+
+                        {order.paymentScreenshotUrl && (
+                          <div className="space-y-2">
+                            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Uploaded Payment Screenshot / Receipt</p>
+                            <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 p-2 text-center">
+                              <a href={order.paymentScreenshotUrl} target="_blank" rel="noreferrer" title="Click to view full image in a new tab" className="inline-block relative group">
+                                <img 
+                                  src={order.paymentScreenshotUrl} 
+                                  alt="Payment Receipt Screenshot" 
+                                  className="max-h-48 rounded-lg object-contain mx-auto shadow-sm transition hover:scale-105 cursor-pointer"
+                                  referrerPolicy="no-referrer"
+                                />
+                                <span className="absolute bottom-2 right-2 bg-slate-900/80 text-white text-[9px] font-bold px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">View Full Size</span>
+                              </a>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Audit Actions */}
                         <div className="pt-4 border-t border-slate-100 flex flex-wrap gap-3">

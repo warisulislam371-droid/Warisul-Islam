@@ -332,6 +332,8 @@ export interface Order {
   paymentVerificationLogs?: PaymentVerificationLog[];
   orderStatus?: string;
   paymentStatus?: string;
+  paymentScreenshotUrl?: string;
+  paymentScreenshotName?: string;
 }
 
 export interface RFQ {
