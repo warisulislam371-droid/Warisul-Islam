@@ -1051,12 +1051,18 @@ export const dbLocal = {
     const settings = this.get(STORAGE_KEYS.PAYMENT_SETTINGS, [DEFAULT_PAYMENT_SETTINGS]) as PaymentSettings[];
     let current = settings[0] || DEFAULT_PAYMENT_SETTINGS;
     current = { ...DEFAULT_PAYMENT_SETTINGS, ...current };
+    
+    // If QR code is missing but custom UPI details exist, auto-generate a matching QR code data URL
+    if (!current.upiQrCodeUrl && current.upiId) {
+      current.upiQrCodeUrl = getSliceUpiQrDataUrl(current.upiId, current.upiHolderName);
+      this.set(STORAGE_KEYS.PAYMENT_SETTINGS, [current]);
+    }
+    
     const latestSliceQr = getSliceUpiQrDataUrl();
     if (
       current.upiId === 'payments@hdfcbank' ||
       current.upiQrCodeUrl?.includes('unsplash') ||
-      !current.upiQrCodeUrl ||
-      ((current.upiHolderName?.toLowerCase().includes('warisul') || current.upiId === SLICE_UPI_ID) && current.upiQrCodeUrl !== latestSliceQr)
+      ((current.upiHolderName?.toLowerCase().includes('warisul') || current.upiId === SLICE_UPI_ID) && current.upiQrCodeUrl !== latestSliceQr && current.upiId === SLICE_UPI_ID)
     ) {
       current.upiId = SLICE_UPI_ID;
       current.upiHolderName = SLICE_HOLDER_NAME;

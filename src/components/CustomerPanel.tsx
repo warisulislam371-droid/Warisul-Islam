@@ -609,20 +609,6 @@ export default function CustomerPanel({
       const txId = manualTxId.trim() || `UPI-${Date.now().toString().slice(-6)}`;
       const paymentMethodName = selectedPayMethod === 'bank' ? 'Bank Transfer' : 'UPI';
 
-      // 4. Upload payment screenshot if selected
-      let uploadedScreenshotUrl = '';
-      let uploadedScreenshotName = '';
-      if (screenshotFile) {
-        try {
-          const res = await uploadScreenshot(screenshotFile);
-          uploadedScreenshotUrl = res.url;
-          uploadedScreenshotName = res.name;
-        } catch (e: any) {
-          console.error('Screenshot upload failed:', e);
-          addToast(`Warning: Screenshot upload failed. Proceeding with UTR only.`, 'info');
-        }
-      }
-
       const newOrder: Order = {
         id: orderId,
         customerId: currentUser.id,
@@ -662,8 +648,8 @@ export default function CustomerPanel({
         ],
         paymentTxId: txId,
         paymentNote: manualNote.trim() || undefined,
-        paymentScreenshotUrl: uploadedScreenshotUrl || undefined,
-        paymentScreenshotName: uploadedScreenshotName || undefined,
+        paymentScreenshotUrl: undefined,
+        paymentScreenshotName: undefined,
         paymentVerificationLogs: [{
           action: 'submit',
           performedBy: shippingName.trim(),
@@ -875,7 +861,7 @@ export default function CustomerPanel({
                     {promoBanners[activeBannerIdx % promoBanners.length].title}
                   </h1>
                   {promoBanners[activeBannerIdx % promoBanners.length].subtitle && (
-                    <p className="text-xs sm:text-sm text-slate-350 leading-relaxed max-w-lg font-medium">
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-lg font-medium">
                       {promoBanners[activeBannerIdx % promoBanners.length].subtitle}
                     </p>
                   )}
@@ -911,7 +897,7 @@ export default function CustomerPanel({
                   <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-sans leading-tight text-white">
                     India's Premium Medical Equipment <span className="text-blue-400">Bazar</span>
                   </h1>
-                  <p className="text-xs sm:text-sm text-slate-350 leading-relaxed max-w-lg">
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-lg">
                     Source directly from certified suppliers. Submit custom hospital RFQs, compare verified quotations side-by-side, and download official tax invoices.
                   </p>
                   <div className="flex flex-wrap gap-3 pt-2">
@@ -2351,41 +2337,6 @@ export default function CustomerPanel({
                       />
                     </div>
 
-                    {/* Screenshot File Upload */}
-                    <div className="sm:col-span-2">
-                      <label className="text-slate-400 block mb-1 font-bold">Payment Screenshot / Transfer Receipt *</label>
-                      <div className="border border-dashed border-slate-300 hover:border-teal-600 bg-slate-50 rounded-xl p-4 flex flex-col items-center justify-center transition cursor-pointer">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          required
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              setScreenshotFile(e.target.files[0]);
-                              addToast('Payment screenshot attached successfully!', 'success');
-                            }
-                          }}
-                          className="hidden"
-                          id="checkout-screenshot-input"
-                        />
-                        <label htmlFor="checkout-screenshot-input" className="cursor-pointer text-center flex flex-col items-center w-full">
-                          <Upload className="w-7 h-7 text-teal-700 mb-1" />
-                          <span className="text-[11px] font-bold text-slate-700">
-                            {screenshotFile ? `Attached: ${screenshotFile.name}` : 'Click to select / upload your payment screenshot'}
-                          </span>
-                          <span className="text-[9px] text-slate-400 mt-0.5">JPEG, PNG, WebP image format required</span>
-                        </label>
-                        {screenshotFile && (
-                          <button
-                            type="button"
-                            onClick={() => setScreenshotFile(null)}
-                            className="mt-2 text-[10px] text-rose-600 hover:underline font-bold"
-                          >
-                            Remove file
-                          </button>
-                        )}
-                      </div>
-                    </div>
                   </div>
                 </div>
 
@@ -2401,20 +2352,11 @@ export default function CustomerPanel({
                     <button
                       type="button"
                       onClick={handleSubmitOrder}
-                      disabled={!manualTxId.trim() || !screenshotFile || screenshotUploading}
+                      disabled={!manualTxId.trim()}
                       className="w-2/3 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
                     >
-                      {screenshotUploading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Uploading receipt ({screenshotUploadProgress}%)</span>
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-4 h-4" />
-                          <span>Submit Order</span>
-                        </>
-                      )}
+                      <Check className="w-4 h-4" />
+                      <span>Submit Order</span>
                     </button>
                   </div>
                 </div>
@@ -2426,7 +2368,6 @@ export default function CustomerPanel({
             <div className="lg:col-span-3 text-center py-20 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4 max-w-lg mx-auto">
               <Loader2 className="w-12 h-12 text-teal-700 animate-spin mx-auto" />
               <h3 className="text-base font-bold text-slate-900">Processing Procurement Order...</h3>
-              <p className="text-xs text-slate-400">Verifying commercial accounts and uploading payment receipt verification credentials</p>
             </div>
           )}
 
@@ -2954,67 +2895,17 @@ export default function CustomerPanel({
                                       />
                                     </div>
 
-                                    {/* Screenshot File Upload */}
-                                    <div className="sm:col-span-2">
-                                      <label className="text-slate-400 block mb-1 text-[10px] font-bold">Payment Screenshot / Transfer Receipt *</label>
-                                      <div className="border border-dashed border-slate-300 hover:border-teal-600 bg-white rounded-xl p-3 flex flex-col items-center justify-center transition cursor-pointer">
-                                        <input
-                                          type="file"
-                                          accept="image/*"
-                                          required
-                                          onChange={(e) => {
-                                            if (e.target.files && e.target.files[0]) {
-                                              setReuploadScreenshotFile(e.target.files[0]);
-                                              addToast('Payment screenshot attached successfully!', 'success');
-                                            }
-                                          }}
-                                          className="hidden"
-                                          id="reupload-screenshot-input"
-                                        />
-                                        <label htmlFor="reupload-screenshot-input" className="cursor-pointer text-center flex flex-col items-center w-full">
-                                          <Upload className="w-6 h-6 text-teal-700 mb-1" />
-                                          <span className="text-[10px] font-bold text-slate-700">
-                                            {reuploadScreenshotFile ? `Attached: ${reuploadScreenshotFile.name}` : 'Click to select / upload payment screenshot'}
-                                          </span>
-                                          <span className="text-[8px] text-slate-400 mt-0.5">JPEG, PNG, WebP image format required</span>
-                                        </label>
-                                        {reuploadScreenshotFile && (
-                                          <button
-                                            type="button"
-                                            onClick={() => setReuploadScreenshotFile(null)}
-                                            className="mt-1 text-[9px] text-rose-600 hover:underline font-bold"
-                                          >
-                                            Remove file
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
                                   </div>
 
                                   <button
-                                    disabled={screenshotUploading || !manualTxId.trim() || !reuploadScreenshotFile}
+                                    disabled={!manualTxId.trim()}
                                     onClick={async () => {
                                       // process submit
                                       if (!manualTxId.trim()) {
                                         addToast('Please enter the Transaction ID / UTR Number.', 'error');
                                         return;
                                       }
-                                      if (!reuploadScreenshotFile) {
-                                        addToast('Please upload the payment screenshot.', 'error');
-                                        return;
-                                      }
 
-                                      let uploadedScreenshotUrl = '';
-                                      let uploadedScreenshotName = '';
-                                      try {
-                                        const res = await uploadScreenshot(reuploadScreenshotFile);
-                                        uploadedScreenshotUrl = res.url;
-                                        uploadedScreenshotName = res.name;
-                                      } catch (e: any) {
-                                        console.error('Screenshot re-upload failed:', e);
-                                        addToast('Screenshot upload failed, proceeding with UTR only.', 'info');
-                                      }
-                                      
                                       const currentOrders = dbLocal.getOrders();
                                       const idx = currentOrders.findIndex(o => o.id === order.id);
                                       if (idx > -1) {
@@ -3022,10 +2913,11 @@ export default function CustomerPanel({
                                         const updatedOrder: Order = {
                                           ...originalOrder,
                                           status: 'Payment Pending Verification',
+                                          paymentStatus: 'Pending Verification',
                                           paymentTxId: manualTxId.trim(),
                                           paymentNote: manualNote.trim(),
-                                          paymentScreenshotUrl: uploadedScreenshotUrl || undefined,
-                                          paymentScreenshotName: uploadedScreenshotName || undefined,
+                                          paymentScreenshotUrl: undefined,
+                                          paymentScreenshotName: undefined,
                                           paymentRejectionReason: undefined, // Clear rejection reason
                                           timeline: [
                                             ...(originalOrder.timeline || []),
@@ -3057,7 +2949,7 @@ export default function CustomerPanel({
                                           'payment_updated'
                                         );
                                         
-                                        addToast('Payment UTR and screenshot submitted successfully!', 'success');
+                                        addToast('Payment UTR submitted successfully!', 'success');
                                         // reset state
                                         setManualTxId('');
                                         setManualNote('');

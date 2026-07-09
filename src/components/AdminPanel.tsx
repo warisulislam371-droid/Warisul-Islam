@@ -633,6 +633,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       const updatedOrder: Order = {
         ...originalOrder,
         status: 'Confirmed', // Requirement 8
+        paymentStatus: 'Verified',
         timeline: [
           ...(originalOrder.timeline || []),
           {

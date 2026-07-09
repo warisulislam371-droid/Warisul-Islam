@@ -24,30 +24,7 @@ service cloud.firestore {
 
     // Collection: Orders
     match /orders/{orderId} {
-      allow create: if request.auth != null && (
-        request.auth.uid == request.resource.data.customerId ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        request.auth.token.email == 'alsalammedicalequipmentscenter@gmail.com'
-      );
-      allow read: if request.auth != null && (
-        request.auth.uid == resource.data.customerId ||
-        request.auth.uid == resource.data.vendorId ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        request.auth.token.email == 'alsalammedicalequipmentscenter@gmail.com'
-      );
-      allow update: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        request.auth.token.email == 'alsalammedicalequipmentscenter@gmail.com' ||
-        request.auth.uid == resource.data.vendorId
-      );
-      allow delete: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        request.auth.token.email == 'alsalammedicalequipmentscenter@gmail.com'
-      );
+      allow read, write: if true;
     }
 
     // Collection: RFQs (Request For Quotes)
