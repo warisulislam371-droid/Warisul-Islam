@@ -777,7 +777,71 @@ export const dbLocal = {
   },
 
   // Products
-  getProducts(): Product[] { return this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS); },
+  getProducts(): Product[] {
+    const list = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
+    let needsSave = false;
+    const settings = this.getCommissionSettings();
+    const mapped = list.map(p => {
+      if (p.vendor_price === undefined || p.final_price === undefined || p.commission_rate === undefined) {
+        needsSave = true;
+        const vendorPrice = p.vendor_price ?? p.vendorPrice ?? p.price ?? p.salePrice ?? 0;
+        
+        // Calculate commission rate based on current settings
+        let commissionRate = 0;
+        if (settings.enabled) {
+          if (settings.vendorPercents && settings.vendorPercents[p.vendorId] !== undefined) {
+            commissionRate = settings.vendorPercents[p.vendorId];
+          } else if (p.category) {
+            const catKey = Object.keys(settings.categoryPercents).find(
+              k => k.toLowerCase() === p.category.toLowerCase()
+            );
+            if (catKey !== undefined && settings.categoryPercents[catKey] !== undefined) {
+              commissionRate = settings.categoryPercents[catKey];
+            } else if (p.brand) {
+              const brandKey = Object.keys(settings.brandPercents).find(
+                k => k.toLowerCase() === p.brand.toLowerCase()
+              );
+              if (brandKey !== undefined && settings.brandPercents[brandKey] !== undefined) {
+                commissionRate = settings.brandPercents[brandKey];
+              } else {
+                commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
+              }
+            } else {
+              commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
+            }
+          } else {
+            commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
+          }
+        }
+        
+        const commissionAmount = Math.round((vendorPrice * commissionRate) / 100);
+        const customerPrice = vendorPrice + commissionAmount;
+        
+        return {
+          ...p,
+          vendor_price: vendorPrice,
+          vendorPrice: vendorPrice,
+          commission_rate: commissionRate,
+          commissionPercent: commissionRate,
+          commissionAmount: commissionAmount,
+          final_price: customerPrice,
+          customerPrice: customerPrice,
+          price: customerPrice,
+          salePrice: customerPrice,
+          wholesalePrice: customerPrice,
+          mrp: Math.round(customerPrice * 1.2),
+          vendor_payout: vendorPrice,
+        };
+      }
+      return p;
+    });
+    if (needsSave) {
+      setTimeout(() => {
+        try { this.saveProducts(mapped); } catch (e) {}
+      }, 0);
+    }
+    return mapped;
+  },
   saveProducts(products: Product[]) {
     const old = this.getProducts();
     this.set(STORAGE_KEYS.PRODUCTS, products);
@@ -1039,6 +1103,68 @@ export const dbLocal = {
     const old = this.get(STORAGE_KEYS.COMMISSION_SETTINGS, [DEFAULT_COMMISSION_SETTINGS]) as CommissionSettings[];
     this.set(STORAGE_KEYS.COMMISSION_SETTINGS, [settings]);
     syncListToFirestoreWithDeletions('commission_settings', [settings], old);
+
+    // Automatically recalculate final customer price for all affected products
+    try {
+      const products = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
+      const updatedProducts = products.map(p => {
+        const vendorPrice = p.vendor_price ?? p.vendorPrice ?? p.price ?? p.salePrice ?? 0;
+        
+        // Calculate the commission rate using the new settings
+        let commissionRate = 0;
+        if (settings.enabled) {
+          if (settings.vendorPercents && settings.vendorPercents[p.vendorId] !== undefined) {
+            commissionRate = settings.vendorPercents[p.vendorId];
+          } else if (p.category) {
+            const catKey = Object.keys(settings.categoryPercents).find(
+              k => k.toLowerCase() === p.category.toLowerCase()
+            );
+            if (catKey !== undefined && settings.categoryPercents[catKey] !== undefined) {
+              commissionRate = settings.categoryPercents[catKey];
+            } else if (p.brand) {
+              const brandKey = Object.keys(settings.brandPercents).find(
+                k => k.toLowerCase() === p.brand.toLowerCase()
+              );
+              if (brandKey !== undefined && settings.brandPercents[brandKey] !== undefined) {
+                commissionRate = settings.brandPercents[brandKey];
+              } else {
+                commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
+              }
+            } else {
+              commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
+            }
+          } else {
+            commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
+          }
+        }
+        
+        const commissionAmount = Math.round((vendorPrice * commissionRate) / 100);
+        const customerPrice = vendorPrice + commissionAmount;
+        
+        return {
+          ...p,
+          vendor_price: vendorPrice,
+          vendorPrice: vendorPrice,
+          commission_rate: commissionRate,
+          commissionPercent: commissionRate,
+          commissionAmount: commissionAmount,
+          final_price: customerPrice,
+          customerPrice: customerPrice,
+          price: customerPrice,
+          salePrice: customerPrice,
+          wholesalePrice: customerPrice,
+          mrp: Math.round(customerPrice * 1.2),
+          vendor_payout: vendorPrice,
+        };
+      });
+      
+      const oldProds = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
+      this.set(STORAGE_KEYS.PRODUCTS, updatedProducts);
+      syncListToFirestoreWithDeletions('products', updatedProducts, oldProds);
+      window.dispatchEvent(new Event('healnex_db_update'));
+    } catch (err) {
+      console.error('Failed to recalculate product prices upon commission change:', err);
+    }
   },
 
   // WhatsApp Click Logs

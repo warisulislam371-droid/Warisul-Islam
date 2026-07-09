@@ -269,6 +269,10 @@ export default function VendorProductManager({
       commissionPercent: commissionPercent,
       commissionAmount: commissionAmount,
       customerPrice: customerPrice,
+      vendor_price: formVendorPrice,
+      commission_rate: commissionPercent,
+      final_price: customerPrice,
+      vendor_payout: formVendorPrice,
       price: customerPrice,
       mrp: Math.round(customerPrice * 1.2),
       salePrice: customerPrice,
@@ -1442,7 +1446,7 @@ export default function VendorProductManager({
                 <h4 className="text-sm font-extrabold text-slate-900 border-b border-slate-200 pb-2">2. Commercial Pricing & Inventory Constraints</h4>
                 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="col-span-2 md:col-span-1">
+                  <div className="col-span-2 md:col-span-4">
                     <label className="block mb-1.5 text-teal-800 font-extrabold">Vendor Price (₹) *</label>
                     <input
                       type="number"
@@ -1453,30 +1457,6 @@ export default function VendorProductManager({
                       className="w-full bg-white border-2 border-teal-600 rounded-xl p-3 outline-none font-mono font-extrabold text-teal-900 focus:ring-2 focus:ring-teal-500"
                     />
                     <p className="text-[10px] text-slate-400 mt-1">Net amount you will receive per sale.</p>
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5 text-slate-500 font-bold">Commission Rate</label>
-                    <div className="w-full bg-slate-100 border border-slate-200 rounded-xl p-3 font-mono font-bold text-slate-500 select-none">
-                      {currentCommRate}%
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1">Based on category & brand rules.</p>
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5 text-slate-500 font-bold">Commission Amount</label>
-                    <div className="w-full bg-slate-100 border border-slate-200 rounded-xl p-3 font-mono font-bold text-slate-500 select-none">
-                      ₹{calculatedCommAmt.toLocaleString()}
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1">Vendor Price × Commission %</p>
-                  </div>
-
-                  <div>
-                    <label className="block mb-1.5 text-blue-800 font-bold">Customer Price (₹)</label>
-                    <div className="w-full bg-blue-50 border-2 border-blue-200 rounded-xl p-3 font-mono font-extrabold text-blue-900 select-none">
-                      ₹{calculatedCustPrice.toLocaleString()}
-                    </div>
-                    <p className="text-[10px] text-blue-500/80 font-medium mt-1">Final price displayed on store.</p>
                   </div>
 
                   <div>

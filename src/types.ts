@@ -139,6 +139,10 @@ export interface Product {
   commissionPercent?: number;
   commissionAmount?: number;
   customerPrice?: number;
+  vendor_price?: number;
+  commission_rate?: number;
+  final_price?: number;
+  vendor_payout?: number;
 }
 
 export interface CommissionSettings {

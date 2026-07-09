@@ -2603,26 +2603,30 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                             </div>
 
                             {/* Commission & Pricing details */}
-                            <div className="mt-3 bg-slate-50/80 rounded-xl p-3 text-xs max-w-xl border border-slate-200">
+                            <div className="mt-3 bg-slate-50/80 rounded-xl p-3 text-xs max-w-2xl border border-slate-200">
                               <span className="font-extrabold block text-slate-800 uppercase tracking-wider text-[10px] pb-1 border-b border-slate-200 mb-2">
-                                Commercial Pricing & Commission Split:
+                                Commercial Pricing & Commission Split Audit:
                               </span>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
+                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-[11px]">
                                 <div>
-                                  <span className="text-slate-400 block text-[9px] uppercase">Vendor Net</span>
-                                  <span className="font-bold text-slate-700">₹{(p.vendorPrice ?? p.price).toLocaleString('en-IN')}</span>
+                                  <span className="text-slate-400 block text-[9px] uppercase">Vendor Price</span>
+                                  <span className="font-bold text-slate-700">₹{(p.vendor_price ?? p.vendorPrice ?? p.price).toLocaleString('en-IN')}</span>
                                 </div>
                                 <div>
                                   <span className="text-slate-400 block text-[9px] uppercase">Comm. Rate</span>
-                                  <span className="font-bold text-indigo-700 font-mono">{p.commissionPercent ?? 7}%</span>
+                                  <span className="font-bold text-indigo-700 font-mono">{p.commission_rate ?? p.commissionPercent ?? 7}%</span>
                                 </div>
                                 <div>
                                   <span className="text-slate-400 block text-[9px] uppercase">Comm. Amt</span>
-                                  <span className="font-bold text-slate-700">₹{(p.commissionAmount ?? Math.round((p.vendorPrice ?? p.price) * 0.07)).toLocaleString('en-IN')}</span>
+                                  <span className="font-bold text-rose-600">₹{((p.final_price ?? p.customerPrice ?? p.price) - (p.vendor_payout ?? p.vendorPrice ?? p.price)).toLocaleString('en-IN')}</span>
                                 </div>
                                 <div>
-                                  <span className="text-slate-400 block text-[9px] uppercase">Cust. Price</span>
-                                  <span className="font-extrabold text-teal-700">₹{(p.customerPrice ?? p.price).toLocaleString('en-IN')}</span>
+                                  <span className="text-slate-400 block text-[9px] uppercase">Final Price</span>
+                                  <span className="font-extrabold text-teal-800">₹{(p.final_price ?? p.customerPrice ?? p.price).toLocaleString('en-IN')}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block text-[9px] uppercase">Vendor Payout</span>
+                                  <span className="font-bold text-emerald-700">₹{(p.vendor_payout ?? p.vendorPrice ?? p.price).toLocaleString('en-IN')}</span>
                                 </div>
                               </div>
                             </div>
