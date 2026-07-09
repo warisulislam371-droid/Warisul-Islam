@@ -204,6 +204,8 @@ export type OrderStatus =
   | 'Pending Payment'
   | 'Payment Submitted'
   | 'Awaiting Payment Verification'
+  | 'Payment Pending Verification'
+  | 'Payment Rejected'
   | 'Payment Verified'
   | 'Order Sent to Vendor'
   | 'Vendor Accepted'
@@ -320,7 +322,6 @@ export interface Order {
   timeline: OrderTimelineEvent[];
   createdAt: string;
   // Manual Payment Fields
-  paymentProofUrl?: string;
   paymentTxId?: string; // Transaction ID or UTR Number
   paymentNote?: string;
   paymentRejectionReason?: string;

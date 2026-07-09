@@ -828,7 +828,6 @@ export const dbLocal = {
       shippingAddress: newOrder.shippingAddress,
       createdAt: newOrder.createdAt,
       timeline: newOrder.timeline,
-      paymentProofUrl: newOrder.paymentProofUrl || '',
       paymentTxId: newOrder.paymentTxId || '',
       paymentNote: newOrder.paymentNote || '',
       paymentVerificationLogs: newOrder.paymentVerificationLogs || [],

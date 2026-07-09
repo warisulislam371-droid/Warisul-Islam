@@ -172,7 +172,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
 
     const ords = dbLocal.getOrders().filter(o => 
       o.vendorId === currentUser.id && 
-      !['Pending Payment', 'Payment Submitted', 'Awaiting Payment Verification'].includes(o.status)
+      !['Pending Payment', 'Payment Submitted', 'Awaiting Payment Verification', 'Payment Pending Verification', 'Payment Rejected'].includes(o.status)
     );
     setOrders(ords);
 

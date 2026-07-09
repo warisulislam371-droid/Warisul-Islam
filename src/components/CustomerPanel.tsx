@@ -148,18 +148,11 @@ export default function CustomerPanel({
   const [shippingName, setShippingName] = useState('');
   const [shippingPhone, setShippingPhone] = useState('');
   
-  // Firebase storage upload states
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  
   // Manual Payment verification and settings states
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(dbLocal.getPaymentSettings());
   const [selectedPayMethod, setSelectedPayMethod] = useState<'razorpay' | 'upi' | 'bank' | ''>('');
   const [manualTxId, setManualTxId] = useState('');
   const [manualNote, setManualNote] = useState('');
-  const [manualProofUrl, setManualProofUrl] = useState('');
-  const [manualProofFileName, setManualProofFileName] = useState('');
-  const [dragActive, setDragActive] = useState(false);
   const [ordersFilter, setOrdersFilter] = useState<'All' | 'Pending Verification' | 'Active' | 'Completed'>('All');
   
   // Order specific re-upload payment state
@@ -509,77 +502,6 @@ export default function CustomerPanel({
 
   const getCheckoutTotal = () => getSubtotal() + getGstTotal();
 
-  // Drag and Drop & File upload handling
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      processFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const processFile = (file: File) => {
-    if (file.size > 10 * 1024 * 1024) {
-      addToast('File size exceeds the 10MB limit.', 'error');
-      return;
-    }
-    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.type)) {
-      addToast('Unsupported file format. Please upload JPG, PNG, or PDF.', 'error');
-      return;
-    }
-    setManualProofFileName(file.name);
-    setIsUploading(true);
-    setUploadProgress(0);
-
-    const fileRef = ref(storage, `payment_receipts/${Date.now()}_${file.name}`);
-    const uploadTask = uploadBytesResumable(fileRef, file);
-
-    uploadTask.on('state_changed',
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        setUploadProgress(Math.round(progress));
-      },
-      (error) => {
-        console.error("Storage upload error:", error);
-        addToast(`Upload failed: ${error.message}`, 'error');
-        setIsUploading(false);
-        setUploadProgress(null);
-      },
-      async () => {
-        try {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          setManualProofUrl(downloadURL);
-          setIsUploading(false);
-          setUploadProgress(null);
-          addToast('Payment proof screenshot uploaded to Firebase Storage successfully!', 'success');
-        } catch (e: any) {
-          console.error("Error getting download URL:", e);
-          addToast(`URL generation failed: ${e.message}`, 'error');
-          setIsUploading(false);
-          setUploadProgress(null);
-        }
-      }
-    );
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processFile(file);
-    }
-  };
-
   // Step 2 checkout: proceed to payment screen
   const handleProceedToPayment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -604,8 +526,6 @@ export default function CustomerPanel({
     // Clear any previous states
     setManualTxId('');
     setManualNote('');
-    setManualProofUrl('');
-    setManualProofFileName('');
     setSelectedPayMethod('upi');
     setCheckoutStep('payment');
   };
@@ -653,7 +573,7 @@ export default function CustomerPanel({
         gstAmount: gst,
         discountAmount: 0,
         finalAmount: final,
-        status: 'Awaiting Payment Verification', // Backwards compatibility & hide from Vendor panel until approved
+        status: 'Payment Pending Verification', // Requirement 6
         orderStatus: 'Pending', // Requirement 6
         paymentStatus: 'Pending Verification', // Requirement 6
         paymentMethod: paymentMethodName,
@@ -661,12 +581,11 @@ export default function CustomerPanel({
         createdAt: new Date().toISOString(),
         timeline: [
           { 
-            status: 'Awaiting Payment Verification', 
+            status: 'Payment Pending Verification', 
             time: new Date().toISOString(), 
-            note: `Procurement order placed. Payment receipt screenshot uploaded (UTR: ${txId}) via ${paymentMethodName}.` 
+            note: `Procurement order placed. Transaction reference (UTR: ${txId}) submitted via ${paymentMethodName}.` 
           }
         ],
-        paymentProofUrl: manualProofUrl,
         paymentTxId: txId,
         paymentNote: manualNote.trim() || undefined,
         paymentVerificationLogs: [{
@@ -674,7 +593,7 @@ export default function CustomerPanel({
           performedBy: shippingName.trim(),
           performedByRole: 'customer',
           timestamp: new Date().toISOString(),
-          note: 'Initial payment proof screenshot upload.'
+          note: 'Initial transaction UTR verification requested.'
         }]
       };
 
@@ -685,7 +604,7 @@ export default function CustomerPanel({
       dbLocal.addNotification(
         'admin',
         'New UPI Order Received',
-        `New UPI procurement Order #${orderId} (₹${final.toLocaleString('en-IN')}) requires payment receipt verification.`,
+        `New UPI procurement Order #${orderId} (₹${final.toLocaleString('en-IN')}) requires payment UTR verification.`,
         'payment_submitted'
       );
 
@@ -696,8 +615,6 @@ export default function CustomerPanel({
       // Clear manual payment states
       setManualTxId('');
       setManualNote('');
-      setManualProofUrl('');
-      setManualProofFileName('');
       addToast('Procurement order placed successfully! Awaiting verification.', 'success');
     } catch (error: any) {
       console.error('Failed to process checkout transaction:', error);
@@ -2331,6 +2248,7 @@ export default function CustomerPanel({
                       </div>
                     }
                   </div>
+                )}
                  {/* Transaction Inputs */}
                 <div className="space-y-3 pt-3 border-t border-slate-100">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
@@ -2379,6 +2297,7 @@ export default function CustomerPanel({
                   </div>
                 </div>
               </div>
+            </div>
           )}
 
           {checkoutStep === 'processing' && (
@@ -2672,10 +2591,10 @@ export default function CustomerPanel({
             <div className="lg:col-span-2 space-y-4">
               {orders.filter(o => {
                 if (ordersFilter === 'Pending Verification') {
-                  return o.status === 'Awaiting Payment Verification' || o.status === 'Pending Payment';
+                  return o.status === 'Awaiting Payment Verification' || o.status === 'Pending Payment' || o.status === 'Payment Pending Verification' || o.status === 'Payment Rejected';
                 }
                 if (ordersFilter === 'Active') {
-                  return ['Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped'].includes(o.status);
+                  return ['Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped', 'Confirmed', 'Paid', 'Payment Verified'].includes(o.status);
                 }
                 if (ordersFilter === 'Completed') {
                   return o.status === 'Delivered' || o.status === 'Completed';
@@ -2699,10 +2618,10 @@ export default function CustomerPanel({
                 orders
                   .filter(o => {
                     if (ordersFilter === 'Pending Verification') {
-                      return o.status === 'Awaiting Payment Verification' || o.status === 'Pending Payment';
+                      return o.status === 'Awaiting Payment Verification' || o.status === 'Pending Payment' || o.status === 'Payment Pending Verification' || o.status === 'Payment Rejected';
                     }
                     if (ordersFilter === 'Active') {
-                      return ['Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped'].includes(o.status);
+                      return ['Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped', 'Confirmed', 'Paid', 'Payment Verified'].includes(o.status);
                     }
                     if (ordersFilter === 'Completed') {
                       return o.status === 'Delivered' || o.status === 'Completed';
@@ -2710,8 +2629,8 @@ export default function CustomerPanel({
                     return true;
                   })
                   .map((order) => {
-                    const isAwaitingVerification = order.status === 'Awaiting Payment Verification';
-                    const isPendingPayment = order.status === 'Pending Payment';
+                    const isAwaitingVerification = order.status === 'Payment Pending Verification' || order.status === 'Awaiting Payment Verification';
+                    const isPendingPayment = order.status === 'Pending Payment' || order.status === 'Payment Rejected';
                     const isReuploadFormOpen = reuploadingOrderId === order.id;
 
                     return (
@@ -2855,18 +2774,16 @@ export default function CustomerPanel({
                                   onClick={() => {
                                     setReuploadingOrderId(order.id);
                                     setManualTxId(order.paymentTxId || '');
-                                    setManualProofUrl(order.paymentProofUrl || '');
-                                    setManualProofFileName('previous_payment_receipt.png');
                                   }}
                                   className="w-full bg-teal-50 border border-teal-200 text-teal-800 font-bold py-2 rounded-xl text-center uppercase tracking-wider hover:bg-teal-100 transition flex items-center justify-center gap-1.5 cursor-pointer"
                                 >
                                   <RotateCcw className="w-4 h-4" />
-                                  Upload / Re-submit Payment Proof
+                                  Re-submit Transaction UTR
                                 </button>
                               ) : (
                                 <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-4">
                                   <div className="flex justify-between items-center">
-                                    <h5 className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Submit Payment Certificate</h5>
+                                    <h5 className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Submit Transaction Reference</h5>
                                     <button
                                       onClick={() => setReuploadingOrderId(null)}
                                       className="text-slate-400 hover:text-slate-600 font-bold text-xs"
@@ -2930,17 +2847,16 @@ export default function CustomerPanel({
                                         const originalOrder = currentOrders[idx];
                                         const updatedOrder: Order = {
                                           ...originalOrder,
-                                          status: 'Awaiting Payment Verification',
+                                          status: 'Payment Pending Verification',
                                           paymentTxId: manualTxId.trim(),
-                                          paymentProofUrl: manualProofUrl,
                                           paymentNote: manualNote.trim(),
                                           paymentRejectionReason: undefined, // Clear rejection reason
                                           timeline: [
                                             ...(originalOrder.timeline || []),
                                             {
-                                              status: 'Awaiting Payment Verification',
+                                              status: 'Payment Pending Verification',
                                               time: new Date().toISOString(),
-                                              note: `Payment proof re-submitted by customer with transaction ID ${manualTxId.trim()}.`
+                                              note: `Payment UTR re-submitted by customer with transaction ID ${manualTxId.trim()}.`
                                             }
                                           ],
                                           paymentVerificationLogs: [
@@ -2950,7 +2866,7 @@ export default function CustomerPanel({
                                               performedBy: currentUser?.name || 'Customer',
                                               performedByRole: 'customer',
                                               timestamp: new Date().toISOString(),
-                                              note: `Resubmitted payment proof after admin feedback.`
+                                              note: `Resubmitted payment UTR after admin feedback.`
                                             }
                                           ]
                                         };
@@ -2961,23 +2877,21 @@ export default function CustomerPanel({
                                         dbLocal.addNotification(
                                           'admin',
                                           `Payment Proof Re-submitted`,
-                                          `Customer resubmitted payment proof for Order #${order.id} with UTR ${manualTxId.trim()}.`,
+                                          `Customer resubmitted payment UTR for Order #${order.id} with UTR ${manualTxId.trim()}.`,
                                           'payment_updated'
                                         );
                                         
-                                        addToast('Payment proof submitted successfully!', 'success');
+                                        addToast('Payment UTR submitted successfully!', 'success');
                                         // reset state
                                         setManualTxId('');
                                         setManualNote('');
-                                        setManualProofUrl('');
-                                        setManualProofFileName('');
                                         setReuploadingOrderId(null);
                                         loadData();
                                       }
                                     }}
                                     className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-2 rounded-xl text-center uppercase tracking-wider transition text-[11px] cursor-pointer shadow-sm"
                                   >
-                                    Submit Clearance Receipt
+                                    Submit Transaction UTR
                                   </button>
                                 </div>
                               )}
