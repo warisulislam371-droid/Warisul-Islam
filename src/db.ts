@@ -81,7 +81,7 @@ function sanitizeForFirestore<T>(obj: T): T {
 }
 
 // Track quota status so we gracefully fall back to local storage without spamming errors
-let isFirestoreQuotaExceeded = false;
+let isFirestoreQuotaExceeded = true; // Permanently disabled Firebase Firestore integration as requested
 const syncedHashes = new Map<string, string>();
 const activeUnsubscribes: Array<() => void> = [];
 

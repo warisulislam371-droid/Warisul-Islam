@@ -3,6 +3,7 @@ import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
+import { GoogleSheetsSync } from './GoogleSheetsSync';
 import { deleteObject, ref as storageRef } from 'firebase/storage';
 import { storage } from '../firebase';
 import {
@@ -1551,10 +1552,11 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 Monitor vendor order acceptances, packaging status, courier dispatch partners, and tracking coordinates.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700">
+            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
+              <span className="text-xs font-bold px-3 py-1.5 bg-slate-100 text-slate-700 rounded-xl">
                 Total Orders: <strong className="font-mono">{orders.length}</strong>
               </span>
+              <GoogleSheetsSync data={orders} dataType="orders" buttonText="Export All Orders" />
             </div>
           </div>
 
@@ -2404,8 +2406,11 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                   Full administrative control over marketplace inventory: audit listings, approve & publish to live customer portal, or reject listings with notes.
                 </p>
               </div>
-              <div className="flex items-center gap-2 text-xs font-bold bg-teal-50 text-teal-800 px-4 py-2.5 rounded-xl border border-teal-200">
-                <Shield className="w-4 h-4 text-teal-600" /> Catalog Audit Mode Active
+              <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
+                <GoogleSheetsSync data={filteredProducts} dataType="products" buttonText="Export Filtered Catalog" />
+                <div className="flex items-center gap-2 text-xs font-bold bg-teal-50 text-teal-800 px-4 py-2.5 rounded-xl border border-teal-200">
+                  <Shield className="w-4 h-4 text-teal-600" /> Catalog Audit Mode Active
+                </div>
               </div>
             </div>
 

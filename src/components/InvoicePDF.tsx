@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Order } from '../types';
-import { Printer, Download, X, CheckCircle } from 'lucide-react';
+import { Printer, Download, X, CheckCircle, Cloud, Loader2 } from 'lucide-react';
+import { signInWithGoogleForWorkspace, getCachedWorkspaceToken, uploadFileToGoogleDrive } from '../utils/googleSheets';
 
 interface InvoicePDFProps {
   order: Order;
@@ -9,12 +10,73 @@ interface InvoicePDFProps {
 }
 
 export default function InvoicePDF({ order, onClose, addToast }: InvoicePDFProps) {
+  const [isSavingToDrive, setIsSavingToDrive] = useState(false);
+  const [driveFileUrl, setDriveFileUrl] = useState<string | null>(null);
+
   const handlePrint = () => {
     window.print();
   };
 
   const getSubtotal = () => {
     return order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  };
+
+  const handleSaveToDrive = async () => {
+    setIsSavingToDrive(true);
+    try {
+      let currentToken = getCachedWorkspaceToken();
+      if (!currentToken) {
+        const authRes = await signInWithGoogleForWorkspace();
+        currentToken = authRes.accessToken;
+      }
+
+      // Generate invoice text file content
+      const invoiceText = `
+=========================================
+      HEALNEX MEDIBAZAR INVOICE
+=========================================
+Invoice No   : ${order.id}
+Order Date   : ${new Date(order.createdAt).toLocaleDateString()}
+Payment Status: ${order.paymentStatus || 'Pending'}
+Order Status : ${order.status}
+
+CUSTOMER DETAILS:
+Name         : ${order.customerName}
+Email        : ${order.customerEmail}
+Phone        : ${order.phone || 'N/A'}
+Address      : ${order.address || 'N/A'}
+
+SUPPLIER VENDOR:
+Name         : ${order.vendorName}
+
+ITEMS:
+${order.items.map(item => `- ${item.productName} | Qty: ${item.quantity} | Price: INR ${item.price} | Total: INR ${item.price * item.quantity}`).join('\n')}
+
+SUMMARY:
+Subtotal     : INR ${getSubtotal()}
+GST Amount   : INR ${order.gstAmount}
+Discount     : INR ${order.discountAmount}
+-----------------------------------------
+GRAND TOTAL  : INR ${order.finalAmount}
+=========================================
+Generated via Google Drive Cloud Integration.
+`;
+
+      const fileName = `Healnex_Invoice_Order_${order.id}.txt`;
+      const result = await uploadFileToGoogleDrive(currentToken, fileName, invoiceText, 'text/plain');
+      
+      setDriveFileUrl(result.url);
+      if (addToast) {
+        addToast(`Invoice saved to Google Drive as ${fileName}!`, 'success');
+      }
+    } catch (err: any) {
+      console.error('Failed to save to Google Drive:', err);
+      if (addToast) {
+        addToast(err?.message || 'Failed to save to Google Drive. Ensure you granted permissions.', 'error');
+      }
+    } finally {
+      setIsSavingToDrive(false);
+    }
   };
 
   return (
@@ -26,7 +88,7 @@ export default function InvoicePDF({ order, onClose, addToast }: InvoicePDFProps
             <CheckCircle className="w-5 h-5 text-emerald-600" />
             <h3 className="text-sm font-semibold text-slate-800">B2B Commercial Tax Invoice</h3>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={handlePrint}
               className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition"
@@ -45,6 +107,38 @@ export default function InvoicePDF({ order, onClose, addToast }: InvoicePDFProps
               <Download className="w-3.5 h-3.5" />
               Download PDF
             </button>
+            
+            {driveFileUrl ? (
+              <a
+                href={driveFileUrl}
+                target="_blank"
+                referrerPolicy="no-referrer"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-300 rounded-lg hover:bg-emerald-100 transition no-print"
+              >
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                Saved to Drive! ↗
+              </a>
+            ) : (
+              <button
+                onClick={handleSaveToDrive}
+                disabled={isSavingToDrive}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition disabled:opacity-50 cursor-pointer no-print"
+              >
+                {isSavingToDrive ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Cloud className="w-3.5 h-3.5 text-sky-400" />
+                    Save to Drive
+                  </>
+                )}
+              </button>
+            )}
+
             <button
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition ml-2"

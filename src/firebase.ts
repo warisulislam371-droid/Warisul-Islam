@@ -20,7 +20,7 @@ try {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
 const storage = getStorage(app);
 
 // Enable Offline Persistence for high resilience in browser environments
@@ -40,26 +40,12 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export let isQuotaExceeded = false;
+export let isQuotaExceeded = true; // Permanently disabled Firebase Firestore integration as requested
 
 // Test connection on boot to satisfy validating connection criteria
 export async function testFirebaseConnection() {
-  try {
-    const testDocRef = doc(db, 'test', 'connection');
-    await getDocFromServer(testDocRef);
-    console.log('Firebase Firestore connection test successful.');
-    return true;
-  } catch (error: any) {
-    if (error?.code === 'resource-exhausted' || error?.message?.includes('resource-exhausted') || error?.message?.includes('Quota limit exceeded')) {
-      isQuotaExceeded = true;
-      console.warn('Firebase Firestore daily write quota reached. Application is running smoothly via IndexedDB & local persistence.');
-    } else if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase is offline. Check network connection or configuration.');
-    } else {
-      console.warn('Firebase Firestore test connection failed (expected if DB is empty or quota reached):', error?.message || error);
-    }
-    return false;
-  }
+  console.log('Firebase Firestore is currently disabled. Using offline local storage persistence.');
+  return false;
 }
 
 // Run test connection in browser environment

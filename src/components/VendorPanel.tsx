@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { Vendor, Product, Order, RFQ, Quotation, User, PaymentClearanceRequest } from '../types';
 import VendorProductManager from './VendorProductManager';
+import { GoogleSheetsSync } from './GoogleSheetsSync';
 import {
   Store,
   Upload,
@@ -1283,13 +1284,16 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-fade-in">
           <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between flex-wrap gap-3">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Customer Equipment Sales</h3>
-            <button
-              onClick={() => setActiveTab('payouts')}
-              className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
-            >
-              <IndianRupee className="w-3.5 h-3.5" />
-              Request Payment Clearance
-            </button>
+            <div className="flex items-center gap-3 flex-wrap">
+              <GoogleSheetsSync data={orders} dataType="orders" buttonText="Export Sales Orders" />
+              <button
+                onClick={() => setActiveTab('payouts')}
+                className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+              >
+                <IndianRupee className="w-3.5 h-3.5" />
+                Request Payment Clearance
+              </button>
+            </div>
           </div>
 
           {orders.length === 0 ? (
