@@ -599,6 +599,12 @@ export default function CustomerPanel({
       return;
     }
     if (cart.length === 0) return;
+
+    if (!screenshotFile) {
+      addToast('Please upload your payment transaction screenshot/receipt to place the order.', 'error');
+      return;
+    }
+
     setCheckoutStep('processing');
 
     try {
@@ -610,6 +616,16 @@ export default function CustomerPanel({
       const orderId = `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
       const txId = manualTxId.trim() || `UPI-${Date.now().toString().slice(-6)}`;
       const paymentMethodName = selectedPayMethod === 'bank' ? 'Bank Transfer' : 'UPI';
+
+      let screenshotUrl = undefined;
+      let screenshotName = undefined;
+      try {
+        const uploadRes = await uploadScreenshot(screenshotFile);
+        screenshotUrl = uploadRes.url;
+        screenshotName = uploadRes.name;
+      } catch (uploadErr) {
+        console.warn('[Screenshot Upload] Failed, continuing with direct data payload:', uploadErr);
+      }
 
       const newOrder: Order = {
         id: orderId,
@@ -638,8 +654,8 @@ export default function CustomerPanel({
         status: 'Payment Pending Verification', // Requirement 6
         orderStatus: 'Payment Pending Verification', // Requirement 6
         paymentStatus: 'Pending Verification', // Requirement 6
-        paymentMethod: 'UPI',
-        payment_method: 'UPI',
+        paymentMethod: paymentMethodName,
+        payment_method: paymentMethodName,
         upi_transaction_id: txId,
         payment_status: 'Pending Verification',
         order_status: 'Payment Pending Verification',
@@ -649,19 +665,19 @@ export default function CustomerPanel({
           { 
             status: 'Payment Pending Verification', 
             time: new Date().toISOString(), 
-            note: `Procurement order placed. Transaction reference (UTR: ${txId}) submitted via UPI.` 
+            note: `Procurement order placed. Transaction reference (UTR: ${txId}) submitted via ${paymentMethodName}.` 
           }
         ],
         paymentTxId: txId,
         paymentNote: manualNote.trim() || undefined,
-        paymentScreenshotUrl: undefined,
-        paymentScreenshotName: undefined,
+        paymentScreenshotUrl: screenshotUrl,
+        paymentScreenshotName: screenshotName,
         paymentVerificationLogs: [{
           action: 'submit',
           performedBy: shippingName.trim(),
           performedByRole: 'customer',
           timestamp: new Date().toISOString(),
-          note: 'Initial transaction UTR verification requested.'
+          note: `Initial manual transaction verification requested for payment via ${paymentMethodName}.`
         }]
       };
 
@@ -2379,6 +2395,41 @@ export default function CustomerPanel({
                       />
                     </div>
 
+                    <div className="sm:col-span-2">
+                      <label className="text-slate-400 block mb-1 font-bold">Payment Receipt / Screenshot *</label>
+                      <div className="border border-dashed border-slate-300 rounded-xl p-4 bg-white hover:bg-slate-50 transition relative flex flex-col items-center justify-center text-center cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 5 * 1024 * 1024) {
+                                addToast('Screenshot size must be less than 5MB.', 'error');
+                                return;
+                              }
+                              setScreenshotFile(file);
+                            }
+                          }}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                        <Upload className="w-8 h-8 text-slate-400 mb-1" />
+                        {screenshotFile ? (
+                          <div>
+                            <p className="text-xs font-bold text-teal-800 flex items-center gap-1 justify-center">
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Selected: {screenshotFile.name}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-medium">Click or drag new image to replace (Max 5MB)</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-xs text-slate-700 font-bold">Select or drag payment receipt screenshot</p>
+                            <p className="text-[10px] text-slate-400 font-medium">Supports JPG, PNG, JPEG formats (Max 5MB)</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                   </div>
                 </div>
 
@@ -2394,7 +2445,7 @@ export default function CustomerPanel({
                     <button
                       type="button"
                       onClick={handleSubmitOrder}
-                      disabled={!manualTxId.trim()}
+                      disabled={!manualTxId.trim() || !screenshotFile}
                       className="w-2/3 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
                     >
                       <Check className="w-4 h-4" />

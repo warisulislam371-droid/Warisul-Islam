@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { User, Vendor } from '../types';
+import { addVendorToSheet } from '../lib/sheets';
 import {
   Lock,
   Mail,
@@ -192,6 +193,8 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
     fssaiLicense: { name: '', size: '', url: '', previewUrl: '', progress: 0, isUploading: false },
   });
 
+  const [isVendorRegSuccess, setIsVendorRegSuccess] = useState(false);
+
   // Forced password change variables
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -366,6 +369,26 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
       return;
     }
 
+    // Check vendor status if role is vendor
+    if (match.role === 'vendor') {
+      const vendors = dbLocal.getVendors();
+      const vendor = vendors.find(v => v.id === match.id);
+      if (vendor) {
+        if (vendor.status === 'Pending') {
+          addToast('Your account is awaiting admin approval.', 'error');
+          return;
+        }
+        if (vendor.status === 'Rejected') {
+          addToast(`Your registration was rejected. Reason: ${vendor.statusReason || 'Documents did not meet criteria.'}`, 'error');
+          return;
+        }
+        if (vendor.status === 'Suspended') {
+          addToast('Your account has been suspended. Please contact support.', 'error');
+          return;
+        }
+      }
+    }
+
     // Successful normal login
     dbLocal.setCurrentUser(match);
     onLoginSuccess(match);
@@ -450,16 +473,8 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
       addToast('GST Certificate is required for clinical vendor onboarding. Please upload or scan.', 'error');
       return;
     }
-    if (!uploadedDocs.tradeLicense.url) {
-      addToast('Trade License is required for clinical vendor onboarding. Please upload or scan.', 'error');
-      return;
-    }
     if (!uploadedDocs.companyRegCertificate.url) {
-      addToast('Company Registration Certificate is required for clinical vendor onboarding. Please upload or scan.', 'error');
-      return;
-    }
-    if (!uploadedDocs.cancelledCheque.url) {
-      addToast('Cancelled Cheque is required for clinical vendor onboarding. Please upload or scan.', 'error');
+      addToast('Business Certificate (Company Registration) is required for clinical vendor onboarding. Please upload or scan.', 'error');
       return;
     }
 
@@ -530,6 +545,11 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
     currentVendors.push(newVendor);
     dbLocal.saveVendors(currentVendors);
 
+    // Sync to Google Sheets
+    addVendorToSheet(newVendor).catch(err => {
+      console.warn('Failed to sync registered vendor to Google Sheets:', err);
+    });
+
     // Trigger push notification to Admins
     dbLocal.addNotification(
       'admin',
@@ -540,10 +560,8 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
 
     addToast('Onboarding profile & verified documents uploaded successfully! Account pending audit.', 'success');
     
-    // Log in immediately as vendor
-    dbLocal.setCurrentUser(newUser);
-    onLoginSuccess(newUser);
-    onClose();
+    // Show manual registration success confirmation instead of auto login
+    setIsVendorRegSuccess(true);
   };
 
   const handleForgotSubmit = (e: React.FormEvent) => {
@@ -712,8 +730,45 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
           {/* Form Content Scrolling Window */}
           <div className="p-6 max-h-[60vh] overflow-y-auto">
             
-            {/* 1. Login Mode */}
-            {mode === 'login' && (
+            {isVendorRegSuccess ? (
+              <div className="text-center py-8 px-4 space-y-6 animate-fade-in">
+                <div className="w-16 h-16 bg-teal-50 border border-teal-200 text-teal-700 rounded-full flex items-center justify-center mx-auto shadow-sm">
+                  <CheckCircle className="w-10 h-10" />
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className={`text-base font-bold uppercase tracking-wide ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                    Registration Successful
+                  </h3>
+                  <p className={`text-xs leading-relaxed max-w-md mx-auto ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                    Your registration has been submitted successfully. Your account is awaiting admin approval.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-left max-w-md mx-auto space-y-2 text-xs text-slate-600 font-medium">
+                  <p className="font-bold text-slate-800 uppercase text-[10px] tracking-wider mb-1">What happens next?</p>
+                  <p>1. Our compliance team will audit your CDSCO, GST, and Drug License documents within 24-48 business hours.</p>
+                  <p>2. You will receive an automated email notification once your portal status is updated.</p>
+                  <p>3. If approved, you can log in to list medical gear, manage inventory, and quote for active institutional RFQs.</p>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsVendorRegSuccess(false);
+                      onClose();
+                    }}
+                    className="bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs uppercase px-6 py-3 rounded-xl tracking-wider transition cursor-pointer"
+                  >
+                    Close Secure Window
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* 1. Login Mode */}
+                {mode === 'login' && (
               <form onSubmit={handleLogin} className="space-y-4 font-medium">
                 <div>
                   <label className={`block mb-1 text-[10px] uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -1263,9 +1318,9 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-3">
                     {[
                       { key: 'gstCertificate', label: 'GST Certificate (Form REG-06)', required: true },
-                      { key: 'tradeLicense', label: 'Active Municipal Trade License', required: true },
-                      { key: 'companyRegCertificate', label: 'Company Registration (CoI)', required: true },
-                      { key: 'cancelledCheque', label: 'Cancelled Cheque Leaf', required: true },
+                      { key: 'companyRegCertificate', label: 'Business Certificate (CoI)', required: true },
+                      { key: 'tradeLicense', label: 'Active Municipal Trade License', required: false },
+                      { key: 'cancelledCheque', label: 'Cancelled Cheque Leaf', required: false },
                       { key: 'panCard', label: 'Corporate PAN Card', required: false },
                       { key: 'aadhaarCard', label: 'Promoter Aadhaar Card', required: false },
                       { key: 'drugLicense', label: 'State Drug Control License', required: false },
@@ -1455,6 +1510,9 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
                   Back to Sign In
                 </button>
               </form>
+            )}
+
+              </>
             )}
 
           </div>

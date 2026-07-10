@@ -295,3 +295,39 @@ export async function getProducts(): Promise<any[]> {
     return [];
   }
 }
+
+/**
+ * 6. addVendorToSheet(vendorData) -> Append row to "Healnex_Vendors" sheet
+ */
+export async function addVendorToSheet(vendorData: any) {
+  const ids = getSheetIds();
+  const row = [
+    vendorData.id || '',
+    vendorData.companyName || '',
+    vendorData.ownerName || '',
+    vendorData.email || '',
+    vendorData.mobileNumber || '',
+    vendorData.gstNumber || '',
+    vendorData.panNumber || '',
+    vendorData.aadhaarNumber || '',
+    vendorData.businessAddress || '',
+    vendorData.state || '',
+    vendorData.district || '',
+    vendorData.pincode || '',
+    vendorData.bankDetails?.bankName || '',
+    vendorData.bankDetails?.accountNumber || '',
+    vendorData.bankDetails?.ifscCode || '',
+    vendorData.status || 'Pending',
+    vendorData.createdAt || new Date().toISOString()
+  ];
+
+  try {
+    // Append to sheet named "Healnex_Vendors" using the user/fallback spreadsheet
+    await appendRow(ids.users, 'Healnex_Vendors!A:Q', row);
+    console.log('Successfully appended vendor to Healnex_Vendors Google Sheet.');
+  } catch (err: any) {
+    console.error('[Sheets Sync] Direct Google Sheets vendor write failed:', err);
+    throw err;
+  }
+}
+
