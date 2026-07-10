@@ -332,6 +332,10 @@ export interface Order {
   paymentVerificationLogs?: PaymentVerificationLog[];
   orderStatus?: string;
   paymentStatus?: string;
+  payment_method?: string;
+  upi_transaction_id?: string;
+  payment_status?: string;
+  order_status?: string;
   paymentScreenshotUrl?: string;
   paymentScreenshotName?: string;
 }

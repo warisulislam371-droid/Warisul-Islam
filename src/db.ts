@@ -10,6 +10,13 @@ import {
   onSnapshot 
 } from 'firebase/firestore';
 import { db, isQuotaExceeded, auth } from './firebase';
+import { 
+  addOrder as addOrderToSheets, 
+  getOrders as getOrdersFromSheets, 
+  updateOrderStatus as updateOrderStatusInSheets, 
+  addUser as addUserToSheets, 
+  getProducts as getProductsFromSheets,
+} from './lib/sheets';
 
 enum OperationType {
   CREATE = 'create',
@@ -672,53 +679,90 @@ export const dbLocal = {
     // Do not auto-login by default to allow showing login screen on startup
     this.set(STORAGE_KEYS.CURRENT_USER, null);
 
-    // Background Firebase seeding & listening initialization
-    try {
-      // 1. Seed Firestore collections if empty
-      await seedCollectionIfEmpty('users', DEFAULT_USERS);
-      await seedCollectionIfEmpty('vendors', DEFAULT_VENDORS);
-      await seedCollectionIfEmpty('products', INITIAL_PRODUCTS);
-      await seedCollectionIfEmpty('orders', DEFAULT_ORDERS);
-      await seedCollectionIfEmpty('rfqs', DEFAULT_RFQS);
-      await seedCollectionIfEmpty('quotations', DEFAULT_QUOTATIONS);
-      await seedCollectionIfEmpty('tickets', DEFAULT_TICKETS);
-      await seedCollectionIfEmpty('blogs', INITIAL_BLOGS);
-      await seedCollectionIfEmpty('notifications', DEFAULT_NOTIFICATIONS);
-      await seedCollectionIfEmpty('reviews', DEFAULT_REVIEWS);
-      await seedCollectionIfEmpty('payment_settings', [DEFAULT_PAYMENT_SETTINGS]);
-      await seedCollectionIfEmpty('whatsapp_settings', [DEFAULT_WHATSAPP_SETTINGS]);
-      await seedCollectionIfEmpty('whatsapp_click_logs', []);
-      await seedCollectionIfEmpty('clearance_requests', DEFAULT_CLEARANCE_REQUESTS);
-      await seedCollectionIfEmpty('promo_banners', DEFAULT_PROMO_BANNERS);
-      await seedCollectionIfEmpty('categories', INITIAL_CATEGORIES);
-      await seedCollectionIfEmpty('brands', INITIAL_BRANDS);
-      await seedCollectionIfEmpty('categoryRequests', []);
-      await seedCollectionIfEmpty('brandRequests', []);
-      await seedCollectionIfEmpty('commission_settings', [DEFAULT_COMMISSION_SETTINGS]);
+    // Boot Google Sheets background sync
+    this.syncDataFromSheets().catch(err => {
+      console.warn('Initial Google Sheets synchronization failed:', err);
+    });
+  },
 
-      // 2. Start real-time Firestore synchronization
-      listenToCollection('users', STORAGE_KEYS.USERS, DEFAULT_USERS);
-      listenToCollection('vendors', STORAGE_KEYS.VENDORS, DEFAULT_VENDORS);
-      listenToCollection('products', STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
-      listenToCollection('orders', STORAGE_KEYS.ORDERS, DEFAULT_ORDERS);
-      listenToCollection('rfqs', STORAGE_KEYS.RFQS, DEFAULT_RFQS);
-      listenToCollection('quotations', STORAGE_KEYS.QUOTATIONS, DEFAULT_QUOTATIONS);
-      listenToCollection('tickets', STORAGE_KEYS.TICKETS, DEFAULT_TICKETS);
-      listenToCollection('blogs', STORAGE_KEYS.BLOGS, INITIAL_BLOGS);
-      listenToCollection('notifications', STORAGE_KEYS.NOTIFICATIONS, DEFAULT_NOTIFICATIONS);
-      listenToCollection('reviews', STORAGE_KEYS.REVIEWS, DEFAULT_REVIEWS);
-      listenToCollection('payment_settings', STORAGE_KEYS.PAYMENT_SETTINGS, [DEFAULT_PAYMENT_SETTINGS]);
-      listenToCollection('whatsapp_settings', STORAGE_KEYS.WHATSAPP_SETTINGS, [DEFAULT_WHATSAPP_SETTINGS]);
-      listenToCollection('whatsapp_click_logs', STORAGE_KEYS.WHATSAPP_CLICK_LOGS, []);
-      listenToCollection('clearance_requests', STORAGE_KEYS.CLEARANCE_REQUESTS, DEFAULT_CLEARANCE_REQUESTS);
-      listenToCollection('promo_banners', STORAGE_KEYS.PROMO_BANNERS, DEFAULT_PROMO_BANNERS);
-      listenToCollection('categories', STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
-      listenToCollection('brands', STORAGE_KEYS.BRANDS, INITIAL_BRANDS);
-      listenToCollection('categoryRequests', STORAGE_KEYS.CATEGORY_REQUESTS, []);
-      listenToCollection('brandRequests', STORAGE_KEYS.BRAND_REQUESTS, []);
-      listenToCollection('commission_settings', STORAGE_KEYS.COMMISSION_SETTINGS, [DEFAULT_COMMISSION_SETTINGS]);
+  async syncDataFromSheets() {
+    try {
+      console.log('[Sheets Sync] Starting sync of users, products, and orders from Google Sheets...');
+
+      // 1. Sync products
+      try {
+        const sheetsProducts = await getProductsFromSheets();
+        if (sheetsProducts && sheetsProducts.length > 0) {
+          console.log(`[Sheets Sync] Synced ${sheetsProducts.length} products from Google Sheets.`);
+          const localProds = this.getProducts();
+          const mergedProds = [...localProds];
+          for (const sp of sheetsProducts) {
+            const idx = mergedProds.findIndex(p => p.id === sp.id);
+            if (idx > -1) {
+              mergedProds[idx] = { ...mergedProds[idx], ...sp, stockQuantity: sp.stock ?? mergedProds[idx].stockQuantity };
+            } else {
+              mergedProds.push({
+                ...sp,
+                sku: `SKU-${sp.id}`,
+                description: `${sp.name} is a high-grade professional medical supply.`,
+                brand: 'Healnex',
+                subcategory: 'Clinical Supplies',
+                images: [sp.image || 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80'],
+                gstRate: 18,
+                hsnCode: '9018',
+                isVerified: true,
+                vendorId: 'vendor-1',
+                vendorName: 'Healnex Supplier Ltd',
+                status: 'Approved',
+                specifications: {},
+                moq: 1,
+                stockQuantity: sp.stock ?? 50,
+              } as any);
+            }
+          }
+          this.set(STORAGE_KEYS.PRODUCTS, mergedProds);
+        }
+      } catch (e) {
+        console.warn('[Sheets Sync] Product sync failed:', e);
+      }
+
+      // 2. Sync orders
+      try {
+        const sheetsOrders = await getOrdersFromSheets();
+        if (sheetsOrders && sheetsOrders.length > 0) {
+          console.log(`[Sheets Sync] Synced ${sheetsOrders.length} orders from Google Sheets.`);
+          const localOrders = this.getOrders();
+          const mergedOrders = [...localOrders];
+          for (const so of sheetsOrders) {
+            const idx = mergedOrders.findIndex(o => o.id === so.id);
+            if (idx > -1) {
+              mergedOrders[idx] = { ...mergedOrders[idx], ...so };
+            } else {
+              mergedOrders.push({
+                ...so,
+                vendorId: so.vendorId || 'vendor-1',
+                vendorName: so.vendorName || 'Healnex Supplier Ltd',
+                paymentMethod: 'UPI',
+                paymentTxId: so.paymentTxId || '',
+                payment_method: 'UPI',
+                orderStatus: so.status,
+                paymentStatus: so.status === 'Confirmed' ? 'Verified' : 'Pending Verification',
+                timeline: so.timeline || [
+                  { status: so.status, time: so.createdAt, note: 'Synchronized order from Google Sheets.' }
+                ],
+              } as any);
+            }
+          }
+          this.set(STORAGE_KEYS.ORDERS, mergedOrders);
+        }
+      } catch (e) {
+        console.warn('[Sheets Sync] Order sync failed:', e);
+      }
+
+      console.log('[Sheets Sync] Google Sheets data sync completed successfully!');
+      window.dispatchEvent(new Event('healnex_db_update'));
     } catch (err) {
-      console.warn('Firebase sync failed to initialize (possibly offline):', err);
+      console.warn('[Sheets Sync] General error during Sheets sync:', err);
     }
   },
 
@@ -761,7 +805,17 @@ export const dbLocal = {
   saveUsers(users: User[]) {
     const old = this.get(STORAGE_KEYS.USERS, DEFAULT_USERS) as User[];
     this.set(STORAGE_KEYS.USERS, users);
-    syncListToFirestoreWithDeletions('users', users, old);
+    
+    // Detect new users and append them to Google Sheets
+    const oldEmails = new Set(old.map(u => u.email.toLowerCase()));
+    for (const u of users) {
+      if (u && u.email && !oldEmails.has(u.email.toLowerCase())) {
+        console.log(`[Sheets Sync] Detecting new user ${u.name} (${u.email}). Appending to Google Sheets...`);
+        addUserToSheets(u).catch(err => {
+          console.error('[Sheets Sync] Failed to append user to Google Sheets:', err);
+        });
+      }
+    }
   },
 
   // Current logged in User
@@ -867,7 +921,18 @@ export const dbLocal = {
   saveOrders(orders: Order[]) {
     const old = this.getOrders();
     this.set(STORAGE_KEYS.ORDERS, orders);
-    syncListToFirestoreWithDeletions('orders', orders, old);
+    
+    // Sync order status changes to Google Sheets!
+    for (const ord of orders) {
+      if (!ord || !ord.id) continue;
+      const prev = old.find(o => o.id === ord.id);
+      if (prev && prev.status !== ord.status) {
+        console.log(`[Sheets Sync] Detected status change for order ${ord.id} from "${prev.status}" to "${ord.status}". Syncing to Google Sheets...`);
+        updateOrderStatusInSheets(ord.id, ord.status).catch(err => {
+          console.error(`[Sheets Sync] Failed to update status for order ${ord.id} in Google Sheets:`, err);
+        });
+      }
+    }
   },
   async createOrderDirect(newOrder: Order) {
     console.log(`Starting createOrderDirect for Order ID: ${newOrder.id}`);
@@ -916,21 +981,14 @@ export const dbLocal = {
       orderStatus: newOrder.status,
     };
 
-    const sanitized = sanitizeForFirestore(orderDoc);
-    const serialized = JSON.stringify(sanitized);
-
-    // Perform direct Firestore write immediately
+    // Perform direct Google Sheets write immediately
     try {
-      console.log(`Attempting direct Firestore write to orders/${newOrder.id}`);
-      await setDoc(doc(db, 'orders', newOrder.id), sanitized);
-      syncedHashes.set(`orders/${newOrder.id}`, serialized);
-      console.log(`Direct Firestore write successful for Order ID: ${newOrder.id}`);
+      console.log(`[Sheets Sync] Attempting direct Google Sheets write for Order ID: ${newOrder.id}`);
+      await addOrderToSheets(newOrder);
+      console.log(`[Sheets Sync] Direct Google Sheets write successful for Order ID: ${newOrder.id}`);
     } catch (err: any) {
-      console.error(`Direct Firestore write failed for Order ID: ${newOrder.id}`, err);
-      if (err?.code === 'permission-denied' || err?.message?.includes('permission-denied')) {
-        handleFirestoreError(err, OperationType.WRITE, `orders/${newOrder.id}`);
-      }
-      throw err;
+      console.error(`[Sheets Sync] Direct Google Sheets write failed for Order ID: ${newOrder.id}`, err);
+      // Fallback: we still save it to local storage below so the customer is never stuck!
     }
 
     // Update local storage to keep client in sync

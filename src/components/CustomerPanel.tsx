@@ -52,6 +52,8 @@ import {
 import InvoicePDF from './InvoicePDF';
 import HomepageTrustSection from './HomepageTrustSection';
 import { PolicyType } from './PolicyModal';
+import { GoogleSheetsSync } from './GoogleSheetsSync';
+import { getCachedWorkspaceToken, createGoogleSpreadsheet, appendRowsToSpreadsheet } from '../utils/googleSheets';
 
 const CategoryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'Activity': Activity,
@@ -634,16 +636,20 @@ export default function CustomerPanel({
         discountAmount: 0,
         finalAmount: final,
         status: 'Payment Pending Verification', // Requirement 6
-        orderStatus: 'Pending', // Requirement 6
+        orderStatus: 'Payment Pending Verification', // Requirement 6
         paymentStatus: 'Pending Verification', // Requirement 6
-        paymentMethod: paymentMethodName,
+        paymentMethod: 'UPI',
+        payment_method: 'UPI',
+        upi_transaction_id: txId,
+        payment_status: 'Pending Verification',
+        order_status: 'Payment Pending Verification',
         shippingAddress: shippingAddress,
         createdAt: new Date().toISOString(),
         timeline: [
           { 
             status: 'Payment Pending Verification', 
             time: new Date().toISOString(), 
-            note: `Procurement order placed. Transaction reference (UTR: ${txId}) submitted via ${paymentMethodName}.` 
+            note: `Procurement order placed. Transaction reference (UTR: ${txId}) submitted via UPI.` 
           }
         ],
         paymentTxId: txId,
@@ -659,8 +665,44 @@ export default function CustomerPanel({
         }]
       };
 
-      // Save order in Firestore
+      // Save order in Firestore & Local Panel
       await dbLocal.createOrderDirect(newOrder);
+
+      // Try to sync with Google Sheets automatically if a workspace session is active
+      const sheetsToken = getCachedWorkspaceToken();
+      if (sheetsToken) {
+        try {
+          let sheetId = localStorage.getItem('google_orders_sheet_id');
+          if (!sheetId) {
+            const sheetInfo = await createGoogleSpreadsheet(sheetsToken, "Healnex MedBazar - Live Orders Sheet");
+            sheetId = sheetInfo.id;
+            localStorage.setItem('google_orders_sheet_id', sheetId);
+          }
+
+          const row = [
+            newOrder.id,
+            new Date(newOrder.createdAt).toLocaleString(),
+            newOrder.customerName,
+            newOrder.customerEmail,
+            newOrder.phone || 'N/A',
+            newOrder.vendorName,
+            newOrder.items?.map((item: any) => `${item.productName} (x${item.quantity})`).join(', ') || '',
+            newOrder.totalAmount,
+            newOrder.gstAmount,
+            newOrder.discountAmount,
+            newOrder.finalAmount,
+            newOrder.order_status,
+            newOrder.payment_status,
+            newOrder.payment_method,
+            newOrder.upi_transaction_id
+          ];
+
+          await appendRowsToSpreadsheet(sheetsToken, sheetId, 'Sheet1!A1', [row]);
+          addToast('Order details synced to live Google Sheet!', 'success');
+        } catch (sheetErr) {
+          console.error('Failed to auto-sync order to Google Sheets:', sheetErr);
+        }
+      }
 
       // Alert Admin
       dbLocal.addNotification(
@@ -2356,7 +2398,7 @@ export default function CustomerPanel({
                       className="w-2/3 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
                     >
                       <Check className="w-4 h-4" />
-                      <span>Submit Order</span>
+                      <span>Place Order</span>
                     </button>
                   </div>
                 </div>

@@ -1,9 +1,19 @@
 import { signInWithPopup, GoogleAuthProvider, User } from 'firebase/auth';
 import { auth } from '../firebase';
 
-// Keep the access token in-memory for security
-let cachedAccessToken: string | null = null;
+// Keep the access token in-memory and fallback to localStorage for cross-tab/session persistence
+let cachedAccessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('GOOGLE_WORKSPACE_ACCESS_TOKEN') : null;
 let googleUser: User | null = null;
+if (typeof window !== 'undefined') {
+  const storedUser = localStorage.getItem('GOOGLE_WORKSPACE_USER');
+  if (storedUser) {
+    try {
+      googleUser = JSON.parse(storedUser) as User;
+    } catch (e) {
+      // ignore
+    }
+  }
+}
 
 // Scopes required for Drive and Sheets
 export const GOOGLE_SCOPES = [
@@ -36,6 +46,16 @@ export async function signInWithGoogleForWorkspace(): Promise<{ user: User; acce
 
     cachedAccessToken = credential.accessToken;
     googleUser = result.user;
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('GOOGLE_WORKSPACE_ACCESS_TOKEN', credential.accessToken);
+      localStorage.setItem('GOOGLE_WORKSPACE_USER', JSON.stringify({
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL,
+      }));
+    }
     
     return {
       user: result.user,
@@ -67,6 +87,10 @@ export function getCachedWorkspaceUser(): User | null {
 export function clearWorkspaceSession() {
   cachedAccessToken = null;
   googleUser = null;
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('GOOGLE_WORKSPACE_ACCESS_TOKEN');
+    localStorage.removeItem('GOOGLE_WORKSPACE_USER');
+  }
 }
 
 /**

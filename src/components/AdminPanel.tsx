@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
+import { updateOrderStatus as updateOrderStatusInSheets } from '../lib/sheets';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
@@ -207,6 +208,41 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  
+  // Google Sheets DB States
+  const [sheetIdOrders, setSheetIdOrders] = useState(localStorage.getItem('GOOGLE_SHEET_ID_ORDERS') || '');
+  const [sheetIdUsers, setSheetIdUsers] = useState(localStorage.getItem('GOOGLE_SHEET_ID_USERS') || '');
+  const [sheetIdProducts, setSheetIdProducts] = useState(localStorage.getItem('GOOGLE_SHEET_ID_PRODUCTS') || '');
+  const [sheetsApiKey, setSheetsApiKey] = useState(localStorage.getItem('VITE_NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY') || '');
+  const [isSyncingSheets, setIsSyncingSheets] = useState(false);
+
+  const handleSaveSheetsConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('GOOGLE_SHEET_ID_ORDERS', sheetIdOrders.trim());
+    localStorage.setItem('GOOGLE_SHEET_ID_USERS', sheetIdUsers.trim());
+    localStorage.setItem('GOOGLE_SHEET_ID_PRODUCTS', sheetIdProducts.trim());
+    if (sheetsApiKey.trim()) {
+      localStorage.setItem('VITE_NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY', sheetsApiKey.trim());
+    } else {
+      localStorage.removeItem('VITE_NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY');
+    }
+    addToast('Google Sheets Database configuration saved successfully!', 'success');
+  };
+
+  const handleSyncLiveSheets = async () => {
+    setIsSyncingSheets(true);
+    try {
+      addToast('Syncing database from Google Sheets...', 'info');
+      await dbLocal.syncDataFromSheets();
+      setOrders(dbLocal.getOrders());
+      setProducts(dbLocal.getProducts());
+      addToast('Live database successfully synchronized with Google Sheets!', 'success');
+    } catch (err: any) {
+      addToast(`Sync failed: ${err?.message || 'Check your Spreadsheet IDs and API Key'}`, 'error');
+    } finally {
+      setIsSyncingSheets(false);
+    }
+  };
   
   // Custom push trigger form state
   const [pushTitle, setPushTitle] = useState('');
@@ -561,6 +597,12 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
   useEffect(() => {
     loadData();
+
+    // Background sync from Google Sheets on mount
+    dbLocal.syncDataFromSheets().then(() => {
+      loadData();
+    }).catch(err => console.warn('Failed to auto-sync Google Sheets on mount:', err));
+
     const handleDbUpdate = () => loadData();
     window.addEventListener('healnex_db_update', handleDbUpdate);
     return () => window.removeEventListener('healnex_db_update', handleDbUpdate);
@@ -656,6 +698,11 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       };
       currentOrders[idx] = updatedOrder;
       dbLocal.saveOrders(currentOrders);
+
+      // Async sync to Google Sheets
+      updateOrderStatusInSheets(orderId, 'Confirmed').catch(err => {
+        console.error('Failed to sync order status confirmation to Google Sheets:', err);
+      });
       
       // Notify Customer & Vendor
       dbLocal.addNotification(
@@ -712,6 +759,11 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       };
       currentOrders[idx] = updatedOrder;
       dbLocal.saveOrders(currentOrders);
+
+      // Async sync to Google Sheets
+      updateOrderStatusInSheets(orderId, 'Payment Rejected').catch(err => {
+        console.error('Failed to sync order status rejection to Google Sheets:', err);
+      });
       
       // Notify Customer
       dbLocal.addNotification(
@@ -4329,6 +4381,100 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             </div>
 
           </form>
+
+          {/* Google Sheets Database Connection Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-xs mt-8">
+            <div className="p-4 border-b border-slate-100 bg-emerald-50/50 flex justify-between items-center">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+                Google Sheets Database Connector (Firebase Alternative)
+              </h3>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full uppercase">Active</span>
+              </div>
+            </div>
+            <div className="p-6 space-y-4 font-medium text-slate-600">
+              <p className="text-xs text-slate-500 leading-relaxed mb-2">
+                All transactional order data, user profiles, and product catalogs are stored directly in your connected Google Sheets. Configure your spreadsheet targets below.
+              </p>
+
+              <form onSubmit={handleSaveSheetsConfig} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-slate-500 block mb-1 font-bold">Healnex_Orders Spreadsheet ID *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Spreadsheet ID or URL"
+                      value={sheetIdOrders}
+                      onChange={(e) => setSheetIdOrders(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-600 transition font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-500 block mb-1 font-bold">Healnex_Users Spreadsheet ID *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Spreadsheet ID or URL"
+                      value={sheetIdUsers}
+                      onChange={(e) => setSheetIdUsers(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-600 transition font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-500 block mb-1 font-bold">Healnex_Products Spreadsheet ID *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Spreadsheet ID or URL"
+                      value={sheetIdProducts}
+                      onChange={(e) => setSheetIdProducts(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-600 transition font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-slate-500 block mb-1 font-bold">Google Sheets API Key (Fallback Override)</label>
+                  <input
+                    type="password"
+                    placeholder="NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY"
+                    value={sheetsApiKey}
+                    onChange={(e) => setSheetsApiKey(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-600 transition font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">If blank, utilizes the platform's configured credentials.</p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row justify-between items-center pt-3 gap-3 border-t border-slate-100">
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-xl uppercase tracking-wider text-[10px] shadow transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Save Connector IDs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSyncLiveSheets}
+                      disabled={isSyncingSheets}
+                      className="bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-bold py-2.5 px-5 rounded-xl uppercase tracking-wider text-[10px] transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSheets ? 'animate-spin' : ''}`} />
+                      {isSyncingSheets ? 'Syncing...' : 'Sync Live Sheets Now'}
+                    </button>
+                  </div>
+
+                  <div className="text-[10px] text-slate-400 flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Synced {orders.length} orders & {products.length} catalog items</span>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       )}
 
