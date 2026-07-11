@@ -1,4 +1,4 @@
-import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, AuditLog } from './types';
+import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest } from './types';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_BLOGS, DEFAULT_SUPER_ADMIN, INITIAL_BRANDS } from './data';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from './utils/sliceQrSvg';
 import { 
@@ -10,13 +10,6 @@ import {
   onSnapshot 
 } from 'firebase/firestore';
 import { db, isQuotaExceeded, auth } from './firebase';
-import { 
-  addOrder as addOrderToSheets, 
-  getOrders as getOrdersFromSheets, 
-  updateOrderStatus as updateOrderStatusInSheets, 
-  addUser as addUserToSheets, 
-  getProducts as getProductsFromSheets,
-} from './lib/sheets';
 
 enum OperationType {
   CREATE = 'create',
@@ -88,7 +81,7 @@ function sanitizeForFirestore<T>(obj: T): T {
 }
 
 // Track quota status so we gracefully fall back to local storage without spamming errors
-let isFirestoreQuotaExceeded = true; // Permanently disabled Firebase Firestore integration as requested
+let isFirestoreQuotaExceeded = false;
 const syncedHashes = new Map<string, string>();
 const activeUnsubscribes: Array<() => void> = [];
 
@@ -266,20 +259,10 @@ const STORAGE_KEYS = {
   CATEGORIES: 'healnex_categories',
   BRANDS: 'healnex_brands',
   CATEGORY_REQUESTS: 'healnex_category_requests',
-  BRAND_REQUESTS: 'healnex_brand_requests',
-  COMMISSION_SETTINGS: 'healnex_commission_settings'
+  BRAND_REQUESTS: 'healnex_brand_requests'
 };
 
-import { PaymentSettings, PaymentClearanceRequest, PromoBanner, CommissionSettings } from './types';
-
-export const DEFAULT_COMMISSION_SETTINGS: CommissionSettings = {
-  id: 'global_commission_settings',
-  enabled: true,
-  globalPercent: 7,
-  categoryPercents: {},
-  brandPercents: {},
-  vendorPercents: {}
-};
+import { PaymentSettings, PaymentClearanceRequest, PromoBanner } from './types';
 
 export const DEFAULT_PROMO_BANNERS: PromoBanner[] = [
   {
@@ -310,7 +293,7 @@ export const DEFAULT_PROMO_BANNERS: PromoBanner[] = [
 
 export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = {
   id: 'global_payment_settings',
-  razorpayEnabled: false,
+  razorpayEnabled: true,
   razorpayKeyId: 'rzp_test_Hnx19283746',
   razorpaySecret: 'shh_secret_91823746',
   razorpayMode: 'test',
@@ -674,95 +657,55 @@ export const dbLocal = {
     if (!localStorage.getItem(STORAGE_KEYS.BRANDS)) this.set(STORAGE_KEYS.BRANDS, INITIAL_BRANDS);
     if (!localStorage.getItem(STORAGE_KEYS.CATEGORY_REQUESTS)) this.set(STORAGE_KEYS.CATEGORY_REQUESTS, []);
     if (!localStorage.getItem(STORAGE_KEYS.BRAND_REQUESTS)) this.set(STORAGE_KEYS.BRAND_REQUESTS, []);
-    if (!localStorage.getItem(STORAGE_KEYS.COMMISSION_SETTINGS)) this.set(STORAGE_KEYS.COMMISSION_SETTINGS, [DEFAULT_COMMISSION_SETTINGS]);
     
     // Do not auto-login by default to allow showing login screen on startup
     this.set(STORAGE_KEYS.CURRENT_USER, null);
 
-    // Boot Google Sheets background sync
-    this.syncDataFromSheets().catch(err => {
-      console.warn('Initial Google Sheets synchronization failed:', err);
-    });
-  },
-
-  async syncDataFromSheets() {
+    // Background Firebase seeding & listening initialization
     try {
-      console.log('[Sheets Sync] Starting sync of users, products, and orders from Google Sheets...');
+      // 1. Seed Firestore collections if empty
+      await seedCollectionIfEmpty('users', DEFAULT_USERS);
+      await seedCollectionIfEmpty('vendors', DEFAULT_VENDORS);
+      await seedCollectionIfEmpty('products', INITIAL_PRODUCTS);
+      await seedCollectionIfEmpty('orders', DEFAULT_ORDERS);
+      await seedCollectionIfEmpty('rfqs', DEFAULT_RFQS);
+      await seedCollectionIfEmpty('quotations', DEFAULT_QUOTATIONS);
+      await seedCollectionIfEmpty('tickets', DEFAULT_TICKETS);
+      await seedCollectionIfEmpty('blogs', INITIAL_BLOGS);
+      await seedCollectionIfEmpty('notifications', DEFAULT_NOTIFICATIONS);
+      await seedCollectionIfEmpty('reviews', DEFAULT_REVIEWS);
+      await seedCollectionIfEmpty('payment_settings', [DEFAULT_PAYMENT_SETTINGS]);
+      await seedCollectionIfEmpty('whatsapp_settings', [DEFAULT_WHATSAPP_SETTINGS]);
+      await seedCollectionIfEmpty('whatsapp_click_logs', []);
+      await seedCollectionIfEmpty('clearance_requests', DEFAULT_CLEARANCE_REQUESTS);
+      await seedCollectionIfEmpty('promo_banners', DEFAULT_PROMO_BANNERS);
+      await seedCollectionIfEmpty('categories', INITIAL_CATEGORIES);
+      await seedCollectionIfEmpty('brands', INITIAL_BRANDS);
+      await seedCollectionIfEmpty('categoryRequests', []);
+      await seedCollectionIfEmpty('brandRequests', []);
 
-      // 1. Sync products
-      try {
-        const sheetsProducts = await getProductsFromSheets();
-        if (sheetsProducts && sheetsProducts.length > 0) {
-          console.log(`[Sheets Sync] Synced ${sheetsProducts.length} products from Google Sheets.`);
-          const localProds = this.getProducts();
-          const mergedProds = [...localProds];
-          for (const sp of sheetsProducts) {
-            const idx = mergedProds.findIndex(p => p.id === sp.id);
-            if (idx > -1) {
-              mergedProds[idx] = { ...mergedProds[idx], ...sp, stockQuantity: sp.stock ?? mergedProds[idx].stockQuantity };
-            } else {
-              mergedProds.push({
-                ...sp,
-                sku: `SKU-${sp.id}`,
-                description: `${sp.name} is a high-grade professional medical supply.`,
-                brand: 'Healnex',
-                subcategory: 'Clinical Supplies',
-                images: [sp.image || 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80'],
-                gstRate: 18,
-                hsnCode: '9018',
-                isVerified: true,
-                vendorId: 'vendor-1',
-                vendorName: 'Healnex Supplier Ltd',
-                status: 'Approved',
-                specifications: {},
-                moq: 1,
-                stockQuantity: sp.stock ?? 50,
-              } as any);
-            }
-          }
-          this.set(STORAGE_KEYS.PRODUCTS, mergedProds);
-        }
-      } catch (e) {
-        console.warn('[Sheets Sync] Product sync failed:', e);
-      }
-
-      // 2. Sync orders
-      try {
-        const sheetsOrders = await getOrdersFromSheets();
-        if (sheetsOrders && sheetsOrders.length > 0) {
-          console.log(`[Sheets Sync] Synced ${sheetsOrders.length} orders from Google Sheets.`);
-          const localOrders = this.getOrders();
-          const mergedOrders = [...localOrders];
-          for (const so of sheetsOrders) {
-            const idx = mergedOrders.findIndex(o => o.id === so.id);
-            if (idx > -1) {
-              mergedOrders[idx] = { ...mergedOrders[idx], ...so };
-            } else {
-              mergedOrders.push({
-                ...so,
-                vendorId: so.vendorId || 'vendor-1',
-                vendorName: so.vendorName || 'Healnex Supplier Ltd',
-                paymentMethod: 'UPI',
-                paymentTxId: so.paymentTxId || '',
-                payment_method: 'UPI',
-                orderStatus: so.status,
-                paymentStatus: so.status === 'Confirmed' ? 'Verified' : 'Pending Verification',
-                timeline: so.timeline || [
-                  { status: so.status, time: so.createdAt, note: 'Synchronized order from Google Sheets.' }
-                ],
-              } as any);
-            }
-          }
-          this.set(STORAGE_KEYS.ORDERS, mergedOrders);
-        }
-      } catch (e) {
-        console.warn('[Sheets Sync] Order sync failed:', e);
-      }
-
-      console.log('[Sheets Sync] Google Sheets data sync completed successfully!');
-      window.dispatchEvent(new Event('healnex_db_update'));
+      // 2. Start real-time Firestore synchronization
+      listenToCollection('users', STORAGE_KEYS.USERS, DEFAULT_USERS);
+      listenToCollection('vendors', STORAGE_KEYS.VENDORS, DEFAULT_VENDORS);
+      listenToCollection('products', STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+      listenToCollection('orders', STORAGE_KEYS.ORDERS, DEFAULT_ORDERS);
+      listenToCollection('rfqs', STORAGE_KEYS.RFQS, DEFAULT_RFQS);
+      listenToCollection('quotations', STORAGE_KEYS.QUOTATIONS, DEFAULT_QUOTATIONS);
+      listenToCollection('tickets', STORAGE_KEYS.TICKETS, DEFAULT_TICKETS);
+      listenToCollection('blogs', STORAGE_KEYS.BLOGS, INITIAL_BLOGS);
+      listenToCollection('notifications', STORAGE_KEYS.NOTIFICATIONS, DEFAULT_NOTIFICATIONS);
+      listenToCollection('reviews', STORAGE_KEYS.REVIEWS, DEFAULT_REVIEWS);
+      listenToCollection('payment_settings', STORAGE_KEYS.PAYMENT_SETTINGS, [DEFAULT_PAYMENT_SETTINGS]);
+      listenToCollection('whatsapp_settings', STORAGE_KEYS.WHATSAPP_SETTINGS, [DEFAULT_WHATSAPP_SETTINGS]);
+      listenToCollection('whatsapp_click_logs', STORAGE_KEYS.WHATSAPP_CLICK_LOGS, []);
+      listenToCollection('clearance_requests', STORAGE_KEYS.CLEARANCE_REQUESTS, DEFAULT_CLEARANCE_REQUESTS);
+      listenToCollection('promo_banners', STORAGE_KEYS.PROMO_BANNERS, DEFAULT_PROMO_BANNERS);
+      listenToCollection('categories', STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+      listenToCollection('brands', STORAGE_KEYS.BRANDS, INITIAL_BRANDS);
+      listenToCollection('categoryRequests', STORAGE_KEYS.CATEGORY_REQUESTS, []);
+      listenToCollection('brandRequests', STORAGE_KEYS.BRAND_REQUESTS, []);
     } catch (err) {
-      console.warn('[Sheets Sync] General error during Sheets sync:', err);
+      console.warn('Firebase sync failed to initialize (possibly offline):', err);
     }
   },
 
@@ -773,10 +716,12 @@ export const dbLocal = {
       const adminIdx = users.findIndex(u => u.role === 'super_admin' || u.id === 'user-superadmin');
       if (adminIdx !== -1) {
         const admin = users[adminIdx];
-        if (admin.email !== 'warisulislam371@gmail.com') {
+        if (admin.email !== 'warisulislam371@gmail.com' || admin.password !== 'Waris@123' || admin.forcePasswordChange) {
           users[adminIdx] = {
             ...admin,
-            email: 'warisulislam371@gmail.com'
+            email: 'warisulislam371@gmail.com',
+            password: 'Waris@123',
+            forcePasswordChange: false
           };
           this.set(STORAGE_KEYS.USERS, users);
         }
@@ -803,17 +748,7 @@ export const dbLocal = {
   saveUsers(users: User[]) {
     const old = this.get(STORAGE_KEYS.USERS, DEFAULT_USERS) as User[];
     this.set(STORAGE_KEYS.USERS, users);
-    
-    // Detect new users and append them to Google Sheets
-    const oldEmails = new Set(old.map(u => u.email.toLowerCase()));
-    for (const u of users) {
-      if (u && u.email && !oldEmails.has(u.email.toLowerCase())) {
-        console.log(`[Sheets Sync] Detecting new user ${u.name} (${u.email}). Appending to Google Sheets...`);
-        addUserToSheets(u).catch(err => {
-          console.error('[Sheets Sync] Failed to append user to Google Sheets:', err);
-        });
-      }
-    }
+    syncListToFirestoreWithDeletions('users', users, old);
   },
 
   // Current logged in User
@@ -826,75 +761,10 @@ export const dbLocal = {
     const old = this.getVendors();
     this.set(STORAGE_KEYS.VENDORS, vendors);
     syncListToFirestoreWithDeletions('vendors', vendors, old);
-    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Products
-  getProducts(): Product[] {
-    const list = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
-    let needsSave = false;
-    const settings = this.getCommissionSettings();
-    const mapped = list.map(p => {
-      if (p.vendor_price === undefined || p.final_price === undefined || p.commission_rate === undefined) {
-        needsSave = true;
-        const vendorPrice = p.vendor_price ?? p.vendorPrice ?? p.price ?? p.salePrice ?? 0;
-        
-        // Calculate commission rate based on current settings
-        let commissionRate = 0;
-        if (settings.enabled) {
-          if (settings.vendorPercents && settings.vendorPercents[p.vendorId] !== undefined) {
-            commissionRate = settings.vendorPercents[p.vendorId];
-          } else if (p.category) {
-            const catKey = Object.keys(settings.categoryPercents).find(
-              k => k.toLowerCase() === p.category.toLowerCase()
-            );
-            if (catKey !== undefined && settings.categoryPercents[catKey] !== undefined) {
-              commissionRate = settings.categoryPercents[catKey];
-            } else if (p.brand) {
-              const brandKey = Object.keys(settings.brandPercents).find(
-                k => k.toLowerCase() === p.brand.toLowerCase()
-              );
-              if (brandKey !== undefined && settings.brandPercents[brandKey] !== undefined) {
-                commissionRate = settings.brandPercents[brandKey];
-              } else {
-                commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
-              }
-            } else {
-              commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
-            }
-          } else {
-            commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
-          }
-        }
-        
-        const commissionAmount = Math.round((vendorPrice * commissionRate) / 100);
-        const customerPrice = vendorPrice + commissionAmount;
-        
-        return {
-          ...p,
-          vendor_price: vendorPrice,
-          vendorPrice: vendorPrice,
-          commission_rate: commissionRate,
-          commissionPercent: commissionRate,
-          commissionAmount: commissionAmount,
-          final_price: customerPrice,
-          customerPrice: customerPrice,
-          price: customerPrice,
-          salePrice: customerPrice,
-          wholesalePrice: customerPrice,
-          mrp: Math.round(customerPrice * 1.2),
-          vendor_payout: vendorPrice,
-        };
-      }
-      return p;
-    });
-    if (needsSave) {
-      setTimeout(() => {
-        try { this.saveProducts(mapped); } catch (e) {}
-      }, 0);
-    }
-    return mapped;
-  },
+  getProducts(): Product[] { return this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS); },
   saveProducts(products: Product[]) {
     const old = this.getProducts();
     this.set(STORAGE_KEYS.PRODUCTS, products);
@@ -920,139 +790,7 @@ export const dbLocal = {
   saveOrders(orders: Order[]) {
     const old = this.getOrders();
     this.set(STORAGE_KEYS.ORDERS, orders);
-    
-    // Sync order status changes to Google Sheets!
-    for (const ord of orders) {
-      if (!ord || !ord.id) continue;
-      const prev = old.find(o => o.id === ord.id);
-      if (prev && prev.status !== ord.status) {
-        console.log(`[Sheets Sync] Detected status change for order ${ord.id} from "${prev.status}" to "${ord.status}". Syncing to Google Sheets...`);
-        updateOrderStatusInSheets(ord.id, ord.status).catch(err => {
-          console.error(`[Sheets Sync] Failed to update status for order ${ord.id} in Google Sheets:`, err);
-        });
-      }
-    }
-  },
-  async createOrderDirect(newOrder: Order) {
-    console.log(`Starting createOrderDirect for Order ID: ${newOrder.id}`);
-    
-    // Build the full mapped order document
-    const orderDoc = {
-      // Original fields for app compatibility
-      id: newOrder.id,
-      customerId: newOrder.customerId,
-      customerName: newOrder.customerName,
-      customerEmail: newOrder.customerEmail,
-      vendorId: newOrder.vendorId,
-      vendorName: newOrder.vendorName,
-      items: newOrder.items,
-      totalAmount: newOrder.totalAmount,
-      gstAmount: newOrder.gstAmount,
-      discountAmount: newOrder.discountAmount,
-      finalAmount: newOrder.finalAmount,
-      status: newOrder.status,
-      paymentMethod: newOrder.paymentMethod,
-      paymentId: newOrder.paymentId || '',
-      shippingAddress: newOrder.shippingAddress,
-      createdAt: newOrder.createdAt,
-      timeline: newOrder.timeline,
-      paymentTxId: newOrder.paymentTxId || '',
-      paymentNote: newOrder.paymentNote || '',
-      paymentScreenshotUrl: newOrder.paymentScreenshotUrl || '',
-      paymentScreenshotName: newOrder.paymentScreenshotName || '',
-      paymentVerificationLogs: newOrder.paymentVerificationLogs || [],
-
-      // Requirement 3 fields (explicitly requested)
-      orderId: newOrder.id,
-      products: newOrder.items.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        price: item.price,
-        quantity: item.quantity,
-        vendorId: item.vendorId,
-      })),
-      quantity: newOrder.items.reduce((sum, item) => sum + item.quantity, 0),
-      subtotal: newOrder.totalAmount,
-      tax: newOrder.gstAmount,
-      shipping: 0,
-      total: newOrder.finalAmount,
-      paymentStatus: (newOrder.status === 'Order Sent to Vendor' || newOrder.status === 'Completed' || newOrder.status === 'Paid' || newOrder.status === 'Payment Verified' || newOrder.status === 'Confirmed' || newOrder.status === 'Processing' || newOrder.status === 'Shipped' || newOrder.status === 'Delivered') ? 'Paid' : 'Pending',
-      orderStatus: newOrder.status,
-    };
-
-    // Perform direct Google Sheets write immediately
-    try {
-      console.log(`[Sheets Sync] Attempting direct Google Sheets write for Order ID: ${newOrder.id}`);
-      await addOrderToSheets(newOrder);
-      console.log(`[Sheets Sync] Direct Google Sheets write successful for Order ID: ${newOrder.id}`);
-    } catch (err: any) {
-      console.error(`[Sheets Sync] Direct Google Sheets write failed for Order ID: ${newOrder.id}`, err);
-      // Fallback: we still save it to local storage below so the customer is never stuck!
-    }
-
-    // Update local storage to keep client in sync
-    const currentOrders = this.getOrders();
-    const existingIdx = currentOrders.findIndex(o => o.id === newOrder.id);
-    if (existingIdx > -1) {
-      currentOrders[existingIdx] = newOrder;
-    } else {
-      currentOrders.unshift(newOrder);
-    }
-    this.set(STORAGE_KEYS.ORDERS, currentOrders);
-
-    // Update stock for each product in the order (Requirement 7)
-    console.log(`Updating stock quantities for products in Order ID: ${newOrder.id}`);
-    for (const item of newOrder.items) {
-      this.decreaseProductStock(item.productId, item.quantity);
-    }
-
-    // Send notifications to customer, vendor, and admin (Requirement 8)
-    console.log(`Sending order notifications for Order ID: ${newOrder.id}`);
-    
-    // Customer
-    this.addNotification(
-      newOrder.customerId,
-      'Order Placed Successfully',
-      `Your medical equipment order #${newOrder.id} for ₹${newOrder.finalAmount.toLocaleString('en-IN')} has been placed via ${newOrder.paymentMethod}.`,
-      'order_placed'
-    );
-
-    // Vendor
-    this.addNotification(
-      newOrder.vendorId,
-      'New Equipment Order Received',
-      `Procurement order #${newOrder.id} (₹${newOrder.finalAmount.toLocaleString('en-IN')}) has been routed to your dashboard.`,
-      'order_placed'
-    );
-
-    // Admin
-    this.addNotification(
-      'admin',
-      'New Marketplace Transaction',
-      `Order #${newOrder.id} placed by ${newOrder.customerName} via ${newOrder.paymentMethod}. Total: ₹${newOrder.finalAmount.toLocaleString('en-IN')}.`,
-      'order_placed'
-    );
-
-    // Dispatch database update event to refresh UI components
-    window.dispatchEvent(new Event('healnex_db_update'));
-    console.log(`createOrderDirect completed successfully for Order ID: ${newOrder.id}`);
-  },
-
-  decreaseProductStock(productId: string, quantity: number) {
-    const products = this.getProducts();
-    const productIdx = products.findIndex(p => p.id === productId);
-    if (productIdx > -1) {
-      const product = products[productIdx];
-      const newStock = Math.max(0, (product.stockQuantity || 0) - quantity);
-      const updatedProduct = {
-        ...product,
-        stockQuantity: newStock,
-        outOfStock: newStock === 0,
-      };
-      products[productIdx] = updatedProduct;
-      this.saveProducts(products);
-      console.log(`Deducted stock for product ${productId}: was ${product.stockQuantity}, now ${newStock}`);
-    }
+    syncListToFirestoreWithDeletions('orders', orders, old);
   },
 
   // RFQs
@@ -1108,18 +846,12 @@ export const dbLocal = {
     const settings = this.get(STORAGE_KEYS.PAYMENT_SETTINGS, [DEFAULT_PAYMENT_SETTINGS]) as PaymentSettings[];
     let current = settings[0] || DEFAULT_PAYMENT_SETTINGS;
     current = { ...DEFAULT_PAYMENT_SETTINGS, ...current };
-    
-    // If QR code is missing but custom UPI details exist, auto-generate a matching QR code data URL
-    if (!current.upiQrCodeUrl && current.upiId) {
-      current.upiQrCodeUrl = getSliceUpiQrDataUrl(current.upiId, current.upiHolderName);
-      this.set(STORAGE_KEYS.PAYMENT_SETTINGS, [current]);
-    }
-    
     const latestSliceQr = getSliceUpiQrDataUrl();
     if (
       current.upiId === 'payments@hdfcbank' ||
       current.upiQrCodeUrl?.includes('unsplash') ||
-      ((current.upiHolderName?.toLowerCase().includes('warisul') || current.upiId === SLICE_UPI_ID) && current.upiQrCodeUrl !== latestSliceQr && current.upiId === SLICE_UPI_ID)
+      !current.upiQrCodeUrl ||
+      ((current.upiHolderName?.toLowerCase().includes('warisul') || current.upiId === SLICE_UPI_ID) && current.upiQrCodeUrl !== latestSliceQr)
     ) {
       current.upiId = SLICE_UPI_ID;
       current.upiHolderName = SLICE_HOLDER_NAME;
@@ -1158,80 +890,6 @@ export const dbLocal = {
     syncListToFirestoreWithDeletions('whatsapp_settings', [settings], old);
   },
 
-  // Commission Settings
-  getCommissionSettings(): CommissionSettings {
-    const settings = this.get(STORAGE_KEYS.COMMISSION_SETTINGS, [DEFAULT_COMMISSION_SETTINGS]) as CommissionSettings[];
-    const current = settings[0] || DEFAULT_COMMISSION_SETTINGS;
-    return { ...DEFAULT_COMMISSION_SETTINGS, ...current };
-  },
-  saveCommissionSettings(settings: CommissionSettings) {
-    const old = this.get(STORAGE_KEYS.COMMISSION_SETTINGS, [DEFAULT_COMMISSION_SETTINGS]) as CommissionSettings[];
-    this.set(STORAGE_KEYS.COMMISSION_SETTINGS, [settings]);
-    syncListToFirestoreWithDeletions('commission_settings', [settings], old);
-
-    // Automatically recalculate final customer price for all affected products
-    try {
-      const products = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
-      const updatedProducts = products.map(p => {
-        const vendorPrice = p.vendor_price ?? p.vendorPrice ?? p.price ?? p.salePrice ?? 0;
-        
-        // Calculate the commission rate using the new settings
-        let commissionRate = 0;
-        if (settings.enabled) {
-          if (settings.vendorPercents && settings.vendorPercents[p.vendorId] !== undefined) {
-            commissionRate = settings.vendorPercents[p.vendorId];
-          } else if (p.category) {
-            const catKey = Object.keys(settings.categoryPercents).find(
-              k => k.toLowerCase() === p.category.toLowerCase()
-            );
-            if (catKey !== undefined && settings.categoryPercents[catKey] !== undefined) {
-              commissionRate = settings.categoryPercents[catKey];
-            } else if (p.brand) {
-              const brandKey = Object.keys(settings.brandPercents).find(
-                k => k.toLowerCase() === p.brand.toLowerCase()
-              );
-              if (brandKey !== undefined && settings.brandPercents[brandKey] !== undefined) {
-                commissionRate = settings.brandPercents[brandKey];
-              } else {
-                commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
-              }
-            } else {
-              commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
-            }
-          } else {
-            commissionRate = settings.globalPercent !== undefined ? settings.globalPercent : 7;
-          }
-        }
-        
-        const commissionAmount = Math.round((vendorPrice * commissionRate) / 100);
-        const customerPrice = vendorPrice + commissionAmount;
-        
-        return {
-          ...p,
-          vendor_price: vendorPrice,
-          vendorPrice: vendorPrice,
-          commission_rate: commissionRate,
-          commissionPercent: commissionRate,
-          commissionAmount: commissionAmount,
-          final_price: customerPrice,
-          customerPrice: customerPrice,
-          price: customerPrice,
-          salePrice: customerPrice,
-          wholesalePrice: customerPrice,
-          mrp: Math.round(customerPrice * 1.2),
-          vendor_payout: vendorPrice,
-        };
-      });
-      
-      const oldProds = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
-      this.set(STORAGE_KEYS.PRODUCTS, updatedProducts);
-      syncListToFirestoreWithDeletions('products', updatedProducts, oldProds);
-      window.dispatchEvent(new Event('healnex_db_update'));
-    } catch (err) {
-      console.error('Failed to recalculate product prices upon commission change:', err);
-    }
-  },
-
   // WhatsApp Click Logs
   getWhatsAppClickLogs(): WhatsAppClickLog[] {
     return this.get(STORAGE_KEYS.WHATSAPP_CLICK_LOGS, []);
@@ -1246,26 +904,6 @@ export const dbLocal = {
     logs.unshift(newLog);
     this.set(STORAGE_KEYS.WHATSAPP_CLICK_LOGS, logs);
     syncListToFirestoreWithDeletions('whatsapp_click_logs', logs, []);
-  },
-
-  // Audit Logs
-  getAuditLogs(): AuditLog[] {
-    return this.get('healnex_audit_logs', []) as AuditLog[];
-  },
-  logAudit(userId: string, action: string, details: string, orderId?: string) {
-    const logs = this.getAuditLogs();
-    const newLog: AuditLog = sanitizeForFirestore({
-      id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      orderId,
-      userId,
-      action,
-      dateTime: new Date().toISOString(),
-      ipAddress: '127.0.0.1',
-      details,
-    });
-    logs.unshift(newLog);
-    this.set('healnex_audit_logs', logs);
-    syncListToFirestoreWithDeletions('audit_logs', logs, []);
   },
 
   // Utility to push notifications
@@ -1366,41 +1004,5 @@ export const dbLocal = {
     const list = this.getBrandRequests();
     list.unshift(req);
     this.saveBrandRequests(list);
-  },
-
-  // Commission Calculations
-  getProductCommissionRate(vendorId: string, category: string, brand: string): number {
-    const settings = this.getCommissionSettings();
-    if (!settings.enabled) {
-      return 0;
-    }
-    
-    // Check if there is a vendor-specific commission
-    if (settings.vendorPercents && settings.vendorPercents[vendorId] !== undefined) {
-      return settings.vendorPercents[vendorId];
-    }
-    
-    // Check if there is a category-specific commission
-    if (category) {
-      const catKey = Object.keys(settings.categoryPercents).find(
-        k => k.toLowerCase() === category.toLowerCase()
-      );
-      if (catKey !== undefined && settings.categoryPercents[catKey] !== undefined) {
-        return settings.categoryPercents[catKey];
-      }
-    }
-    
-    // Check if there is a brand-specific commission
-    if (brand) {
-      const brandKey = Object.keys(settings.brandPercents).find(
-        k => k.toLowerCase() === brand.toLowerCase()
-      );
-      if (brandKey !== undefined && settings.brandPercents[brandKey] !== undefined) {
-        return settings.brandPercents[brandKey];
-      }
-    }
-    
-    // Fallback to global commission %
-    return settings.globalPercent !== undefined ? settings.globalPercent : 7;
   }
 };

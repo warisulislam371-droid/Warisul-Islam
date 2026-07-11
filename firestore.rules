@@ -6,105 +6,164 @@ service cloud.firestore {
     match /{document=**} {
       allow read, write: if false;
     }
+    
+    // Auth helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin'
+      );
+    }
 
     // Collection: Users
     match /users/{userId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Collection: Vendors
     match /vendors/{vendorId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Collection: Products
     match /products/{productId} {
-      allow read, write: if true;
+      allow read: if (
+        // Public/customer read for active, approved, and published products
+        (resource != null && 
+         (resource.data.status == 'approved' || resource.data.status == 'Approved') && 
+         resource.data.published == true && 
+         resource.data.isActive == true)
+        ||
+        // Signed in users (Vendor / Admin) can read
+        isSignedIn()
+      );
+
+      allow create: if isSignedIn() && (
+        // Admin can create any
+        isAdmin()
+        ||
+        // Vendor can create their own product in pending/draft state, hidden by default
+        (request.resource.data.vendorId == request.auth.uid &&
+         (request.resource.data.status == 'pending' || request.resource.data.status == 'Pending' || request.resource.data.status == 'Draft' || request.resource.data.status == 'draft') &&
+         request.resource.data.published == false &&
+         request.resource.data.isActive == false)
+      );
+
+      allow update: if isSignedIn() && (
+        // Admin has full control
+        isAdmin()
+        ||
+        // Vendor can edit their own product ONLY if it is pending, draft, or changes requested
+        (resource.data.vendorId == request.auth.uid &&
+         request.resource.data.vendorId == request.auth.uid &&
+         (resource.data.status == 'pending' || resource.data.status == 'Pending' || resource.data.status == 'Draft' || resource.data.status == 'draft' || resource.data.status == 'needs_changes' || resource.data.status == 'ChangesRequested') &&
+         // Vendor cannot self-approve, publish, or modify administrative fields
+         request.resource.data.status == resource.data.status &&
+         request.resource.data.published == resource.data.published &&
+         request.resource.data.isActive == resource.data.isActive &&
+         request.resource.data.approvedBy == resource.data.approvedBy &&
+         request.resource.data.approvedAt == resource.data.approvedAt
+        )
+      );
+
+      allow delete: if isSignedIn() && (
+        // Admin can delete any product
+        isAdmin()
+        ||
+        // Vendor can delete their own non-live products
+        (resource.data.vendorId == request.auth.uid &&
+         (resource.data.status == 'pending' || resource.data.status == 'Pending' || resource.data.status == 'Draft' || resource.data.status == 'draft' || resource.data.status == 'Rejected' || resource.data.status == 'rejected' || resource.data.status == 'needs_changes'))
+      );
     }
 
     // Collection: Orders
     match /orders/{orderId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Collection: RFQs (Request For Quotes)
     match /rfqs/{rfqId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Collection: Quotations
     match /quotations/{quotationId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Collection: Tickets
     match /tickets/{ticketId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
-    // Collection: Blogs
+    // Collection: Blogs (Publicly readable)
     match /blogs/{blogId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     // Collection: Notifications
     match /notifications/{notificationId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
-    // Collection: Reviews
+    // Collection: Reviews (Publicly readable)
     match /reviews/{reviewId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     // Collection: Payment Settings
     match /payment_settings/{settingId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Collection: WhatsApp Settings
     match /whatsapp_settings/{settingId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     // Collection: WhatsApp Click Logs
     match /whatsapp_click_logs/{logId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Collection: Clearance Requests
     match /clearance_requests/{requestId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
-    // Collection: Promo Banners
+    // Collection: Promo Banners (Publicly readable)
     match /promo_banners/{bannerId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
-    // Collection: Commission Settings
-    match /commission_settings/{settingId} {
-      allow read, write: if true;
-    }
-
-    // Collection: Categories
+    // Collection: Categories (Publicly readable)
     match /categories/{categoryId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
-    // Collection: Brands
+    // Collection: Brands (Publicly readable)
     match /brands/{brandId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     // Collection: Category Requests
     match /categoryRequests/{requestId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Collection: Brand Requests
     match /brandRequests/{requestId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
   }
 }

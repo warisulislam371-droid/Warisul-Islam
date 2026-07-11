@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Store, Lock, Truck, FileText, Headphones, ShieldAlert, ExternalLink } from 'lucide-react';
+import { ShieldCheck, Store, BadgeDollarSign, HeadphonesIcon, Truck, ExternalLink } from 'lucide-react';
 import { PolicyType } from './PolicyModal';
 
 interface HomepageTrustSectionProps {
@@ -15,78 +15,69 @@ export default function HomepageTrustSection({
 }: HomepageTrustSectionProps) {
   const cards = [
     {
-      title: 'Verified Vendors',
-      icon: <Store className="w-6 h-6 text-blue-600" />,
+      title: 'Secure Shopping',
+      icon: <ShieldCheck className="w-6 h-6 text-emerald-600" />,
       items: [
-        'Rigorous vendor vetting.',
-        'Licensed pharmacy reviews.',
-        'Manufacturer certification checks.'
+        'SSL encrypted website.',
+        'Secure checkout.',
+        'Customer data protection.'
       ]
     },
     {
-      title: 'Secure Payments',
-      icon: <Lock className="w-6 h-6 text-emerald-600" />,
+      title: 'Trusted Vendors',
+      icon: <Store className="w-6 h-6 text-teal-600" />,
       items: [
-        'End-to-end payment encryption.',
-        'Verified manual bank transfers.',
-        'Safe multi-channel processing.'
+        'Vendor verification process.',
+        'Business information review.',
+        'Marketplace quality standards.'
       ]
     },
     {
-      title: 'Express Delivery',
-      icon: <Truck className="w-6 h-6 text-indigo-600" />,
+      title: 'Transparent Pricing',
+      icon: <BadgeDollarSign className="w-6 h-6 text-blue-600" />,
       items: [
-        'Expedited shipping routes.',
-        'Real-time transit updates.',
-        'Cold-chain transport available.'
+        'Clear product pricing.',
+        'No hidden marketplace charges.',
+        'Product information provided by vendors.'
       ]
     },
     {
-      title: 'GST Invoice',
-      icon: <FileText className="w-6 h-6 text-purple-600" />,
+      title: 'Customer Support',
+      icon: <HeadphonesIcon className="w-6 h-6 text-amber-600" />,
       items: [
-        'Full input tax credit support.',
-        'Compliant tax billing summaries.',
-        'Instant digital invoice generation.'
+        'Email support.',
+        'Phone support.',
+        'Fast response to customer queries.'
       ]
     },
     {
-      title: 'Dedicated Support',
-      icon: <Headphones className="w-6 h-6 text-amber-500" />,
+      title: 'Easy Order Tracking',
+      icon: <Truck className="w-6 h-6 text-purple-600" />,
       items: [
-        '24/7 technical hotline.',
-        'Clinically certified advisors.',
-        'Fast dispute resolution desk.'
-      ]
-    },
-    {
-      title: 'Buyer Protection',
-      icon: <ShieldAlert className="w-6 h-6 text-rose-500" />,
-      items: [
-        'Escrowed payment holds.',
-        'Verified return & refund policy.',
-        'Calibration quality guarantees.'
+        'Track orders from your dashboard.',
+        'Delivery status updates.',
+        'Order history.'
       ]
     }
   ];
 
   return (
-    <section className={`py-12 px-6 sm:px-10 rounded-[16px] border transition-all duration-300 mt-12 ${
+    <section className={`py-12 px-6 sm:px-10 rounded-3xl border transition-colors mt-12 ${
       isDarkMode 
-        ? 'bg-slate-900 border-slate-800 text-slate-100' 
-        : 'bg-white border-slate-150 text-slate-850 shadow-xs hover:shadow-md'
+        ? 'bg-slate-900/90 border-slate-800 text-slate-100' 
+        : 'bg-gradient-to-b from-slate-50/80 to-white border-slate-200 text-slate-800 shadow-sm'
     }`}>
       {/* Section Header */}
       <div className="max-w-3xl mx-auto text-center space-y-3 mb-10">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-slate-800 border border-blue-100 text-blue-700 dark:text-blue-300 text-xs font-bold uppercase tracking-wider">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300 text-xs font-bold uppercase tracking-wider">
           <ShieldCheck className="w-3.5 h-3.5" />
-          HealNex Premium Trust Shield
+          Marketplace Trust Shield
         </span>
-        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-sans text-slate-900 dark:text-white">
-          Why Shop with HealNex Medi Bazar?
+        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-display">
+          Why Shop with MedBazar Helnex?
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
-          A secure B2B & B2C clinical marketplace connecting doctors and purchasers with verified healthcare manufacturers.
+          A secure marketplace connecting customers with trusted medical equipment vendors.
         </p>
       </div>
 
@@ -95,23 +86,23 @@ export default function HomepageTrustSection({
         {cards.map((card, idx) => (
           <div
             key={idx}
-            className={`p-6 rounded-[16px] border transition-all duration-300 hover:-translate-y-1 hover:shadow-md flex flex-col justify-between ${
+            className={`p-6 rounded-2xl border transition hover:-translate-y-0.5 flex flex-col justify-between ${
               isDarkMode
-                ? 'bg-slate-850 border-slate-800 hover:border-blue-500'
-                : 'bg-white border-slate-150 hover:border-blue-200 hover:shadow-lg'
+                ? 'bg-slate-800/60 border-slate-700/80 hover:border-teal-500/50'
+                : 'bg-white border-slate-200 hover:border-teal-600 hover:shadow-md'
             }`}
           >
             <div>
-              <div className="p-3 rounded-[12px] bg-slate-50 dark:bg-slate-800 w-fit mb-4 border border-slate-100 dark:border-slate-750">
+              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 w-fit mb-4">
                 {card.icon}
               </div>
-              <h3 className="font-bold text-base mb-3 text-slate-900 dark:text-white font-sans">
+              <h3 className="font-bold text-base mb-3 text-slate-900 dark:text-white">
                 {card.title}
               </h3>
-              <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-300 font-medium">
+              <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
                 {card.items.map((item, i) => (
                   <li key={i} className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-1.5 shrink-0" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-teal-600 dark:bg-teal-400 mt-1.5 shrink-0" />
                     <span>{item}</span>
                   </li>
                 ))}
@@ -119,45 +110,54 @@ export default function HomepageTrustSection({
             </div>
           </div>
         ))}
-      </div>
 
-      {/* CTA to Dedicated Trust and Safety Page */}
-      <div className="mt-10 max-w-xl mx-auto text-center">
-        <button
-          onClick={onNavigateToTrustPage}
-          className="inline-flex items-center gap-1.5 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 cursor-pointer"
-        >
-          View Trust & Safety Portal
-          <ExternalLink className="w-3.5 h-3.5" />
-        </button>
+        {/* 6th Card / CTA to dedicated Trust & Safety Page */}
+        <div className={`p-6 rounded-2xl border flex flex-col justify-between bg-gradient-to-br from-teal-800 to-teal-950 text-white border-teal-700 shadow-md`}>
+          <div>
+            <div className="p-3 rounded-xl bg-teal-700/50 w-fit mb-4">
+              <ShieldCheck className="w-6 h-6 text-teal-300" />
+            </div>
+            <h3 className="font-bold text-base mb-2">Our Full Security Framework</h3>
+            <p className="text-xs text-teal-100/90 leading-relaxed mb-4">
+              Explore our comprehensive Trust & Safety portal, including clinical standards, encryption details, and verified reviews.
+            </p>
+          </div>
+          <button
+            onClick={onNavigateToTrustPage}
+            className="w-full py-2.5 px-4 rounded-xl bg-white text-teal-900 font-bold text-xs hover:bg-teal-50 transition flex items-center justify-center gap-1.5 shadow-xs"
+          >
+            View Trust & Safety Page
+            <ExternalLink className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Policies Footer Bar */}
-      <div className="mt-10 pt-6 border-t border-slate-150 dark:border-slate-800 flex flex-wrap items-center justify-center gap-6 text-xs font-semibold text-slate-500">
-        <span>Framework Policies:</span>
+      <div className="mt-10 pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-center gap-6 text-xs font-semibold">
+        <span className="text-slate-400">Policies:</span>
         <button
           onClick={() => onOpenPolicy('privacy')}
-          className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 underline transition cursor-pointer"
+          className="text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-teal-400 underline transition"
         >
           Privacy Policy
         </button>
         <button
           onClick={() => onOpenPolicy('terms')}
-          className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 underline transition cursor-pointer"
+          className="text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-teal-400 underline transition"
         >
           Terms & Conditions
         </button>
         <button
-          onClick={() => onOpenPolicy('shipping')}
-          className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 underline transition cursor-pointer"
+          onClick={() => onOpenPolicy('refund')}
+          className="text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-teal-400 underline transition"
         >
-          Shipping Policy
+          Refund Policy
         </button>
         <button
-          onClick={() => onOpenPolicy('refund')}
-          className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 underline transition cursor-pointer"
+          onClick={() => onOpenPolicy('shipping')}
+          className="text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-teal-400 underline transition"
         >
-          Refund & Return Policy
+          Shipping Policy
         </button>
       </div>
     </section>

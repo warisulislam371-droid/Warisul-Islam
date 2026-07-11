@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbLocal } from '../db';
 import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderItem, PaymentSettings, PromoBanner, Vendor } from '../types';
-import qrcode from 'qrcode-generator';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { storage } from '../firebase';
 import {
   Heart,
   ShoppingCart,
@@ -41,30 +38,11 @@ import {
   RotateCcw,
   FileCheck,
   ChevronLeft,
-  ChevronRight,
-  Activity,
-  FlaskConical,
-  Scissors,
-  Bed,
-  HeartPulse,
-  Syringe
+  ChevronRight
 } from 'lucide-react';
 import InvoicePDF from './InvoicePDF';
 import HomepageTrustSection from './HomepageTrustSection';
 import { PolicyType } from './PolicyModal';
-import { GoogleSheetsSync } from './GoogleSheetsSync';
-import { getCachedWorkspaceToken, createGoogleSpreadsheet, appendRowsToSpreadsheet, uploadFileToGoogleDrive } from '../utils/googleSheets';
-import { uploadScreenshotToDrive, saveOrderToSheet } from '../lib/googleSheets';
-
-const CategoryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  'Activity': Activity,
-  'FlaskConical': FlaskConical,
-  'Sparkles': Sparkles,
-  'Scissors': Scissors,
-  'Bed': Bed,
-  'HeartPulse': HeartPulse,
-  'Syringe': Syringe,
-};
 
 interface CustomerPanelProps {
   currentUser: User | null;
@@ -110,7 +88,6 @@ export default function CustomerPanel({
   const [reviews, setReviews] = useState<Review[]>([]);
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>([]);
   const [activeBannerIdx, setActiveBannerIdx] = useState(0);
-  const [activeTestimonialIdx, setActiveTestimonialIdx] = useState(0);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [categories, setCategories] = useState<Category[]>(() => dbLocal.getCategories().filter(c => c.isActive !== false));
   const [brands, setBrands] = useState<Brand[]>(() => dbLocal.getBrands().filter(b => b.isActive !== false));
@@ -144,89 +121,17 @@ export default function CustomerPanel({
   const [rfqAttachmentName, setRfqAttachmentName] = useState('');
 
   // Payment sandbox state
-  const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout' | 'payment' | 'processing' | 'success'>('cart');
+  const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout' | 'processing' | 'success'>('cart');
   const [razorpayMethod, setRazorpayMethod] = useState<'UPI' | 'Credit Card' | 'Debit Card' | 'Net Banking'>('UPI');
-  
-  // Shipping details state
-  const [shippingName, setShippingName] = useState('');
-  const [shippingPhone, setShippingPhone] = useState('');
-  
-  // Billing details state
-  const [billingAddress, setBillingAddress] = useState({
-    address: 'City Hospital, Emergency Wing, Station Road',
-    city: 'Pune',
-    state: 'Maharashtra',
-    pincode: '411001'
-  });
-  const [billingSameAsShipping, setBillingSameAsShipping] = useState(true);
   
   // Manual Payment verification and settings states
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(dbLocal.getPaymentSettings());
-  const [selectedPayMethod, setSelectedPayMethod] = useState<'razorpay' | 'upi' | 'bank' | 'neft' | 'imps' | 'rtgs' | 'cash' | ''>('upi');
+  const [selectedPayMethod, setSelectedPayMethod] = useState<'razorpay' | 'upi' | 'bank' | ''>('');
   const [manualTxId, setManualTxId] = useState('');
-  const [manualBankName, setManualBankName] = useState('');
-  const [manualPaymentDate, setManualPaymentDate] = useState('');
   const [manualNote, setManualNote] = useState('');
-  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
-  const [reuploadScreenshotFile, setReuploadScreenshotFile] = useState<File | null>(null);
-  const [screenshotUploading, setScreenshotUploading] = useState<boolean>(false);
-  const [screenshotUploadProgress, setScreenshotUploadProgress] = useState<number>(0);
-
-  const uploadScreenshot = async (file: File): Promise<{ url: string; name: string }> => {
-    return new Promise((resolve, reject) => {
-      setScreenshotUploading(true);
-      setScreenshotUploadProgress(10);
-      
-      const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-      const storagePath = `payment_screenshots/${fileName}`;
-      const fileRef = ref(storage, storagePath);
-      
-      const uploadTask = uploadBytesResumable(fileRef, file);
-      
-      uploadTask.on('state_changed', 
-        (snapshot) => {
-          const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-          setScreenshotUploadProgress(Math.max(10, progress));
-        }, 
-        async (error) => {
-          console.warn('Firebase Storage upload failed, falling back to Base64:', error);
-          try {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              setScreenshotUploading(false);
-              setScreenshotUploadProgress(100);
-              resolve({ url: reader.result as string, name: file.name });
-            };
-            reader.onerror = (err) => {
-              setScreenshotUploading(false);
-              reject(err);
-            };
-            reader.readAsDataURL(file);
-          } catch (e) {
-            setScreenshotUploading(false);
-            reject(e);
-          }
-        }, 
-        async () => {
-          try {
-            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            setScreenshotUploading(false);
-            setScreenshotUploadProgress(100);
-            resolve({ url: downloadUrl, name: file.name });
-          } catch (err) {
-            console.warn('Failed to get download URL, falling back to Base64:', err);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              setScreenshotUploading(false);
-              resolve({ url: reader.result as string, name: file.name });
-            };
-            reader.readAsDataURL(file);
-          }
-        }
-      );
-    });
-  };
-
+  const [manualProofUrl, setManualProofUrl] = useState('');
+  const [manualProofFileName, setManualProofFileName] = useState('');
+  const [dragActive, setDragActive] = useState(false);
   const [ordersFilter, setOrdersFilter] = useState<'All' | 'Pending Verification' | 'Active' | 'Completed'>('All');
   
   // Order specific re-upload payment state
@@ -256,11 +161,10 @@ export default function CustomerPanel({
       return approvedVendors;
     });
 
-    // Only approved, published, active products with stock > 0 are visible to customers
+    // Only approved, published, and active products are visible to customers
     const approvedProducts = dbLocal.getProducts().filter(p => {
-      const isApproved = p.status?.toLowerCase() === 'approved';
-      const hasStock = p.stockQuantity !== undefined && p.stockQuantity > 0;
-      return isApproved && p.published === true && p.isActive === true && hasStock;
+      const isApproved = p.status === 'Approved';
+      return isApproved && p.published === true && p.isActive === true;
     });
     setProducts(prev => {
       if (JSON.stringify(prev) === JSON.stringify(approvedProducts)) return prev;
@@ -381,7 +285,7 @@ export default function CustomerPanel({
       lastSearchKeyRef.current = currentSearchKey;
       setIsAiSearching(true);
       try {
-        const res = await fetch('/api/groq/search', {
+        const res = await fetch('/api/gemini/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ searchQuery, products })
@@ -424,7 +328,7 @@ export default function CustomerPanel({
       lastRecommendKeyRef.current = currentRecommendKey;
       setIsAiRecommending(true);
       try {
-        const res = await fetch('/api/groq/recommend', {
+        const res = await fetch('/api/gemini/recommend', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -576,421 +480,170 @@ export default function CustomerPanel({
 
   const getCheckoutTotal = () => getSubtotal() + getGstTotal();
 
-  const fileToBase64 = (f: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(f);
-      reader.onload = () => {
-        const base64Str = (reader.result as string).split(',')[1];
-        resolve(base64Str);
-      };
-      reader.onerror = (err) => reject(err);
-    });
+  // Drag and Drop & File upload handling
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
   };
 
-  // Step 2 checkout: proceed to payment screen / Submit Order
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const processFile = (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      addToast('File size exceeds the 10MB limit.', 'error');
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.type)) {
+      addToast('Unsupported file format. Please upload JPG, PNG, or PDF.', 'error');
+      return;
+    }
+    setManualProofFileName(file.name);
+    
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result) {
+        setManualProofUrl(reader.result as string);
+        addToast('Payment proof uploaded successfully!', 'success');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  // Handle Checkout submission with multi-payment modes
   const handleProceedToPayment = (e: React.FormEvent) => {
     e.preventDefault();
-    handleSubmitOrder();
-  };
-
-  // Step 3: Validate, Create, and Save Order (Phase 1)
-  const handleSubmitOrder = async () => {
     if (!currentUser) {
-      addToast('Please log in to submit your procurement order.', 'error');
+      addToast('Please log in or switch profiles to complete checkout.', 'error');
+      onNavigate('login');
       return;
     }
-    if (cart.length === 0) {
-      addToast('Your cart is empty.', 'error');
-      return;
-    }
+    if (cart.length === 0) return;
 
-    // Step 1: Validate Order
-    if (!shippingName.trim()) {
-      addToast('Please enter your full name.', 'error');
-      return;
-    }
-    if (!shippingPhone.trim()) {
-      addToast('Please enter your phone number.', 'error');
-      return;
-    }
-    // Validate mobile phone format (must be 10 digits or valid Indian/international format)
-    const sanitizedPhone = shippingPhone.trim().replace(/[^0-9+]/g, '');
-    if (sanitizedPhone.length < 10) {
-      addToast('Please enter a valid 10-digit mobile number.', 'error');
-      return;
-    }
-
-    // Validate shipping address
-    if (!shippingAddress.address.trim() || !shippingAddress.city.trim() || !shippingAddress.state.trim() || !shippingAddress.pincode.trim()) {
-      addToast('Please enter complete shipping address consignment details.', 'error');
-      return;
-    }
-
-    // Validate billing address if not same as shipping
-    const finalBillingAddress = billingSameAsShipping ? shippingAddress : billingAddress;
-    if (!finalBillingAddress.address.trim() || !finalBillingAddress.city.trim() || !finalBillingAddress.state.trim() || !finalBillingAddress.pincode.trim()) {
-      addToast('Please enter complete billing address details.', 'error');
-      return;
-    }
-
-    // Validate product stock
-    const productsInDb = dbLocal.getProducts();
-    for (const item of cart) {
-      const dbProd = productsInDb.find(p => p.id === item.product.id);
-      if (!dbProd) {
-        addToast(`Product "${item.product.name}" not found in our catalog.`, 'error');
-        return;
-      }
-      if (dbProd.stockQuantity !== undefined && dbProd.stockQuantity < item.quantity) {
-        addToast(`Insufficient Stock: Only ${dbProd.stockQuantity} units left for "${item.product.name}". Please reduce quantity.`, 'error');
-        return;
-      }
-    }
-
-    // Validate selected payment method
     if (!selectedPayMethod) {
-      addToast('Please select a payment method.', 'error');
+      addToast('Please select a B2B clearing payment method before submitting.', 'error');
+      return;
+    }
+
+    if (!manualProofUrl) {
+      addToast('Payment receipt screenshot image is strictly required! Please upload your payment screenshot.', 'error');
+      return;
+    }
+
+    if (selectedPayMethod !== 'razorpay' && !manualTxId.trim()) {
+      addToast('Please enter the Transaction ID / UTR Number.', 'error');
       return;
     }
 
     setCheckoutStep('processing');
 
-    try {
+    setTimeout(() => {
       const firstItem = cart[0].product;
       const sub = getSubtotal();
       const gst = getGstTotal();
       const final = getCheckoutTotal();
 
-      // Step 2: Create Order
-      const nextSerial = String(dbLocal.getOrders().length + 1).padStart(5, '0');
-      const orderId = `HMB2026${nextSerial}`;
-      const invoiceNo = `INV-2026-${nextSerial}`;
+      const payId = selectedPayMethod === 'razorpay' 
+        ? (manualTxId.trim() || `pay_HN_${Date.now().toString().slice(-9)}`) 
+        : manualTxId.trim();
 
-      // Calculate vendor pricing and platform commission
-      const itemsWithCommission = cart.map(item => {
-        const vendorPrice = item.product.wholesalePrice || (item.product.salePrice * 0.9);
-        const platformCommission = (item.product.salePrice - vendorPrice) * item.quantity;
-        return {
+      const initialStatus = selectedPayMethod === 'razorpay' ? 'Order Sent to Vendor' : 'Awaiting Payment Verification';
+      const initialTimelineNote = selectedPayMethod === 'razorpay' 
+        ? 'Procurement order placed via Razorpay Gateway. Payment proof screenshot submitted.' 
+        : `Order placed via ${selectedPayMethod.toUpperCase()}. Payment proof submitted with transaction ID ${manualTxId}. Awaiting Admin Verification.`;
+
+      const newOrder: Order = {
+        id: `ORD-${Math.floor(10000 + Math.random() * 90000)}`,
+        customerId: currentUser.id,
+        customerName: currentUser.name,
+        customerEmail: currentUser.email,
+        vendorId: firstItem.vendorId,
+        vendorName: firstItem.vendorName,
+        items: cart.map(item => ({
           productId: item.product.id,
           productName: item.product.name,
           productImage: item.product.images[0],
           price: item.product.salePrice,
           quantity: item.quantity,
           gstRate: item.product.gstRate,
-          hsnCode: item.product.hsnCode || '90181100',
+          hsnCode: item.product.hsnCode,
           vendorId: item.product.vendorId,
-          vendorName: item.product.vendorName,
-          vendorPrice: vendorPrice,
-          platformCommission: platformCommission
-        };
-      });
-
-      const totalCommission = itemsWithCommission.reduce((sum, item) => sum + item.platformCommission, 0);
-
-      const newOrder: Order = {
-        id: orderId,
-        customerId: currentUser.id,
-        customerName: shippingName.trim(),
-        customerEmail: currentUser.email,
-        phone: shippingPhone.trim(),
-        address: `${shippingAddress.address}, ${shippingAddress.city}, ${shippingAddress.state} - ${shippingAddress.pincode}`,
-        shippingAddress: shippingAddress,
-        billingAddress: finalBillingAddress,
-        invoiceNumber: invoiceNo,
-        vendorId: firstItem.vendorId,
-        vendorName: firstItem.vendorName,
-        items: itemsWithCommission,
+          vendorName: item.product.vendorName
+        })),
         totalAmount: sub,
         gstAmount: gst,
         discountAmount: 0,
         finalAmount: final,
-        status: 'Pending Payment',
-        orderStatus: 'Pending Payment',
-        paymentStatus: 'Pending',
-        payment_status: 'Pending',
-        order_status: 'Pending Payment',
-        paymentMethod: selectedPayMethod === 'bank' ? 'Bank Transfer' : selectedPayMethod.toUpperCase(),
-        platformCommission: totalCommission,
-        platformCommissionRate: 10,
+        status: initialStatus as any,
+        paymentMethod: selectedPayMethod === 'razorpay' ? 'Razorpay' : selectedPayMethod === 'upi' ? 'UPI' : 'Bank Transfer',
+        paymentId: payId,
+        shippingAddress: shippingAddress,
         createdAt: new Date().toISOString(),
         timeline: [
-          { 
-            status: 'Pending Payment', 
-            time: new Date().toISOString(), 
-            note: `Procurement order submitted. Awaiting manual payment verification via ${selectedPayMethod.toUpperCase()}.` 
-          }
+          { status: initialStatus as any, time: new Date().toISOString(), note: initialTimelineNote }
         ],
+        paymentProofUrl: manualProofUrl || undefined,
+        paymentTxId: manualTxId.trim() || payId,
+        paymentNote: manualNote.trim() || undefined,
         paymentVerificationLogs: [{
           action: 'submit',
-          performedBy: shippingName.trim(),
+          performedBy: currentUser.name,
           performedByRole: 'customer',
           timestamp: new Date().toISOString(),
-          note: `Order submitted. Pending payment upload.`
+          note: 'Initial payment proof submission at checkout.'
         }]
       };
 
-      // Step 3 & 4: Save Order & Reduce Inventory Stock
-      await dbLocal.createOrderDirect(newOrder);
+      const currentOrders = dbLocal.getOrders();
+      currentOrders.unshift(newOrder);
+      dbLocal.saveOrders(currentOrders);
 
-      // Step 10: Audit Log (Order Created)
-      dbLocal.logAudit(
-        currentUser.id,
-        'Order Created',
-        `Procurement Order #${orderId} was created with invoice ${invoiceNo} and Pending Payment status.`,
-        orderId
-      );
+      // Alert Vendor ONLY IF payment is verified/Razorpay
+      if (initialStatus === 'Order Sent to Vendor') {
+        dbLocal.addNotification(
+          newOrder.vendorId,
+          'New Equipment Order Placed',
+          `Order #${newOrder.id} has been received for ₹${newOrder.finalAmount.toLocaleString('en-IN')}. Verify calibrated packing.`,
+          'order_placed'
+        );
+      }
 
-      // Send initial notifications
+      // Alert Admin
       dbLocal.addNotification(
         'admin',
-        'New Procurement Order',
-        `New Order #${orderId} (₹${final.toLocaleString('en-IN')}) placed. Pending manual payment submission.`,
+        `New Marketplace Transaction`,
+        `Order #${newOrder.id} placed via ${newOrder.paymentMethod}. Final: ₹${newOrder.finalAmount.toLocaleString('en-IN')}.`,
         'order_placed'
       );
 
       setCreatedOrder(newOrder);
-      onUpdateCart([]); // Clear cart
-      setCheckoutStep('payment'); // Redirect to the Payment Upload page
-      addToast('Order submitted successfully! Please upload proof of payment.', 'success');
-    } catch (err: any) {
-      console.error('Failed to create order:', err);
-      addToast(`Order submission failed: ${err.message || 'Database error'}. Please try again.`, 'error');
-      setCheckoutStep('checkout');
-    }
-  };
-
-  // Phase 2: Upload Payment Proof and complete manual verification trigger
-  const handleUploadPaymentProof = async () => {
-    if (!currentUser || !createdOrder) {
-      addToast('No active order context found. Please submit an order first.', 'error');
-      return;
-    }
-
-    if (!screenshotFile) {
-      addToast('Please upload your payment screenshot/receipt.', 'error');
-      return;
-    }
-
-    if (!manualTxId.trim()) {
-      addToast('Please enter the UTR or Unique Transaction Reference Number.', 'error');
-      return;
-    }
-
-    if (!manualBankName.trim()) {
-      addToast('Please enter the Sender Bank Name.', 'error');
-      return;
-    }
-
-    if (!manualPaymentDate) {
-      addToast('Please select the Payment Date & Time.', 'error');
-      return;
-    }
-
-    // Step 5: Validate UTR Duplicates against existing orders
-    const existingOrders = dbLocal.getOrders();
-    const isUtrDuplicate = existingOrders.some(o => 
-      o.id !== createdOrder.id && 
-      (o.paymentTxId === manualTxId.trim() || o.upi_transaction_id === manualTxId.trim())
-    );
-
-    if (isUtrDuplicate) {
-      addToast('This UTR / Transaction Reference has already been submitted for another order. Please check and try again.', 'error');
-      return;
-    }
-
-    setCheckoutStep('processing');
-
-    try {
-      // 1. Upload payment screenshot to Google Drive via backend proxy
-      let driveScreenshotUrl = '';
-      try {
-        const fileBase64 = await fileToBase64(screenshotFile);
-        driveScreenshotUrl = await uploadScreenshotToDrive(
-          fileBase64,
-          screenshotFile.name,
-          screenshotFile.type,
-          createdOrder.id
-        );
-      } catch (driveErr: any) {
-        console.warn('[Google Drive Upload] Failed, falling back to local simulation link:', driveErr);
-        driveScreenshotUrl = `https://drive.google.com/mock-file-link/${createdOrder.id}_screenshot`;
-      }
-
-      // 2. Upload to Firebase Storage as primary/fallback view URL
-      let firebaseScreenshotUrl = '';
-      try {
-        const uploadRes = await uploadScreenshot(screenshotFile);
-        firebaseScreenshotUrl = uploadRes.url;
-      } catch (fbErr) {
-        console.warn('[Firebase Storage Upload] Failed:', fbErr);
-        firebaseScreenshotUrl = driveScreenshotUrl;
-      }
-
-      // 3. Generate Legally Compliant Tax Invoice automatically (Step 9)
-      const invoiceTextContent = `
-=========================================
-      HEALNEX MEDIBAZAR INVOICE
-=========================================
-Invoice No    : ${createdOrder.invoiceNumber || createdOrder.id}
-Order ID      : ${createdOrder.id}
-Order Date    : ${new Date(createdOrder.createdAt).toLocaleDateString('en-IN')}
-Payment Status: Pending Verification
-Order Status  : Payment Pending Verification
-
-CUSTOMER DETAILS (CONSIGNEE):
-Name          : ${createdOrder.customerName}
-Email         : ${createdOrder.customerEmail}
-Phone         : ${createdOrder.phone || 'N/A'}
-Address       : ${createdOrder.address}
-
-BILLING DETAILS:
-Address       : ${createdOrder.billingAddress?.address}, ${createdOrder.billingAddress?.city}, ${createdOrder.billingAddress?.state} - ${createdOrder.billingAddress?.pincode}
-
-SUPPLIER VENDOR:
-Name          : ${createdOrder.vendorName}
-
-ITEMS:
-${createdOrder.items.map(item => `- ${item.productName} | Qty: ${item.quantity} | Price: INR ${item.price} | Tax Rate: ${item.gstRate}%`).join('\n')}
-
-SUMMARY:
-Subtotal      : INR ${createdOrder.totalAmount}
-GST Tax Amount: INR ${createdOrder.gstAmount}
-Grand Total   : INR ${createdOrder.finalAmount}
-=========================================
-Generated via Google Workspace secure microservice.
-`;
-
-      let driveInvoiceUrl = '';
-      const sheetsToken = getCachedWorkspaceToken();
-      if (sheetsToken) {
-        try {
-          const driveResult = await uploadFileToGoogleDrive(
-            sheetsToken,
-            `Invoice_${createdOrder.invoiceNumber}_${createdOrder.id}.txt`,
-            invoiceTextContent,
-            'text/plain'
-          );
-          driveInvoiceUrl = driveResult.url;
-          addToast('Invoice document generated and saved to Google Drive!', 'success');
-        } catch (invoiceDriveErr) {
-          console.error('[Google Drive Invoice] Failed to automatically upload:', invoiceDriveErr);
-          driveInvoiceUrl = `https://drive.google.com/mock-invoice-link/${createdOrder.id}`;
-        }
-      } else {
-        driveInvoiceUrl = `https://drive.google.com/mock-invoice-link/${createdOrder.id}`;
-      }
-
-      // 4. Update the order with payment details, screenshots, and invoice metadata in Firestore
-      const updatedOrder: Order = {
-        ...createdOrder,
-        status: 'Payment Pending Verification',
-        orderStatus: 'Payment Pending Verification',
-        paymentStatus: 'Pending Verification',
-        payment_status: 'Pending Verification',
-        order_status: 'Payment Pending Verification',
-        paymentTxId: manualTxId.trim(),
-        upi_transaction_id: manualTxId.trim(),
-        paymentScreenshotUrl: firebaseScreenshotUrl,
-        paymentScreenshotName: screenshotFile.name,
-        paymentDriveUrl: driveScreenshotUrl,
-        paymentNote: manualNote.trim() || undefined,
-        invoiceDriveUrl: driveInvoiceUrl,
-        timeline: [
-          ...createdOrder.timeline,
-          {
-            status: 'Payment Pending Verification',
-            time: new Date().toISOString(),
-            note: `Payment proof uploaded. UTR: ${manualTxId.trim()} (${manualBankName.trim()}). Saved to Google Drive.`
-          }
-        ],
-        paymentVerificationLogs: [
-          ...(createdOrder.paymentVerificationLogs || []),
-          {
-            action: 'submit',
-            performedBy: currentUser.name,
-            performedByRole: 'customer',
-            timestamp: new Date().toISOString(),
-            note: `Payment receipt submitted. UTR: ${manualTxId.trim()} via Bank ${manualBankName.trim()}.`
-          }
-        ]
-      };
-
-      // Save/Persist updated order in Firestore & Sheets
-      await dbLocal.createOrderDirect(updatedOrder);
-
-      // Step 5: Save Payment Record in Google Sheets
-      try {
-        await saveOrderToSheet({
-          orderId: updatedOrder.id,
-          customerId: updatedOrder.customerId,
-          vendorId: updatedOrder.vendorId || '',
-          items: updatedOrder.items,
-          totalAmount: updatedOrder.finalAmount,
-          paymentMethod: updatedOrder.paymentMethod,
-          paymentStatus: updatedOrder.paymentStatus,
-          orderStatus: updatedOrder.status,
-          screenshotUrl: firebaseScreenshotUrl,
-          utr: manualTxId.trim(),
-          paymentDateTime: manualPaymentDate,
-          paymentNote: manualNote.trim()
-        });
-      } catch (sheetErr) {
-        console.warn('[Google Sheets Sync] Failed:', sheetErr);
-      }
-
-      // Step 10: Audit Log (Payment Uploaded)
-      dbLocal.logAudit(
-        currentUser.id,
-        'Payment Uploaded',
-        `Payment proof uploaded for Order #${updatedOrder.id} with UTR: ${manualTxId.trim()} from bank ${manualBankName.trim()}.`,
-        updatedOrder.id
-      );
-
-      // Step 6: Trigger Notifications to Customer, Vendor, and Admin
-      // Customer Notification
-      dbLocal.addNotification(
-        currentUser.id,
-        'Payment Proof Received',
-        `Your payment proof for Order #${updatedOrder.id} has been submitted successfully. We will verify and process it shortly.`,
-        'payment_submitted'
-      );
-
-      // Vendor Notification
-      dbLocal.addNotification(
-        updatedOrder.vendorId || 'vendor',
-        'Payment Uploaded by Buyer',
-        `A manual payment has been uploaded for Order #${updatedOrder.id}. Preparing the items for shipment.`,
-        'order_placed'
-      );
-
-      // Admin Notification
-      dbLocal.addNotification(
-        'admin',
-        'Payment Verification Requested',
-        `Order #${updatedOrder.id} is pending verification. UTR: ${manualTxId.trim()} (${manualBankName.trim()}). Check live dashboard.`,
-        'payment_submitted'
-      );
-
-      // Display Success Message (Step 5)
-      addToast(
-        "🎉 Your order has been placed successfully. Your Order ID is generated. Please complete the payment (if applicable) and upload your payment proof. We will verify your payment and process your order shortly.",
-        "success"
-      );
-
-      setCreatedOrder(updatedOrder);
+      setCheckoutStep('success');
+      onUpdateCart([]); // clear cart
       
-      // Automatically redirect the customer to the Order Details page (Step 5)
-      setTimeout(() => {
-        setViewInvoiceOrder(updatedOrder);
-        setCheckoutStep('success');
-      }, 1500);
-
-    } catch (uploadErr: any) {
-      console.error('Failed to submit manual payment verification:', uploadErr);
-      addToast(`Payment verification submission failed: ${uploadErr.message || 'Network error'}. Please try again.`, 'error');
-      setCheckoutStep('payment');
-    }
+      // Clear manual payment states
+      setManualTxId('');
+      setManualNote('');
+      setManualProofUrl('');
+      setManualProofFileName('');
+    }, 2500);
   };
 
   // RFQ Submission
@@ -1051,14 +704,14 @@ Generated via Google Workspace secure microservice.
   };
 
   // Accept vendor quotation and convert into paid order
-  const handleAcceptQuotation = async (quo: Quotation, rfq: RFQ) => {
+  const handleAcceptQuotation = (quo: Quotation, rfq: RFQ) => {
     if (!currentUser) return;
     
     // Simulate Instant payment checkout step
     setCheckoutStep('processing');
     onNavigate('cart');
 
-    try {
+    setTimeout(() => {
       const sub = quo.totalPrice;
       const gst = sub * 0.12; // Flat 12% for diagnostic equipment
       const final = sub + gst;
@@ -1095,8 +748,10 @@ Generated via Google Workspace secure microservice.
         ]
       };
 
-      // Create order directly in Firestore and handle stock + notifications
-      await dbLocal.createOrderDirect(newOrder);
+      // Add to database
+      const allOrders = dbLocal.getOrders();
+      allOrders.unshift(newOrder);
+      dbLocal.saveOrders(allOrders);
 
       // Mark other quotes as rejected
       const updatedQuotes = dbLocal.getQuotations().map(q => {
@@ -1125,11 +780,7 @@ Generated via Google Workspace secure microservice.
       setCheckoutStep('success');
       setActiveRfqReview(null);
       loadData();
-    } catch (error: any) {
-      console.error('Failed to process RFQ checkout transaction:', error);
-      addToast(`Quotation acceptance failed: ${error?.message || 'Database connection error occurred'}. Please try again.`, 'error');
-      setCheckoutStep('cart');
-    }
+    }, 2000);
   };
 
   return (
@@ -1137,38 +788,44 @@ Generated via Google Workspace secure microservice.
       
       {/* Home View / Landing with Marketplace Grid */}
       {currentView === 'marketplace' && (
-        <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 space-y-12 pb-16 animate-fade-in text-slate-800 dark:text-slate-100">
+        <div className="space-y-8 animate-fade-in">
           
-          {/* AESTHETIC BLUE-THEMED HERO BANNER AUTO-SLIDER */}
-          <div className="relative bg-[#0F172A] text-white rounded-[16px] overflow-hidden min-h-[380px] sm:min-h-[460px] flex items-center shadow-md border border-slate-800 transition-all duration-700">
+          {/* Aesthetic B2B Hero Section / Dynamic Promotional Banner Showcase */}
+          <div className="relative bg-teal-950 text-white rounded-3xl overflow-hidden py-12 sm:py-20 px-6 sm:px-12 shadow-2xl border border-teal-800/80 min-h-[380px] sm:min-h-[440px] flex items-center transition-all duration-700">
             {promoBanners.length > 0 && promoBanners[activeBannerIdx % promoBanners.length]?.imageUrl ? (
               <>
                 <img
                   src={promoBanners[activeBannerIdx % promoBanners.length].imageUrl}
                   alt={promoBanners[activeBannerIdx % promoBanners.length].title}
                   referrerPolicy="no-referrer"
-                  className="absolute inset-0 w-full h-full object-cover opacity-35 scale-100 transition-transform duration-1000 ease-out"
+                  className="absolute inset-0 w-full h-full object-cover opacity-35 scale-105 transition-transform duration-1000 ease-out"
                 />
-                {/* Clean gradient overlay matching the blue theme */}
-                <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/80 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-r from-teal-950 via-teal-950/85 to-transparent pointer-events-none" />
               </>
             ) : (
-              <div className="absolute inset-0 opacity-10 pointer-events-none bg-blue-950">
-                <div className="w-full h-full bg-[radial-gradient(#2563eb_1px,transparent_1px)] [background-size:16px_16px]" />
+              <div className="absolute inset-0 opacity-15 pointer-events-none">
+                <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#fff" strokeWidth="1" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid)" />
+                </svg>
               </div>
             )}
 
-            <div className="w-full relative z-10 py-12 px-6 sm:px-12 flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="w-full relative z-10 flex flex-col md:flex-row items-center justify-between gap-10">
               {promoBanners.length > 0 ? (
-                <div className="max-w-2xl space-y-5 animate-fade-in text-left">
-                  <span className="inline-block bg-[#1E40AF]/40 text-blue-200 border border-blue-500/30 text-[10px] sm:text-xs font-bold px-3.5 py-1 rounded-full uppercase tracking-wider shadow-xs">
-                    {promoBanners[activeBannerIdx % promoBanners.length].badgeText || 'CLINICAL PRO-SERIES'}
+                <div className="max-w-2xl space-y-5 animate-fade-in">
+                  <span className="inline-block bg-teal-500/25 text-teal-300 border border-teal-400/40 text-[10px] sm:text-xs font-bold px-3.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                    {promoBanners[activeBannerIdx % promoBanners.length].badgeText || 'CLINICAL QUALITY ASSURED • WHOLESALE PRICING'}
                   </span>
-                  <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-sans leading-tight text-white drop-shadow-xs">
+                  <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display leading-tight drop-shadow-sm">
                     {promoBanners[activeBannerIdx % promoBanners.length].title}
                   </h1>
                   {promoBanners[activeBannerIdx % promoBanners.length].subtitle && (
-                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-lg font-medium">
+                    <p className="text-xs sm:text-sm text-teal-100/90 leading-relaxed max-w-lg font-medium drop-shadow-sm">
                       {promoBanners[activeBannerIdx % promoBanners.length].subtitle}
                     </p>
                   )}
@@ -1183,29 +840,29 @@ Generated via Google Workspace secure microservice.
                           el?.scrollIntoView({ behavior: 'smooth' });
                         }
                       }}
-                      className="bg-[#1E40AF] hover:bg-blue-700 text-white text-xs font-extrabold px-6 py-3.5 rounded-xl transition shadow-lg flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5"
+                      className="bg-teal-500 hover:bg-teal-600 text-white text-xs font-extrabold px-6 py-3.5 rounded-xl transition shadow-xl flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5"
                     >
-                      {promoBanners[activeBannerIdx % promoBanners.length].buttonText || 'Procure Now'}
+                      {promoBanners[activeBannerIdx % promoBanners.length].buttonText || 'Explore Catalog'}
                       <ArrowRight className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => onNavigate('rfqs')}
-                      className="bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-white text-xs font-bold px-6 py-3.5 rounded-xl transition shadow-md"
+                      className="bg-slate-900/80 backdrop-blur border border-teal-500/60 hover:bg-teal-900 text-white text-xs font-bold px-6 py-3.5 rounded-xl transition shadow-lg"
                     >
                       Submit B2B RFQ
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="max-w-2xl space-y-5 text-left">
-                  <span className="inline-block bg-[#1E40AF]/40 text-blue-300 border border-blue-500/30 text-[10px] sm:text-xs font-bold px-3.5 py-1 rounded-full uppercase tracking-wider">
-                    clinical quality assured &bull; wholesale procurement
+                <div className="max-w-2xl space-y-5">
+                  <span className="inline-block bg-teal-500/20 text-teal-300 border border-teal-500/50 text-[10px] sm:text-xs font-bold px-3.5 py-1 rounded-full uppercase tracking-wider">
+                    clinical quality assured &bull; wholesale pricing
                   </span>
-                  <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-sans leading-tight text-white">
-                    India's Premium Medical Equipment <span className="text-blue-400">Bazar</span>
+                  <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display leading-tight">
+                    India's Premium Medical Equipment <span className="text-teal-400">Procurement</span> Hub
                   </h1>
-                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-lg">
-                    Source directly from certified suppliers. Submit custom hospital RFQs, compare verified quotations side-by-side, and download official tax invoices.
+                  <p className="text-xs sm:text-sm text-teal-100/80 leading-relaxed max-w-lg">
+                    Source directly from certified suppliers. Submit custom hospital tenders, compare commercial quotations side-by-side, and download official tax invoices.
                   </p>
                   <div className="flex flex-wrap gap-3 pt-2">
                     <button
@@ -1213,48 +870,47 @@ Generated via Google Workspace secure microservice.
                         const el = document.getElementById('marketplace-anchor');
                         el?.scrollIntoView({ behavior: 'smooth' });
                       }}
-                      className="bg-[#1E40AF] hover:bg-blue-700 text-white text-xs font-bold px-6 py-3 rounded-xl transition shadow-md flex items-center gap-1.5 cursor-pointer"
+                      className="bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold px-6 py-3 rounded-xl transition shadow-lg flex items-center gap-1.5 cursor-pointer"
                     >
                       Explore Catalog
                       <ArrowRight className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => onNavigate('rfqs')}
-                      className="bg-transparent border border-slate-700 hover:bg-slate-900 text-white text-xs font-bold px-6 py-3 rounded-xl transition"
+                      className="bg-transparent border border-teal-600 hover:bg-teal-900 text-white text-xs font-bold px-6 py-3 rounded-xl transition"
                     >
-                      Submit RFQ
+                      Submit B2B RFQ
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Sidebar Trust Card inside Hero Banner */}
               <div className="relative shrink-0 hidden lg:block w-72">
-                <div className="bg-slate-900/90 backdrop-blur p-5 rounded-[16px] border border-slate-800 shadow-2xl space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-850 pb-2.5">
-                    <span className="text-[10px] font-extrabold text-blue-400 tracking-wider">BIOMEDICAL CALIBRATION</span>
+                <div className="bg-teal-900/90 backdrop-blur p-5 rounded-2xl border border-teal-600/60 shadow-2xl relative space-y-3">
+                  <div className="flex items-center justify-between border-b border-teal-700 pb-2.5">
+                    <span className="text-[10px] font-extrabold text-teal-300 tracking-wider">SECURE B2B DISPATCH</span>
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
                   </div>
-                  <p className="text-[11px] font-medium leading-relaxed text-slate-300">
-                    Every device on HealNex undergoes strict biochemical testing and comes certified with official warranty validations.
+                  <p className="text-xs font-semibold leading-relaxed text-teal-50">
+                    Every product listed on HealNex undergoes rigorous biomedical calibration before final dispatch.
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Slider Arrow Controls */}
+            {/* Carousel Arrow Controls & Indicator Dots */}
             {promoBanners.length > 1 && (
               <>
                 <button
                   onClick={() => setActiveBannerIdx((prev) => (prev - 1 + promoBanners.length) % promoBanners.length)}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-slate-900/60 hover:bg-slate-900 border border-slate-700 text-white flex items-center justify-center transition backdrop-blur shadow-md"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-slate-900/70 hover:bg-slate-900 border border-teal-700/60 text-white flex items-center justify-center transition backdrop-blur shadow-md"
                   aria-label="Previous banner"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => setActiveBannerIdx((prev) => (prev + 1) % promoBanners.length)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-slate-900/60 hover:bg-slate-900 border border-slate-700 text-white flex items-center justify-center transition backdrop-blur shadow-md"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-slate-900/70 hover:bg-slate-900 border border-teal-700/60 text-white flex items-center justify-center transition backdrop-blur shadow-md"
                   aria-label="Next banner"
                 >
                   <ChevronRight className="w-5 h-5" />
@@ -1264,10 +920,10 @@ Generated via Google Workspace secure microservice.
                     <button
                       key={idx}
                       onClick={() => setActiveBannerIdx(idx)}
-                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                      className={`h-2 rounded-full transition-all duration-300 ${
                         idx === (activeBannerIdx % promoBanners.length)
-                          ? 'w-6 bg-blue-500 shadow-xs'
-                          : 'w-1.5 bg-white/45 hover:bg-white/70'
+                          ? 'w-8 bg-teal-400 shadow-md'
+                          : 'w-2 bg-white/40 hover:bg-white/70'
                       }`}
                       aria-label={`Slide ${idx + 1}`}
                     />
@@ -1277,677 +933,426 @@ Generated via Google Workspace secure microservice.
             )}
           </div>
 
-          {/* AI ADVISORY TIP */}
+          {/* AI Clinical Compliance Tip Panel */}
           {aiClinicalTip && (
-            <div className={`p-5 rounded-[16px] border flex items-start gap-4 transition-all shadow-xs ${
+            <div className={`p-5 rounded-3xl border flex items-start gap-4 transition-all shadow-md ${
               isDarkMode 
-                ? 'bg-slate-900 border-slate-800 text-slate-100' 
-                : 'bg-blue-50/40 border-blue-100 text-slate-850'
+                ? 'bg-slate-900 border-teal-950 text-slate-100' 
+                : 'bg-gradient-to-r from-teal-50/50 to-teal-50/10 border-teal-100 text-slate-800'
             }`}>
-              <div className="bg-blue-100 dark:bg-slate-800 text-blue-600 p-2 rounded-xl shrink-0">
-                <Sparkles className="w-4 h-4 text-blue-600 animate-pulse" />
+              <div className="bg-teal-500/10 text-teal-500 p-2.5 rounded-2xl shrink-0">
+                <Sparkles className="w-5 h-5 text-teal-600 animate-pulse" />
               </div>
-              <div className="text-xs space-y-1 text-left">
+              <div className="text-xs space-y-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-extrabold text-[10px] text-blue-600 uppercase tracking-widest">AI clinical procurement advisory</span>
-                  <span className="bg-blue-100 text-[#1E40AF] text-[8px] font-bold px-1.5 py-0.5 rounded font-mono">LIVE ASSISTANT</span>
+                  <span className="font-bold text-[10px] text-teal-600 uppercase tracking-widest font-display">AI clinical procurement advisory</span>
+                  <span className="bg-teal-500/15 text-teal-600 text-[8px] font-bold px-1.5 py-0.5 rounded font-mono">LIVE CO-PILOT</span>
                 </div>
                 <p className="leading-relaxed font-semibold">{aiClinicalTip}</p>
               </div>
             </div>
           )}
 
-          {/* CATEGORY SECTION: Large rounded cards, Dynamic product count, Hover scale */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <span className="w-1.5 h-3.5 bg-blue-600 rounded-full"></span>
-                Shop by Specialty
-              </h3>
-              <button 
-                onClick={() => { onCategorySelect(''); const el = document.getElementById('marketplace-anchor'); el?.scrollIntoView({ behavior: 'smooth' }); }}
-                className="text-xs text-blue-600 font-bold hover:underline"
-              >
-                View All Categories &rarr;
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 pt-1">
-              {/* All Specialties card */}
+          {/* Shop by Category (Horizontal Directory) */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Shop by Category</span>
+              <span className="text-[10px] text-teal-600 font-normal">Click category to filter approved products</span>
+            </h3>
+            <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-thin">
               <button
-                onClick={() => { onCategorySelect(''); const el = document.getElementById('marketplace-anchor'); el?.scrollIntoView({ behavior: 'smooth' }); }}
-                className={`flex flex-col items-center justify-center p-4 rounded-[16px] border text-center transition-all duration-300 h-[115px] cursor-pointer group ${
+                onClick={() => onCategorySelect('')}
+                className={`px-5 py-3 rounded-2xl border text-xs font-semibold shrink-0 transition flex items-center gap-2 ${
                   !selectedCategoryName
-                    ? 'bg-blue-600 border-blue-600 text-white shadow-md'
-                    : isDarkMode
-                      ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-blue-500 hover:bg-slate-800/50'
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-blue-500 hover:bg-blue-50/20 shadow-xs'
+                    ? 'bg-teal-700 border-teal-700 text-white shadow-md'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 transition-transform group-hover:scale-105 ${
-                  !selectedCategoryName ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600'
-                }`}>
-                  <Layers className="w-4 h-4" />
-                </div>
-                <span className="text-[11px] font-bold tracking-tight block">All Products</span>
-                <span className="text-[9px] opacity-75 mt-0.5 block">{products.length} Items</span>
+                All Categories
               </button>
-
-              {/* Dynamic Categories */}
               {categories.map((cat) => {
                 const isActive = selectedCategoryName === cat.name;
-                const IconComp = CategoryIconMap[cat.iconName || ''] || Layers;
-                const count = products.filter(p => p.category === cat.name && p.approved !== false).length;
                 return (
                   <button
                     key={cat.id}
-                    onClick={() => { onCategorySelect(cat.name); const el = document.getElementById('marketplace-anchor'); el?.scrollIntoView({ behavior: 'smooth' }); }}
-                    className={`flex flex-col items-center justify-center p-3 rounded-[16px] border text-center transition-all duration-300 h-[115px] cursor-pointer group ${
+                    onClick={() => onCategorySelect(cat.name)}
+                    className={`px-5 py-3 rounded-2xl border text-xs font-semibold shrink-0 transition flex items-center gap-2 ${
                       isActive
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-md'
-                        : isDarkMode
-                          ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-blue-500 hover:bg-slate-800/50'
-                          : 'bg-white border-slate-200 text-slate-700 hover:border-blue-500 hover:bg-blue-50/20 shadow-xs'
+                        ? 'bg-teal-700 border-teal-700 text-white shadow-md'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-1.5 transition-transform group-hover:scale-105 ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600'
-                    }`}>
-                      <IconComp className="w-4 h-4" />
-                    </div>
-                    <span className="text-[11px] font-bold tracking-tight line-clamp-2 leading-tight block">{cat.name}</span>
-                    <span className={`text-[9px] mt-0.5 block ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>{count} Devices</span>
+                    <span>{cat.name}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* TOP BRANDS: Brand carousel list with quick filter toggles */}
-          <div id="brands-section-anchor" className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <span className="w-1.5 h-3.5 bg-blue-600 rounded-full"></span>
-                Certified Manufacturers
-              </h3>
-              <button 
-                onClick={() => setFilterBrand('')}
-                className="text-xs text-blue-600 font-bold hover:underline"
-              >
-                Clear Brand Filter
-              </button>
-            </div>
-            
-            <div className="flex gap-4 overflow-x-auto pb-3 pt-1 scrollbar-none snap-x">
+          {/* Shop by Brand (Horizontal Directory) */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Shop by Brand</span>
+              <span className="text-[10px] text-teal-600 font-normal">Click brand to filter approved products</span>
+            </h3>
+            <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-thin">
               <button
                 onClick={() => setFilterBrand('')}
-                className={`flex flex-col items-center justify-center p-3 rounded-[16px] border text-center transition-all duration-300 min-w-[125px] h-[95px] shrink-0 cursor-pointer snap-start group ${
+                className={`px-5 py-3 rounded-2xl border text-xs font-semibold shrink-0 transition flex items-center gap-2 ${
                   !filterBrand
-                    ? 'bg-slate-900 border-slate-900 text-white shadow-md'
-                    : isDarkMode
-                      ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-blue-500 hover:bg-blue-50/5'
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-blue-500 hover:bg-blue-50/20 shadow-xs'
+                    ? 'bg-slate-800 border-slate-800 text-white shadow-md'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1.5 font-bold text-xs ${
-                  !filterBrand ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-                }`}>
-                  ALL
-                </div>
-                <span className="text-[11px] font-bold truncate max-w-full block">All Brands</span>
+                All Brands
               </button>
-
               {brands.map((brd) => {
                 const isActive = filterBrand.toLowerCase() === brd.name.toLowerCase();
-                const initial = brd.name.slice(0, 2).toUpperCase();
                 return (
                   <button
                     key={brd.id}
                     onClick={() => setFilterBrand(isActive ? '' : brd.name)}
-                    className={`flex flex-col items-center justify-center p-3 rounded-[16px] border text-center transition-all duration-300 min-w-[125px] h-[95px] shrink-0 cursor-pointer snap-start group ${
+                    className={`px-5 py-3 rounded-2xl border text-xs font-semibold shrink-0 transition flex items-center gap-2 ${
                       isActive
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-md'
-                        : isDarkMode
-                          ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-blue-500'
-                          : 'bg-white border-slate-200 text-slate-700 hover:border-blue-500 hover:bg-blue-50/20 shadow-xs'
+                        ? 'bg-slate-800 border-slate-800 text-white shadow-md'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1.5 font-bold text-[10px] overflow-hidden ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600'
-                    }`}>
-                      {brd.logo ? (
-                        <img src={brd.logo} alt="" className="w-full h-full object-contain p-1" />
-                      ) : (
-                        <span>{initial}</span>
-                      )}
-                    </div>
-                    <span className="text-[11px] font-bold truncate max-w-full leading-tight block">{brd.name}</span>
-                    <span className="text-[9px] text-slate-400 block mt-0.5">{brd.country || 'Global'}</span>
+                    {brd.logo && <img src={brd.logo} alt="" className="w-4 h-4 rounded object-contain" />}
+                    <span>{brd.name}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* DEDICATED SPECIALTY PROCUREMENT ROW CAROUSEL TABS */}
-          <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-[16px] border border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-            <span className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-              <SlidersHorizontal className="w-4 h-4 text-blue-600" />
-              Specialty Shortcuts:
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { label: 'Diagnostics', cat: 'Medical Equipment' },
-                { label: 'Dental', cat: 'Dental Equipment' },
-                { label: 'Lab Equipment', cat: 'Laboratory Equipment' },
-                { label: 'Hospital Equipment', cat: 'Hospital Furniture' },
-                { label: 'Critical Care', cat: 'Medical Equipment' },
-                { label: 'Patient Monitoring', cat: 'Medical Equipment' }
-              ].map((shortcut, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    onCategorySelect(shortcut.cat);
-                    const el = document.getElementById('marketplace-anchor');
-                    el?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  className="px-3 py-1.5 bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:text-blue-600 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
-                >
-                  {shortcut.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* PRODUCT GRID SECTIONS: Featured, Best Sellers, New Arrivals & Main Catalog Grid */}
-          <div className="space-y-12">
+          {/* Main Marketplace catalog anchor */}
+          <div id="marketplace-anchor" className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             
-            {/* A. FEATURED PRODUCTS PREVIEW (Horizontal Row) */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                <h4 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500" />
-                  Featured Medical Devices
-                </h4>
-                <span className="text-xs text-slate-400 font-bold">Top clinical validations</span>
+            {/* Filters Sidebar */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-6">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-4 h-4 text-teal-700" />
+                  Commercial Filters
+                </h3>
+                {(filterBrand || selectedCategoryName || filterPriceRange < 500000 || filterMoq < 100 || filterTrustSealOnly || filterMinRating > 0 || filterInStockOnly || filterCountry) && (
+                  <button
+                    onClick={() => { setFilterBrand(''); onCategorySelect(''); setFilterPriceRange(500000); setFilterMoq(100); setFilterTrustSealOnly(false); setFilterMinRating(0); setFilterInStockOnly(false); setFilterCountry(''); }}
+                    className="text-[10px] font-bold text-rose-600 hover:text-rose-800"
+                  >
+                    Reset All
+                  </button>
+                )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {products.slice(0, 4).map((p) => {
-                  const hasWish = wishlist.includes(p.id);
-                  const discountPercentage = p.price > p.salePrice ? Math.round(((p.price - p.salePrice) / p.price) * 100) : 0;
-                  const simulatedRating = (4.4 + (p.name.length % 7) * 0.1).toFixed(1);
-                  const reviewCount = (p.name.length * 5) % 30 + 10;
-                  return (
-                    <div 
-                      key={p.id} 
-                      className={`rounded-[16px] border shadow-xs hover:shadow-md overflow-hidden flex flex-col justify-between group transition-all duration-300 hover:-translate-y-1 ${
-                        isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-150'
-                      }`}
-                    >
-                      <div className="relative bg-slate-50 h-40 overflow-hidden shrink-0">
-                        <img 
-                          src={p.images[0]} 
-                          alt={p.name} 
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
-                        />
-                        {discountPercentage > 0 && (
-                          <span className="absolute top-2.5 left-2.5 bg-rose-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-xs font-mono">
-                            {discountPercentage}% OFF
-                          </span>
-                        )}
-                        <span className="absolute top-2.5 right-2.5 z-10">
+
+              {/* Trust Seal Toggle Filter */}
+              <div className="p-3.5 bg-gradient-to-br from-amber-50 to-amber-100/60 rounded-xl border border-amber-200/80 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span className="text-xs font-extrabold text-slate-800 leading-tight">Verified Trust Seal Only</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={filterTrustSealOnly}
+                  onChange={(e) => setFilterTrustSealOnly(e.target.checked)}
+                  className="w-4 h-4 rounded text-amber-600 accent-amber-500 cursor-pointer"
+                />
+              </div>
+
+              {/* In Stock Only Toggle Filter */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-xs font-bold text-slate-800 leading-tight">In Stock Only</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={filterInStockOnly}
+                  onChange={(e) => setFilterInStockOnly(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 accent-emerald-500 cursor-pointer"
+                />
+              </div>
+
+              {/* Category Dropdown Filter */}
+              <div className="space-y-1.5 text-xs font-semibold">
+                <label className="text-slate-500">Filter by Category</label>
+                <select
+                  value={selectedCategoryName}
+                  onChange={(e) => onCategorySelect(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 outline-none"
+                >
+                  <option value="">All Categories</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Brand Dropdown Filter */}
+              <div className="space-y-1.5 text-xs font-semibold">
+                <label className="text-slate-500">Filter by Brand</label>
+                <select
+                  value={filterBrand}
+                  onChange={(e) => setFilterBrand(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 outline-none"
+                >
+                  <option value="">All Brands</option>
+                  {brands.map(b => (
+                    <option key={b.id} value={b.name}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Rating Filter */}
+              <div className="space-y-1.5 text-xs font-semibold">
+                <label className="text-slate-500">Minimum Rating</label>
+                <select
+                  value={filterMinRating}
+                  onChange={(e) => setFilterMinRating(Number(e.target.value))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 outline-none"
+                >
+                  <option value={0}>Any Rating</option>
+                  <option value={4}>4★ & Above</option>
+                  <option value={4.5}>4.5★ & Above</option>
+                  <option value={4.8}>4.8★ & Above</option>
+                </select>
+              </div>
+
+              {/* Manufacturer / Country Filter */}
+              <div className="space-y-1.5 text-xs font-semibold">
+                <label className="text-slate-500">Country / Manufacturer</label>
+                <input
+                  type="text"
+                  placeholder="e.g. India, Germany..."
+                  value={filterCountry}
+                  onChange={(e) => setFilterCountry(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 outline-none"
+                />
+              </div>
+
+              {/* Price Range Filter */}
+              <div className="space-y-1.5 text-xs font-semibold">
+                <div className="flex justify-between text-slate-500">
+                  <span>Price (Max Limit)</span>
+                  <span className="font-mono text-teal-800">₹{filterPriceRange.toLocaleString()}</span>
+                </div>
+                <input
+                  type="range"
+                  min={1000}
+                  max={500000}
+                  step={5000}
+                  value={filterPriceRange}
+                  onChange={(e) => setFilterPriceRange(Number(e.target.value))}
+                  className="w-full h-1.5 bg-slate-100 rounded-lg cursor-pointer accent-teal-700"
+                />
+              </div>
+
+              {/* MOQ limits */}
+              <div className="space-y-1.5 text-xs font-semibold">
+                <div className="flex justify-between text-slate-500">
+                  <span>MOQ Requirement</span>
+                  <span className="font-mono text-slate-700">&le; {filterMoq} units</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={100}
+                  step={5}
+                  value={filterMoq}
+                  onChange={(e) => setFilterMoq(Number(e.target.value))}
+                  className="w-full h-1.5 bg-slate-100 rounded-lg cursor-pointer accent-teal-700"
+                />
+              </div>
+            </div>
+
+            {/* Catalog Grid */}
+            <div className="lg:col-span-3 space-y-4">
+              {isAiSearching && (
+                <div className={`p-4 rounded-2xl border flex items-center justify-between gap-3 animate-pulse shadow-sm ${
+                  isDarkMode 
+                    ? 'bg-teal-950/20 border-teal-850/50 text-teal-300' 
+                    : 'bg-teal-50 border-teal-100 text-teal-800'
+                }`}>
+                  <div className="flex items-center gap-2.5 text-xs font-semibold">
+                    <Loader2 className="w-4 h-4 text-teal-500 animate-spin" />
+                    <span>Gemini AI is semantic-matching the clinical catalog for "{searchQuery}"...</span>
+                  </div>
+                  <span className="text-[10px] font-mono uppercase bg-teal-500/10 px-2 py-0.5 rounded tracking-wider">Deep Semantic Mode</span>
+                </div>
+              )}
+
+              {searchQuery && !isAiSearching && aiSearchResults.length > 0 && (
+                <div className={`p-3 rounded-2xl border flex items-center justify-between gap-3 shadow-sm ${
+                  isDarkMode 
+                    ? 'bg-slate-900 border-slate-800 text-slate-300' 
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}>
+                  <div className="flex items-center gap-2 text-xs font-medium">
+                    <Sparkles className="w-4 h-4 text-teal-500" />
+                    <span>Gemini AI successfully matched and sorted {filteredProducts.length} clinical instruments matching your query.</span>
+                  </div>
+                  <button 
+                    onClick={onClearSearch}
+                    className="text-[10px] font-bold text-teal-600 hover:text-teal-800 uppercase cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+
+              {filteredProducts.length === 0 ? (
+                <div className="p-16 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">
+                  <SlidersHorizontal className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-xs">No matching certified clinical products found.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredProducts.map((p) => {
+                    const hasWish = wishlist.includes(p.id);
+                    const hasComp = compareList.some(item => item.id === p.id);
+                    const aiMatch = aiSearchResults.find(m => m.productId === p.id);
+                    const productVendor = vendors.find(v => v.id === p.vendorId || v.companyName === p.vendorName);
+                    return (
+                      <div
+                        key={p.id}
+                        className={`rounded-2xl border shadow-sm overflow-hidden flex flex-col justify-between group transition-all hover:shadow-md ${
+                          isDarkMode
+                            ? 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-100'
+                            : 'bg-white border-slate-200/80 hover:border-slate-300 text-slate-800'
+                        }`}
+                      >
+                        {/* Image banner */}
+                        <div className="relative bg-slate-100 h-44 overflow-hidden shrink-0">
+                          <img
+                            src={p.images[0]}
+                            alt={p.name}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          {aiMatch && (
+                            <span className="absolute top-2.5 left-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-[9px] font-bold px-2 py-1 rounded-full shadow-md flex items-center gap-1 animate-pulse z-10">
+                              <Sparkles className="w-3 h-3 text-yellow-300 fill-current" />
+                              {aiMatch.relevanceScore}% Clinical Match
+                            </span>
+                          )}
                           <button
                             onClick={() => handleToggleWishlist(p.id)}
-                            className={`p-1.5 rounded-full transition shadow-xs ${
-                              hasWish ? 'bg-rose-500 text-white' : 'bg-white/90 text-slate-400 hover:text-rose-500'
+                            className={`p-1.5 rounded-full absolute top-2.5 right-2.5 transition ${
+                              hasWish ? 'bg-rose-500 text-white' : 'bg-white text-slate-400 hover:text-rose-500 shadow'
                             }`}
                           >
-                            <Heart className="w-3.5 h-3.5 fill-current" />
+                            <Heart className="w-4 h-4 fill-current" />
                           </button>
-                        </span>
-                        <div className="absolute bottom-2.5 left-2.5 bg-blue-600/90 text-white text-[8px] font-bold px-2 py-0.5 rounded shadow-xs">
-                          FEATURED
-                        </div>
-                      </div>
-
-                      <div className="p-4 flex-1 flex flex-col justify-between space-y-2.5 text-xs text-left">
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-bold text-blue-600 bg-blue-50 dark:bg-slate-800 px-2 py-0.5 rounded block w-fit uppercase">
-                            {p.brand}
-                          </span>
-                          <h5 
-                            onClick={() => setSelectedProduct(p)}
-                            className="font-bold text-slate-900 dark:text-white line-clamp-1 hover:text-blue-600 cursor-pointer text-xs"
-                          >
-                            {p.name}
-                          </h5>
-                          <div className="flex items-center gap-1.5">
-                            <div className="flex items-center text-amber-400">
-                              <Star className="w-3.5 h-3.5 fill-current" />
-                            </div>
-                            <span className="font-bold text-amber-500">{simulatedRating}</span>
-                            <span className="text-[10px] text-slate-400">({reviewCount} reviews)</span>
-                          </div>
-                          <p className="text-[10px] text-slate-400">
-                            Stock Status: <strong className="text-emerald-600 font-bold">In Stock ({p.stockQuantity || 10})</strong>
-                          </p>
                         </div>
 
-                        <div className="border-t border-slate-50 dark:border-slate-800 pt-2 flex items-center justify-between">
+                        {/* Card Body */}
+                        <div className="p-4 flex-1 flex flex-col justify-between space-y-3 text-xs">
                           <div>
-                            <span className="text-slate-400 text-[8px] uppercase block font-bold">Sale Price</span>
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-sm font-extrabold text-[#1E40AF]">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                                isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {p.brand}
+                              </span>
+                              {productVendor?.trustSeal && (
+                                <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1 shrink-0" title={productVendor.trustSealLevel || 'Verified Clinical Supplier'}>
+                                  <ShieldCheck className="w-3 h-3 text-white shrink-0" />
+                                  Trust Seal
+                                </span>
+                              )}
+                            </div>
+                            <h4
+                              onClick={() => setSelectedProduct(p)}
+                              className={`font-bold mt-1 line-clamp-1 hover:text-teal-400 hover:underline cursor-pointer ${
+                                isDarkMode ? 'text-white' : 'text-slate-900'
+                              }`}
+                            >
+                              {p.name}
+                            </h4>
+                            <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
+                              <Building className="w-3 h-3 shrink-0 text-slate-400" />
+                              <span className="truncate">Supplier: <strong className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>{p.vendorName || productVendor?.companyName || 'Verified Partner'}</strong></span>
+                            </div>
+                            <p className={`text-[11px] line-clamp-2 mt-1 leading-relaxed ${
+                              isDarkMode ? 'text-slate-300' : 'text-slate-500'
+                            }`}>
+                              {p.description}
+                            </p>
+
+                            {/* AI Semantic Search Insight */}
+                            {aiMatch && (
+                              <div className={`mt-2.5 p-2 rounded-lg text-[10px] flex gap-1.5 items-start border leading-normal ${
+                                isDarkMode 
+                                  ? 'bg-teal-950/30 text-teal-300 border-teal-850/50' 
+                                  : 'bg-teal-50 text-teal-800 border-teal-100'
+                              }`}>
+                                <Sparkles className="w-3.5 h-3.5 text-teal-500 shrink-0 mt-0.5" />
+                                <div>
+                                  <span className="font-bold">Clinical Insight: </span>
+                                  {aiMatch.aiInsight}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className={`border-t pt-2 flex items-center justify-between ${
+                            isDarkMode ? 'border-slate-800' : 'border-slate-50'
+                          }`}>
+                            <div>
+                              <span className="text-slate-400 text-[10px] block">Price (Excl Tax)</span>
+                              <span className={`text-sm font-bold ${isDarkMode ? 'text-teal-400' : 'text-teal-800'}`}>
                                 ₹{p.salePrice.toLocaleString('en-IN')}
                               </span>
-                              {p.price > p.salePrice && (
-                                <span className="text-[10px] text-slate-400 line-through">
-                                  ₹{p.price.toLocaleString('en-IN')}
-                                </span>
-                              )}
+                            </div>
+                            <div className="text-right">
+                              <span className="text-slate-400 text-[10px] block">MOQ Requirement</span>
+                              <span className={`font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                                {p.moq} unit(s)
+                              </span>
                             </div>
                           </div>
+                        </div>
+
+                        {/* Card Foot action bars */}
+                        <div className={`px-4 py-3 border-t flex items-center justify-between gap-2 shrink-0 ${
+                          isDarkMode ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-100'
+                        }`}>
                           <button
-                            onClick={() => { setSelectedProduct(p); }}
-                            className="text-[9px] uppercase font-bold text-slate-500 hover:text-blue-600 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
+                            onClick={() => handleToggleCompare(p)}
+                            className={`flex items-center gap-1 text-[10px] font-bold py-1 px-2.5 rounded transition-colors ${
+                              hasComp 
+                                ? 'bg-orange-500 text-white' 
+                                : isDarkMode 
+                                  ? 'text-slate-400 hover:bg-slate-800' 
+                                  : 'text-slate-500 hover:bg-slate-100'
+                            }`}
                           >
-                            Quick View
+                            <Scale className="w-3.5 h-3.5" />
+                            {hasComp ? 'Comparing' : 'Compare'}
+                          </button>
+                          <button
+                            onClick={() => handleAddToCart(p)}
+                            className="bg-teal-700 hover:bg-teal-800 text-white font-bold py-1.5 px-3.5 rounded-lg flex items-center gap-1 transition text-[10px] uppercase tracking-wide cursor-pointer"
+                          >
+                            <ShoppingCart className="w-3.5 h-3.5" />
+                            Procure
                           </button>
                         </div>
                       </div>
-
-                      <div className="p-3 bg-slate-50 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-850 flex items-center justify-between gap-2">
-                        <span className="text-[9px] text-slate-400">MOQ: <strong>{p.moq} unit(s)</strong></span>
-                        <button
-                          onClick={() => handleAddToCart(p)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded-lg text-[9px] uppercase tracking-wider cursor-pointer"
-                        >
-                          Add to Cart
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* B. MAIN CATALOG WITH FILTERS SIDEBAR */}
-            <div id="marketplace-anchor" className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-              
-              {/* Filters Sidebar */}
-              <div className="bg-white dark:bg-slate-900 p-5 rounded-[16px] border border-slate-200 dark:border-slate-800 shadow-xs h-fit space-y-6 text-left">
-                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                    <SlidersHorizontal className="w-4 h-4 text-blue-600" />
-                    Commercial Filters
-                  </h3>
-                  {(filterBrand || selectedCategoryName || filterPriceRange < 500000 || filterMoq < 100 || filterTrustSealOnly || filterMinRating > 0 || filterInStockOnly || filterCountry) && (
-                    <button
-                      onClick={() => { setFilterBrand(''); onCategorySelect(''); setFilterPriceRange(500000); setFilterMoq(100); setFilterTrustSealOnly(false); setFilterMinRating(0); setFilterInStockOnly(false); setFilterCountry(''); }}
-                      className="text-[10px] font-bold text-rose-600 hover:text-rose-800"
-                    >
-                      Reset All
-                    </button>
-                  )}
+                    );
+                  })}
                 </div>
-
-                {/* Trust Seal Toggle Filter */}
-                <div className="p-3.5 bg-gradient-to-br from-blue-50/50 to-blue-100/30 rounded-xl border border-blue-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
-                    <span className="text-xs font-extrabold text-slate-850 dark:text-slate-100 leading-tight">Verified Trust Seal Only</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={filterTrustSealOnly}
-                    onChange={(e) => setFilterTrustSealOnly(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600 accent-blue-500 cursor-pointer"
-                  />
-                </div>
-
-                {/* In Stock Only Toggle Filter */}
-                <div className="p-3.5 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-tight">In Stock Only</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={filterInStockOnly}
-                    onChange={(e) => setFilterInStockOnly(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-650 accent-emerald-500 cursor-pointer"
-                  />
-                </div>
-
-                {/* Category Dropdown Filter */}
-                <div className="space-y-1.5 text-xs font-semibold">
-                  <label className="text-slate-500 dark:text-slate-400">Filter by Category</label>
-                  <select
-                    value={selectedCategoryName}
-                    onChange={(e) => onCategorySelect(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg p-2 outline-none dark:text-slate-200"
-                  >
-                    <option value="">All Categories</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Brand Dropdown Filter */}
-                <div className="space-y-1.5 text-xs font-semibold">
-                  <label className="text-slate-500 dark:text-slate-400">Filter by Brand</label>
-                  <select
-                    value={filterBrand}
-                    onChange={(e) => setFilterBrand(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg p-2 outline-none dark:text-slate-200"
-                  >
-                    <option value="">All Brands</option>
-                    {brands.map(b => (
-                      <option key={b.id} value={b.name}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Rating Filter */}
-                <div className="space-y-1.5 text-xs font-semibold">
-                  <label className="text-slate-500 dark:text-slate-400">Minimum Rating</label>
-                  <select
-                    value={filterMinRating}
-                    onChange={(e) => setFilterMinRating(Number(e.target.value))}
-                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg p-2 outline-none dark:text-slate-200"
-                  >
-                    <option value={0}>Any Rating</option>
-                    <option value={4}>4★ & Above</option>
-                    <option value={4.5}>4.5★ & Above</option>
-                    <option value={4.8}>4.8★ & Above</option>
-                  </select>
-                </div>
-
-                {/* Manufacturer / Country Filter */}
-                <div className="space-y-1.5 text-xs font-semibold">
-                  <label className="text-slate-500 dark:text-slate-400">Country / Manufacturer</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. India, Germany..."
-                    value={filterCountry}
-                    onChange={(e) => setFilterCountry(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg p-2 outline-none dark:text-slate-200"
-                  />
-                </div>
-
-                {/* Price Range Filter */}
-                <div className="space-y-1.5 text-xs font-semibold">
-                  <div className="flex justify-between text-slate-500">
-                    <span>Price (Max Limit)</span>
-                    <span className="font-mono text-blue-700 dark:text-blue-400 font-bold">₹{filterPriceRange.toLocaleString()}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={1000}
-                    max={500000}
-                    step={5000}
-                    value={filterPriceRange}
-                    onChange={(e) => setFilterPriceRange(Number(e.target.value))}
-                    className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg cursor-pointer accent-blue-600"
-                  />
-                </div>
-
-                {/* MOQ limits */}
-                <div className="space-y-1.5 text-xs font-semibold">
-                  <div className="flex justify-between text-slate-500">
-                    <span>MOQ Requirement</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300 font-bold">&le; {filterMoq} units</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={1}
-                    max={100}
-                    step={5}
-                    value={filterMoq}
-                    onChange={(e) => setFilterMoq(Number(e.target.value))}
-                    className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg cursor-pointer accent-blue-600"
-                  />
-                </div>
-              </div>
-
-              {/* Catalog Grid */}
-              <div className="lg:col-span-3 space-y-4">
-                {isAiSearching && (
-                  <div className={`p-4 rounded-[16px] border flex items-center justify-between gap-3 animate-pulse shadow-xs ${
-                    isDarkMode 
-                      ? 'bg-blue-950/20 border-slate-800 text-blue-300' 
-                      : 'bg-blue-50 border-blue-100 text-blue-800'
-                  }`}>
-                    <div className="flex items-center gap-2.5 text-xs font-semibold">
-                      <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                      <span>Gemini AI is semantic-matching the clinical catalog for "{searchQuery}"...</span>
-                    </div>
-                    <span className="text-[10px] font-mono uppercase bg-blue-500/10 px-2 py-0.5 rounded tracking-wider">Deep Semantic Mode</span>
-                  </div>
-                )}
-
-                {searchQuery && !isAiSearching && aiSearchResults.length > 0 && (
-                  <div className={`p-3 rounded-[16px] border flex items-center justify-between gap-3 shadow-xs ${
-                    isDarkMode 
-                      ? 'bg-slate-900 border-slate-800 text-slate-300' 
-                      : 'bg-slate-50 border-slate-200 text-slate-600'
-                  }`}>
-                    <div className="flex items-center gap-2 text-xs font-medium">
-                      <Sparkles className="w-4 h-4 text-blue-500" />
-                      <span>Gemini AI successfully matched and sorted {filteredProducts.length} clinical instruments matching your query.</span>
-                    </div>
-                    <button 
-                      onClick={onClearSearch}
-                      className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase cursor-pointer"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                )}
-
-                {filteredProducts.length === 0 ? (
-                  <div className="p-16 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-[16px] border border-slate-200 dark:border-slate-850">
-                    <SlidersHorizontal className="w-10 h-10 mx-auto mb-2 opacity-30 text-blue-600" />
-                    <p className="text-xs font-bold">No matching certified clinical products found.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredProducts.map((p) => {
-                      const hasWish = wishlist.includes(p.id);
-                      const hasComp = compareList.some(item => item.id === p.id);
-                      const aiMatch = aiSearchResults.find(m => m.productId === p.id);
-                      const productVendor = vendors.find(v => v.id === p.vendorId || v.companyName === p.vendorName);
-
-                      // Compute discount and rating stats
-                      const discountPercentage = p.price > p.salePrice ? Math.round(((p.price - p.salePrice) / p.price) * 100) : 0;
-                      const seed = p.name.length;
-                      const simulatedRating = (4.2 + (seed % 9) * 0.1).toFixed(1);
-                      const reviewCount = (seed * 7) % 40 + 12;
-
-                      return (
-                        <div
-                          key={p.id}
-                          className={`rounded-[16px] border shadow-xs overflow-hidden flex flex-col justify-between group transition-all duration-300 hover:shadow-md hover:-translate-y-1 ${
-                            isDarkMode
-                              ? 'bg-slate-900 border-slate-800 text-slate-100'
-                              : 'bg-white border-slate-200 text-slate-800'
-                          }`}
-                        >
-                          {/* Image Banner */}
-                          <div className="relative bg-slate-50 h-44 overflow-hidden shrink-0">
-                            <img
-                              src={p.images[0]}
-                              alt={p.name}
-                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                            />
-                            {discountPercentage > 0 && (
-                              <span className="absolute top-2.5 left-2.5 bg-rose-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded shadow-sm z-10 font-mono">
-                                {discountPercentage}% OFF
-                              </span>
-                            )}
-                            {aiMatch && (
-                              <span className="absolute bottom-2.5 left-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[9px] font-bold px-2 py-1 rounded shadow-md flex items-center gap-1 animate-pulse z-10">
-                                <Sparkles className="w-3 h-3 text-yellow-300 fill-current" />
-                                {aiMatch.relevanceScore}% AI Match
-                              </span>
-                            )}
-                            <button
-                              onClick={() => handleToggleWishlist(p.id)}
-                              className={`p-1.5 rounded-full absolute top-2.5 right-2.5 transition z-10 ${
-                                hasWish ? 'bg-rose-500 text-white shadow-md' : 'bg-white/90 text-slate-400 hover:text-rose-500 shadow'
-                              }`}
-                            >
-                              <Heart className="w-4 h-4 fill-current" />
-                            </button>
-                          </div>
-
-                          {/* Card Body */}
-                          <div className="p-4 flex-1 flex flex-col justify-between space-y-3 text-xs text-left">
-                            <div>
-                              <div className="flex items-center justify-between gap-1.5">
-                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                                  isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-blue-50 text-[#1E40AF]'
-                                }`}>
-                                  {p.brand}
-                                </span>
-                                {productVendor?.trustSeal && (
-                                  <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1 shrink-0" title={productVendor.trustSealLevel || 'Verified Clinical Supplier'}>
-                                    <ShieldCheck className="w-3 h-3 text-white shrink-0" />
-                                    Trust Seal
-                                  </span>
-                                )}
-                              </div>
-                              
-                              <h4
-                                onClick={() => setSelectedProduct(p)}
-                                className={`font-bold mt-1.5 line-clamp-1 hover:text-blue-600 hover:underline cursor-pointer text-sm font-sans ${
-                                  isDarkMode ? 'text-white' : 'text-slate-900'
-                                }`}
-                              >
-                                {p.name}
-                              </h4>
-
-                              {/* Ratings Block */}
-                              <div className="flex items-center gap-1 mt-1">
-                                <div className="flex items-center text-amber-400">
-                                  {[...Array(5)].map((_, i) => (
-                                    <Star 
-                                      key={i} 
-                                      className={`w-3.5 h-3.5 ${
-                                        i < Math.floor(Number(simulatedRating)) 
-                                          ? 'fill-current text-amber-400' 
-                                          : 'opacity-35 text-slate-300'
-                                      }`} 
-                                    />
-                                  ))}
-                                </div>
-                                <span className="text-[11px] font-bold text-amber-500">{simulatedRating}</span>
-                                <span className="text-[10px] text-slate-400">({reviewCount} reviews)</span>
-                              </div>
-
-                              <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1.5">
-                                <Building className="w-3 h-3 shrink-0 text-slate-400" />
-                                <span className="truncate">Supplier: <strong className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>{p.vendorName || productVendor?.companyName || 'Verified Partner'}</strong></span>
-                              </div>
-
-                              <p className={`text-[11px] line-clamp-2 mt-1 leading-relaxed ${
-                                isDarkMode ? 'text-slate-300' : 'text-slate-500'
-                              }`}>
-                                {p.description}
-                              </p>
-
-                              {/* Stock Level status info */}
-                              <div className="mt-2.5 flex items-center gap-1.5">
-                                <span className={`w-2 h-2 rounded-full ${p.stockQuantity && p.stockQuantity > 3 ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-                                <span className="text-[10px] text-slate-500 font-bold">
-                                  {p.stockQuantity && p.stockQuantity > 3 ? `In Stock (${p.stockQuantity})` : `Only ${p.stockQuantity || 2} left in stock!`}
-                                </span>
-                              </div>
-
-                              {/* AI Semantic Search Insight */}
-                              {aiMatch && (
-                                <div className={`mt-2.5 p-2 rounded-lg text-[10px] flex gap-1.5 items-start border leading-normal ${
-                                  isDarkMode 
-                                    ? 'bg-blue-950/30 text-blue-300 border-slate-800' 
-                                    : 'bg-blue-50/50 text-blue-800 border-blue-100'
-                                }`}>
-                                  <Sparkles className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
-                                  <div>
-                                    <span className="font-bold">Clinical Insight: </span>
-                                    {aiMatch.aiInsight}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className={`border-t pt-2.5 flex items-center justify-between ${
-                              isDarkMode ? 'border-slate-800' : 'border-slate-100'
-                            }`}>
-                              <div>
-                                <span className="text-slate-400 text-[10px] block font-medium">Bazar Special Price</span>
-                                <div className="flex items-baseline gap-1.5">
-                                  <span className="text-base font-extrabold text-[#1E40AF]">
-                                    ₹{p.salePrice.toLocaleString('en-IN')}
-                                  </span>
-                                  {p.price > p.salePrice && (
-                                    <span className="text-[11px] text-slate-400 line-through">
-                                      ₹{p.price.toLocaleString('en-IN')}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <span className="text-slate-400 text-[10px] block font-medium">Min Order Requirement</span>
-                                <span className={`text-xs font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
-                                  {p.moq} unit{p.moq > 1 ? 's' : ''}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Card Foot action bars */}
-                          <div className={`px-4 py-3 border-t flex items-center justify-between gap-2 shrink-0 ${
-                            isDarkMode ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-100'
-                          }`}>
-                            <button
-                              onClick={() => handleToggleCompare(p)}
-                              className={`flex items-center gap-1 text-[10px] font-bold py-1.5 px-2.5 rounded-xl transition-all border ${
-                                hasComp 
-                                  ? 'bg-orange-500 border-orange-500 text-white' 
-                                  : isDarkMode 
-                                    ? 'border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-white' 
-                                    : 'border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-900 shadow-xs'
-                              }`}
-                            >
-                              <Scale className="w-3.5 h-3.5" />
-                              {hasComp ? 'Comparing' : 'Compare'}
-                            </button>
-                            <button
-                              onClick={() => handleAddToCart(p)}
-                              className="bg-[#1E40AF] hover:bg-blue-800 text-white font-bold py-2 px-4 rounded-xl flex items-center gap-1.5 transition duration-300 text-[10px] uppercase tracking-wider cursor-pointer shadow-xs hover:shadow-sm"
-                            >
-                              <ShoppingCart className="w-3.5 h-3.5" />
-                              Add to Cart
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
+              )}
             </div>
 
           </div>
 
           {/* Side by side comparison drawer */}
           {compareList.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 rounded-[16px] border border-slate-350 shadow-2xl p-6 space-y-4 max-w-4xl mx-auto text-left">
-              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                  <Scale className="w-5 h-5 text-blue-600 animate-pulse" />
+            <div className="bg-white rounded-2xl border border-slate-300 shadow-2xl p-6 space-y-4 max-w-4xl mx-auto">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                  <Scale className="w-5 h-5 text-teal-700 animate-pulse" />
                   Biomedical Comparison Dashboard ({compareList.length}/3)
                 </h3>
                 <button onClick={() => onUpdateCompare([])} className="text-xs text-rose-600 font-semibold uppercase">
@@ -1957,19 +1362,19 @@ Generated via Google Workspace secure microservice.
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
                 {compareList.map((item) => (
-                  <div key={item.id} className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3 relative bg-slate-50 dark:bg-slate-900/60">
+                  <div key={item.id} className="p-4 rounded-xl border border-slate-100 space-y-3 relative">
                     <button
                       onClick={() => handleToggleCompare(item)}
                       className="absolute top-2 right-2 text-slate-400 hover:text-rose-600 font-bold"
                     >
                       &times;
                     </button>
-                    <h4 className="font-bold text-slate-900 dark:text-white truncate pr-4">{item.name}</h4>
-                    <p className="text-[10px] text-blue-700 uppercase font-bold">{item.brand}</p>
-                    <div className="space-y-1 bg-white dark:bg-slate-850 p-2.5 rounded-lg border border-slate-150">
+                    <h4 className="font-bold text-slate-900 truncate pr-4">{item.name}</h4>
+                    <p className="text-[10px] text-teal-700 uppercase font-bold">{item.brand}</p>
+                    <div className="space-y-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                       <p className="text-slate-500 flex justify-between">
                         <span>Price (INR)</span>
-                        <strong className="text-[#1E40AF] font-mono">₹{item.salePrice.toLocaleString()}</strong>
+                        <strong className="text-emerald-700 font-mono">₹{item.salePrice.toLocaleString()}</strong>
                       </p>
                       <p className="text-slate-500 flex justify-between">
                         <span>MOQ Requirements</span>
@@ -1989,138 +1394,6 @@ Generated via Google Workspace secure microservice.
               </div>
             </div>
           )}
-
-          {/* DOCTOR TESTIMONIALS SLIDER SECTION */}
-          <div className="py-12 bg-[#0F172A] text-white rounded-[16px] px-6 sm:px-12 shadow-md space-y-8 relative overflow-hidden">
-            <div className="absolute top-0 right-0 opacity-10 pointer-events-none">
-              <Activity className="w-96 h-96 text-blue-500 stroke-[1]" />
-            </div>
-
-            <div className="max-w-2xl text-left space-y-2 relative z-10">
-              <span className="text-[10px] bg-blue-600 text-white font-bold uppercase tracking-wider px-2.5 py-1 rounded-full">
-                Testimonials
-              </span>
-              <h4 className="text-2xl sm:text-3xl font-extrabold text-white">
-                Trusted by Doctor-Led Facilities
-              </h4>
-              <p className="text-xs text-slate-400 font-medium">
-                Hear from certified medical personnel who procure hospital apparatus and dental set ups via HealNex.
-              </p>
-            </div>
-
-            {/* Testimonials Slider */}
-            <div className="max-w-4xl mx-auto relative z-10 pt-4">
-              {[
-                {
-                  quote: "Procuring our hospital's 12-channel ECG machines through HealNex was incredibly seamless. The automatic GST tax invoicing combined with fast shipping solved our end-of-year clinical balance sheets instantly.",
-                  doctor: "Dr. Amit Verma, MD, FACC",
-                  position: "Chief Cardiologist, Metro Hospital",
-                  stars: 5,
-                  image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300"
-                },
-                {
-                  quote: "Their Laboratory and Consumables catalog is absolutely unmatched. High-precision clinical equipment such as benchtop centrifuges and blood analyzers arrived pre-calibrated with official validation labels.",
-                  doctor: "Dr. Priyesha Sen, Laboratory Director",
-                  position: "Clinical Diagnostics, SRL Networks",
-                  stars: 5,
-                  image: "https://images.unsplash.com/photo-1594824813573-246434e33963?auto=format&fit=crop&q=80&w=300"
-                },
-                {
-                  quote: "A genuinely brilliant experience for custom clinic designs. Procuring high-value dental chairs via the B2B RFQ system let us collect custom commercial bids and finalize manual payment transfers smoothly.",
-                  doctor: "Dr. Rohan Gupta, MDS",
-                  position: "Director, Dental Craft Surgical Clinic",
-                  stars: 5,
-                  image: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=300"
-                }
-              ].map((testi, idx) => {
-                if (idx !== (activeTestimonialIdx % 3)) return null;
-                return (
-                  <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-8 items-center animate-fade-in text-left">
-                    <div className="md:col-span-1 flex justify-center">
-                      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-4 border-blue-500/20 shadow-lg shrink-0">
-                        <img src={testi.image} alt={testi.doctor} className="w-full h-full object-cover" />
-                      </div>
-                    </div>
-                    <div className="md:col-span-3 space-y-4">
-                      <div className="flex items-center text-amber-400 gap-0.5">
-                        {[...Array(testi.stars)].map((_, i) => (
-                          <Star key={i} className="w-4 h-4 fill-current" />
-                        ))}
-                      </div>
-                      <p className="text-sm sm:text-base italic text-slate-200 leading-relaxed font-sans">
-                        "{testi.quote}"
-                      </p>
-                      <div>
-                        <h5 className="font-bold text-white text-sm">{testi.doctor}</h5>
-                        <p className="text-xs text-blue-400 font-semibold">{testi.position}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Slider Controls */}
-              <div className="flex items-center justify-end gap-3 mt-6">
-                <button
-                  onClick={() => setActiveTestimonialIdx((prev) => (prev - 1 + 3) % 3)}
-                  className="p-2 rounded-full border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white transition cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-xs text-slate-500 font-mono">{(activeTestimonialIdx % 3) + 1} / 3</span>
-                <button
-                  onClick={() => setActiveTestimonialIdx((prev) => (prev + 1) % 3)}
-                  className="p-2 rounded-full border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white transition cursor-pointer"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* DYNAMIC B2B NEWSLETTER SUBSCRIPTION SECTION (Blue Background) */}
-          <div className="py-12 bg-gradient-to-r from-blue-700 via-blue-900 to-indigo-950 text-white rounded-[16px] px-6 sm:px-12 text-center shadow-lg space-y-5 border border-blue-600/20">
-            <div className="max-w-2xl mx-auto space-y-2">
-              <span className="text-[10px] bg-blue-500/30 text-blue-200 font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-blue-400/20 inline-block">
-                Weekly digest
-              </span>
-              <h4 className="text-2xl sm:text-3xl font-extrabold text-white font-sans">
-                Subscribe to our Medical Procurement Digest
-              </h4>
-              <p className="text-xs sm:text-sm text-blue-100 max-w-lg mx-auto leading-relaxed">
-                Receive catalog entry updates, custom wholesale price reductions, bulk RFQ tips, and verified biomedical calibration guidelines directly in your inbox.
-              </p>
-            </div>
-
-            <div className="max-w-md mx-auto pt-2">
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const form = e.currentTarget;
-                  const emailInput = form.querySelector('input') as HTMLInputElement;
-                  if (emailInput?.value) {
-                    addToast(`Successfully subscribed ${emailInput.value} to HealNex Digest!`, 'success');
-                    emailInput.value = '';
-                  }
-                }}
-                className="flex flex-col sm:flex-row gap-2"
-              >
-                <input
-                  type="email"
-                  required
-                  placeholder="Enter medical purchaser / doctor email address"
-                  className="flex-grow px-4 py-3 rounded-xl bg-white text-slate-900 placeholder-slate-400 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-400"
-                />
-                <button
-                  type="submit"
-                  className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl text-xs font-bold shadow-md transition-all shrink-0 cursor-pointer"
-                >
-                  Subscribe
-                </button>
-              </form>
-              <p className="text-[9px] text-blue-200 mt-2">No spam. Unsubscribe at any time. HIPAA compliant data handling.</p>
-            </div>
-          </div>
 
           {/* Professional Homepage Trust & Safety Section */}
           <HomepageTrustSection
@@ -2282,9 +1555,7 @@ Generated via Google Workspace secure microservice.
                       return;
                     }
                     if (cart.length === 0) return;
-                    setSelectedPayMethod('upi');
-                    setShippingName(currentUser.name || '');
-                    setShippingPhone(currentUser.phone || '');
+                    setSelectedPayMethod('');
                     setCheckoutStep('checkout');
                   }}
                   disabled={cart.length === 0}
@@ -2300,43 +1571,14 @@ Generated via Google Workspace secure microservice.
             <div className="lg:col-span-3 max-w-2xl mx-auto bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
               <div className="text-center pb-6 border-b border-slate-100">
                 <Building className="w-12 h-12 text-teal-700 mx-auto mb-2" />
-                <h3 className="text-base font-bold text-slate-950 uppercase tracking-wide">Hospital Consignment & Shipping</h3>
-                <p className="text-xs text-slate-400 mt-1">Complete your B2B corporate clinical procurement delivery details</p>
+                <h3 className="text-base font-bold text-slate-950 uppercase tracking-wide">Procurement Clearing & Checkout</h3>
+                <p className="text-xs text-slate-400 mt-1">Complete your B2B corporate clinical procurement clearing</p>
               </div>
 
               <form onSubmit={handleProceedToPayment} className="space-y-4 text-xs font-semibold">
                 
-                {/* Contact details */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Authorized Recipient Contact</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-slate-400 block mb-1">Full Name *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. Dr. John Doe"
-                        value={shippingName}
-                        onChange={(e) => setShippingName(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-400 block mb-1">Contact Phone Number *</label>
-                      <input
-                        type="tel"
-                        required
-                        placeholder="e.g. +91 98765 43210"
-                        value={shippingPhone}
-                        onChange={(e) => setShippingPhone(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition"
-                      />
-                    </div>
-                  </div>
-                </div>
-
                 {/* Shipping Location fields */}
-                <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="space-y-3">
                   <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Hospital Consignment Destination</h4>
                   <div className="grid grid-cols-1 gap-3">
                     <div>
@@ -2358,7 +1600,7 @@ Generated via Google Workspace secure microservice.
                         required
                         value={shippingAddress.city}
                         onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-lg outline-none focus:border-teal-700 transition"
+                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-lg outline-none"
                       />
                     </div>
                     <div>
@@ -2368,7 +1610,7 @@ Generated via Google Workspace secure microservice.
                         required
                         value={shippingAddress.state}
                         onChange={(e) => setShippingAddress({ ...shippingAddress, state: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-lg outline-none focus:border-teal-700 transition"
+                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-lg outline-none"
                       />
                     </div>
                     <div>
@@ -2378,110 +1620,408 @@ Generated via Google Workspace secure microservice.
                         required
                         value={shippingAddress.pincode}
                         onChange={(e) => setShippingAddress({ ...shippingAddress, pincode: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-lg outline-none font-mono focus:border-teal-700 transition"
+                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-lg outline-none font-mono"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Billing Address Section */}
-                <div className="space-y-3 pt-3 border-t border-slate-100">
+                {/* Multi-Payment Mode Selection */}
+                <div className="space-y-3 border-t border-slate-100 pt-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Billing Information</h4>
-                    <label className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={billingSameAsShipping}
-                        onChange={(e) => setBillingSameAsShipping(e.target.checked)}
-                        className="rounded text-teal-600 focus:ring-teal-500 w-3.5 h-3.5"
-                      />
-                      <span>Same as Shipping Address</span>
-                    </label>
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Select B2B Clearing Method *</h4>
+                    {!selectedPayMethod && (
+                      <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                        Selection Required *
+                      </span>
+                    )}
                   </div>
-
-                  {!billingSameAsShipping && (
-                    <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-100 animate-fade-in">
-                      <div>
-                        <label className="text-slate-400 block mb-1">Billing Street Address *</label>
-                        <input
-                          type="text"
-                          required={!billingSameAsShipping}
-                          value={billingAddress.address}
-                          onChange={(e) => setBillingAddress({ ...billingAddress, address: e.target.value })}
-                          className="w-full bg-white border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition"
-                        />
-                      </div>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <label className="text-slate-400 block mb-1">City *</label>
-                          <input
-                            type="text"
-                            required={!billingSameAsShipping}
-                            value={billingAddress.city}
-                            onChange={(e) => setBillingAddress({ ...billingAddress, city: e.target.value })}
-                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg outline-none focus:border-teal-700 transition"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 block mb-1">State *</label>
-                          <input
-                            type="text"
-                            required={!billingSameAsShipping}
-                            value={billingAddress.state}
-                            onChange={(e) => setBillingAddress({ ...billingAddress, state: e.target.value })}
-                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg outline-none focus:border-teal-700 transition"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-slate-400 block mb-1">Pincode *</label>
-                          <input
-                            type="text"
-                            required={!billingSameAsShipping}
-                            value={billingAddress.pincode}
-                            onChange={(e) => setBillingAddress({ ...billingAddress, pincode: e.target.value })}
-                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg outline-none font-mono focus:border-teal-700 transition"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Step 1: Payment Method Selection */}
-                <div className="space-y-3 pt-3 border-t border-slate-100">
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Select B2B Settlement Method</h4>
-                  <p className="text-[10px] text-slate-400">Choose your preferred manual clearance channel. Payment proof is uploaded in the next step.</p>
-                  
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {[
-                      { id: 'upi', label: 'UPI Scan & Pay', desc: 'Instant Clearance' },
-                      { id: 'bank', label: 'Bank Transfer', desc: 'NEFT / IMPS Link' },
-                      { id: 'neft', label: 'NEFT Clearing', desc: 'Standard B2B Wire' },
-                      { id: 'imps', label: 'IMPS Instant', desc: 'Immediate Settlement' },
-                      { id: 'rtgs', label: 'RTGS High Value', desc: 'Corporate Settlement' },
-                      { id: 'cash', label: 'Cash Deposit', desc: 'Direct Bank Counter' }
-                    ].map((method) => (
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {paymentSettings.razorpayEnabled && (
                       <button
-                        key={method.id}
                         type="button"
-                        onClick={() => setSelectedPayMethod(method.id as any)}
-                        className={`p-3 rounded-xl border text-left transition relative cursor-pointer ${
-                          selectedPayMethod === method.id
-                            ? 'border-teal-600 bg-teal-50/45 ring-2 ring-teal-600/20'
-                            : 'border-slate-200 hover:border-slate-350 bg-white'
+                        onClick={() => setSelectedPayMethod('razorpay')}
+                        className={`p-3 rounded-lg border text-center transition flex flex-col items-center justify-center gap-1.5 ${
+                          selectedPayMethod === 'razorpay'
+                            ? 'bg-teal-50 border-teal-600 text-teal-800 font-bold shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}
                       >
-                        <p className="font-bold text-slate-900 text-xs">{method.label}</p>
-                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">{method.desc}</p>
-                        {selectedPayMethod === method.id && (
-                          <div className="absolute top-2 right-2 w-3.5 h-3.5 rounded-full bg-teal-600 flex items-center justify-center text-white">
-                            <span className="text-[8px]">✓</span>
-                          </div>
-                        )}
+                        <CreditCard className="w-5 h-5 text-teal-700" />
+                        <span className="text-[10px] uppercase tracking-wider">Razorpay</span>
                       </button>
-                    ))}
+                    )}
+                    {paymentSettings.upiEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPayMethod('upi')}
+                        className={`p-3 rounded-lg border text-center transition flex flex-col items-center justify-center gap-1.5 ${
+                          selectedPayMethod === 'upi'
+                            ? 'bg-teal-50 border-teal-600 text-teal-800 font-bold shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <QrCode className="w-5 h-5 text-teal-700" />
+                        <span className="text-[10px] uppercase tracking-wider">UPI</span>
+                      </button>
+                    )}
+                    {paymentSettings.creditCardEnabled !== false && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPayMethod('creditCard')}
+                        className={`p-3 rounded-lg border text-center transition flex flex-col items-center justify-center gap-1.5 ${
+                          selectedPayMethod === 'creditCard'
+                            ? 'bg-teal-50 border-teal-600 text-teal-800 font-bold shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <CreditCard className="w-5 h-5 text-teal-700" />
+                        <span className="text-[10px] uppercase tracking-wider">Credit Card</span>
+                      </button>
+                    )}
+                    {paymentSettings.debitCardEnabled !== false && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPayMethod('debitCard')}
+                        className={`p-3 rounded-lg border text-center transition flex flex-col items-center justify-center gap-1.5 ${
+                          selectedPayMethod === 'debitCard'
+                            ? 'bg-teal-50 border-teal-600 text-teal-800 font-bold shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <CreditCard className="w-5 h-5 text-teal-700" />
+                        <span className="text-[10px] uppercase tracking-wider">Debit Card</span>
+                      </button>
+                    )}
+                    {(paymentSettings.netBankingEnabled !== false || paymentSettings.bankEnabled) && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPayMethod('netBanking')}
+                        className={`p-3 rounded-lg border text-center transition flex flex-col items-center justify-center gap-1.5 ${
+                          selectedPayMethod === 'netBanking' || selectedPayMethod === 'bank'
+                            ? 'bg-teal-50 border-teal-600 text-teal-800 font-bold shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Building className="w-5 h-5 text-teal-700" />
+                        <span className="text-[10px] uppercase tracking-wider">Net Banking</span>
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* Sub-Payment Forms and Details */}
+                {selectedPayMethod === 'razorpay' && (
+                  <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <h5 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Razorpay Secured Instrument</h5>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {(['UPI', 'Credit Card', 'Debit Card', 'Net Banking'] as const).map((method) => {
+                        const isActive = razorpayMethod === method;
+                        return (
+                          <button
+                            key={method}
+                            type="button"
+                            onClick={() => setRazorpayMethod(method)}
+                            className={`py-2 px-2.5 rounded-lg border text-center text-[10px] transition ${
+                              isActive
+                                ? 'bg-teal-700 border-teal-700 text-white font-bold'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {method}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {selectedPayMethod === 'upi' && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row items-center gap-6">
+                      {/* QR Code Card */}
+                      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-md flex flex-col items-center justify-center shrink-0 w-48 sm:w-56 transition hover:shadow-lg">
+                        {paymentSettings.upiQrCodeUrl ? (
+                          <img src={paymentSettings.upiQrCodeUrl} alt="Slice UPI QR Code" className="w-full h-auto object-contain rounded-lg" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="w-44 h-44 bg-slate-100 flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300">
+                            <QrCode className="w-10 h-10 text-slate-400" />
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">Scan to Pay</span>
+                          </div>
+                        )}
+                      </div>
+                      {/* Details */}
+                      <div className="flex-1 space-y-3 text-xs w-full">
+                        <div className="bg-purple-50/80 border border-purple-200/60 rounded-xl p-3 flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 block">UPI Payment App</span>
+                            <span className="text-sm font-black text-purple-950">Slice / Any UPI App</span>
+                          </div>
+                          <span className="px-2.5 py-1 bg-purple-700 text-white rounded-lg text-[10px] font-bold">INSTANT PAY</span>
+                        </div>
+                        <div>
+                          <p className="text-slate-400 text-[10px] uppercase font-bold">Account Holder Name</p>
+                          <p className="text-slate-900 font-extrabold text-sm">{paymentSettings.upiHolderName || 'Warisul Islam'}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400 text-[10px] uppercase font-bold">UPI ID (VPA Address)</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <code className="bg-teal-50 text-teal-950 font-extrabold border border-teal-200 px-3 py-1.5 rounded-lg font-mono text-sm">{paymentSettings.upiId || '9149758743@slc'}</code>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(paymentSettings.upiId || '9149758743@slc');
+                                addToast('UPI ID copied to clipboard!', 'success');
+                              }}
+                              className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition text-xs font-bold flex items-center gap-1 shadow-sm cursor-pointer"
+                              title="Copy UPI ID"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy ID</span>
+                            </button>
+                          </div>
+                        </div>
+                        {paymentSettings.upiInstructions && (
+                          <div className="bg-white p-3 rounded-xl border border-slate-200 text-slate-700 text-xs shadow-sm leading-relaxed">
+                            <span className="font-bold text-teal-800 block text-[10px] uppercase tracking-wider mb-0.5">Instructions:</span>
+                            {paymentSettings.upiInstructions}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedPayMethod === 'creditCard' && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold">Card Holder Name</p>
+                        <p className="text-slate-800 font-bold">{paymentSettings.creditCardHolderName || 'HealNex Medi Bazar Pvt Ltd'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold">Bank / Gateway</p>
+                        <p className="text-slate-800 font-bold">{paymentSettings.creditCardBankName || 'HDFC Corporate Card Clearing'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold">Card Number / Link Reference</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <code className="bg-teal-50 text-teal-900 border border-teal-100 px-2 py-1 rounded font-mono text-xs">{paymentSettings.creditCardNumber || '4532 •••• •••• 8890'}</code>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold">Expiry</p>
+                        <p className="text-slate-800 font-bold font-mono">{paymentSettings.creditCardExpiry || '12/28'}</p>
+                      </div>
+                    </div>
+                    {paymentSettings.creditCardInstructions && (
+                      <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-slate-600 text-xs">
+                        <span className="font-bold text-teal-800 block text-[10px] uppercase">Instructions:</span>
+                        {paymentSettings.creditCardInstructions}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedPayMethod === 'debitCard' && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold">Card Holder Name</p>
+                        <p className="text-slate-800 font-bold">{paymentSettings.debitCardHolderName || 'HealNex Medi Bazar Pvt Ltd'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold">Bank Name</p>
+                        <p className="text-slate-800 font-bold">{paymentSettings.debitCardBankName || 'ICICI Bank B2B Merchant Clearing'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold">Card Number</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <code className="bg-teal-50 text-teal-900 border border-teal-100 px-2 py-1 rounded font-mono text-xs">{paymentSettings.debitCardNumber || '5591 •••• •••• 4421'}</code>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold">Expiry</p>
+                        <p className="text-slate-800 font-bold font-mono">{paymentSettings.debitCardExpiry || '10/27'}</p>
+                      </div>
+                    </div>
+                    {paymentSettings.debitCardInstructions && (
+                      <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-slate-600 text-xs">
+                        <span className="font-bold text-teal-800 block text-[10px] uppercase">Instructions:</span>
+                        {paymentSettings.debitCardInstructions}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {(selectedPayMethod === 'bank' || selectedPayMethod === 'netBanking') && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2.5">
+                        <div>
+                          <p className="text-slate-400 text-[10px] uppercase font-bold">Account Holder Name</p>
+                          <p className="text-slate-800 font-bold">{paymentSettings.netBankingHolderName || paymentSettings.bankHolderName || 'HealNex Medi Bazar Private Limited'}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400 text-[10px] uppercase font-bold">Bank Name</p>
+                          <p className="text-slate-800 font-bold">{paymentSettings.netBankingBankName || paymentSettings.bankName || 'HDFC Bank Ltd'}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400 text-[10px] uppercase font-bold">Branch Name</p>
+                          <p className="text-slate-800 font-bold">{paymentSettings.netBankingBranch || paymentSettings.bankBranch || 'Senapati Bapat Road, Pune'}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2.5">
+                        <div>
+                          <p className="text-slate-400 text-[10px] uppercase font-bold">Account Number</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <code className="bg-teal-50 text-teal-900 border border-teal-100 px-2 py-1 rounded font-mono text-xs">{paymentSettings.netBankingAccountNumber || paymentSettings.bankAccountNumber || '50200098765432'}</code>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(paymentSettings.netBankingAccountNumber || paymentSettings.bankAccountNumber || '50200098765432');
+                                addToast('Account Number copied!', 'success');
+                              }}
+                              className="p-1 text-teal-700 hover:bg-teal-100 rounded transition"
+                              title="Copy Account Number"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-slate-400 text-[10px] uppercase font-bold">IFSC Code</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <code className="bg-teal-50 text-teal-900 border border-teal-100 px-2 py-1 rounded font-mono text-xs">{paymentSettings.netBankingIfsc || paymentSettings.bankIfsc || 'HDFC0001234'}</code>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(paymentSettings.netBankingIfsc || paymentSettings.bankIfsc || 'HDFC0001234');
+                                addToast('IFSC Code copied!', 'success');
+                              }}
+                              className="p-1 text-teal-700 hover:bg-teal-100 rounded transition"
+                              title="Copy IFSC Code"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {(paymentSettings.netBankingInstructions || paymentSettings.bankInstructions) && (
+                      <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-slate-600 text-xs">
+                        <span className="font-bold text-teal-800 block text-[10px] uppercase">Instructions:</span>
+                        {paymentSettings.netBankingInstructions || paymentSettings.bankInstructions}
+                      </div>
+                    )}
+                    {(paymentSettings.netBankingQrCodeUrl || paymentSettings.bankQrCodeUrl) && (
+                      <div className="border-t border-slate-200 pt-3 flex items-center gap-4">
+                        <img src={paymentSettings.netBankingQrCodeUrl || paymentSettings.bankQrCodeUrl} alt="Bank QR" className="w-20 h-20 object-contain border border-slate-200 rounded p-1 bg-white" referrerPolicy="no-referrer" />
+                        <div className="text-[10px] text-slate-500">
+                          <p className="font-bold text-slate-700 uppercase text-[9px]">Banking QR Code</p>
+                          <p className="mt-0.5">Scan to make instant transfer directly to the bank account.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Manual Payment Proof Submission Fields (Required for all B2B orders) */}
+                <div className="space-y-3 pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Upload className="w-4 h-4 text-teal-700" />
+                      Submit Payment Receipt Screenshot
+                    </h4>
+                    <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                      Mandatory Required *
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                    Customer payment screenshot upload is strictly required for all orders. Complete your transfer or gateway clearing first, then capture and attach your receipt screenshot below.
+                  </p>
+                    
+                    {/* File Dropzone */}
+                    <div
+                      onDragEnter={handleDrag}
+                      onDragOver={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDrop={handleDrop}
+                      className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition flex flex-col items-center justify-center cursor-pointer ${
+                        dragActive 
+                          ? 'border-teal-600 bg-teal-50/50' 
+                          : manualProofUrl 
+                            ? 'border-emerald-500 bg-emerald-50/20' 
+                            : 'border-slate-300 bg-slate-50 hover:bg-slate-100/50'
+                      }`}
+                      onClick={() => document.getElementById('manual-receipt-input')?.click()}
+                    >
+                      <input
+                        id="manual-receipt-input"
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        className="hidden"
+                        onChange={handleFileChange}
+                      />
+                      
+                      {manualProofUrl ? (
+                        <div className="space-y-2">
+                          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-sm animate-bounce">
+                            <Check className="w-6 h-6 animate-pulse" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">Receipt Screen Attached</p>
+                            <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-xs">{manualProofFileName || 'payment_proof_receipt.png'}</p>
+                          </div>
+                          {manualProofUrl && (
+                            <img src={manualProofUrl} alt="Receipt Thumb" className="w-16 h-16 object-cover mx-auto rounded border border-slate-200 mt-2 shadow-sm" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setManualProofUrl('');
+                              setManualProofFileName('');
+                            }}
+                            className="text-[10px] text-red-500 hover:underline mt-1"
+                          >
+                            Remove and Re-upload
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <Upload className="w-8 h-8 text-slate-400 mx-auto" />
+                          <p className="text-xs font-semibold text-slate-700">Drag & drop receipt screenshot or <span className="text-teal-700 hover:underline">browse files</span></p>
+                          <p className="text-[9px] text-slate-400 uppercase">JPG, PNG, or PDF (Limit 10MB)</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Transaction Inputs */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                      <div>
+                        <label className="text-slate-400 block mb-1">Transaction ID / UTR Number {selectedPayMethod !== 'razorpay' ? '*' : '(Optional)'}</label>
+                        <input
+                          type="text"
+                          required={selectedPayMethod !== 'razorpay'}
+                          placeholder="e.g. UPI9473827183 or UTR84739281"
+                          value={manualTxId}
+                          onChange={(e) => setManualTxId(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition font-mono uppercase text-xs font-bold text-slate-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 block mb-1">Reference Note (Optional)</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Paid via mobile App"
+                          value={manualNote}
+                          onChange={(e) => setManualNote(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
                 {/* Checkout summary panel info */}
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-1">
@@ -2499,301 +2039,39 @@ Generated via Google Workspace secure microservice.
                   </div>
                 </div>
 
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setCheckoutStep('cart')}
-                    className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-center cursor-pointer transition"
-                  >
-                    Back to Cart
-                  </button>
-                  <button
-                    type="submit"
-                    className="w-2/3 bg-[#1E40AF] hover:bg-blue-750 text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
-                  >
-                    Submit Order
-                  </button>
+                <div className="space-y-2 pt-2">
+                  {!manualProofUrl && (
+                    <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-center text-xs font-bold text-rose-700 flex items-center justify-center gap-1.5 animate-pulse">
+                      <span>⚠️ Please attach your payment receipt screenshot above to unlock order submission.</span>
+                    </div>
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutStep('cart')}
+                      className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-center cursor-pointer transition"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!manualProofUrl || !selectedPayMethod || (selectedPayMethod !== 'razorpay' && !manualTxId.trim())}
+                      className="w-2/3 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
+                    >
+                      <IndianRupee className="w-4 h-4" />
+                      {selectedPayMethod === 'razorpay' ? 'Submit Secure Payment' : 'Submit Proof & Place Order'}
+                    </button>
+                  </div>
                 </div>
               </form>
-            </div>
-          )}
-
-          {checkoutStep === 'payment' && (
-            <div className="lg:col-span-3 max-w-2xl mx-auto bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-              <div className="text-center pb-6 border-b border-slate-100">
-                <QrCode className="w-12 h-12 text-[#1E40AF] mx-auto mb-2" />
-                <h3 className="text-base font-bold text-slate-950 uppercase tracking-wide">Manual Payment &amp; Receipt Upload</h3>
-                <p className="text-xs text-slate-400 mt-1">Please make the payment using the details below and upload your proof of payment</p>
-              </div>
-
-              {/* Display payment details based on selected payment method */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 text-xs font-semibold">
-                {selectedPayMethod === 'upi' ? (
-                  <div className="flex flex-col sm:flex-row items-center gap-6">
-                    {/* QR Code Card */}
-                    <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-md flex flex-col items-center justify-center shrink-0 w-48 sm:w-56 transition hover:shadow-lg">
-                      {(() => {
-                        try {
-                          const upiId = paymentSettings.upiId || '9149758743@slc';
-                          const upiHolder = paymentSettings.upiHolderName || 'Warisul Islam';
-                          const totalAmount = createdOrder?.finalAmount || getCheckoutTotal();
-                          const upiLink = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiHolder)}&am=${totalAmount}&cu=INR`;
-                          
-                          const qr = qrcode(0, 'M');
-                          qr.addData(upiLink);
-                          qr.make();
-                          const qrUrl = qr.createDataURL(5);
-                          return (
-                            <img src={qrUrl} alt="UPI QR Code" className="w-full h-auto object-contain rounded-lg" referrerPolicy="no-referrer" />
-                          );
-                        } catch (err) {
-                          return (
-                            <div className="w-44 h-44 bg-slate-100 flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300">
-                              <QrCode className="w-10 h-10 text-slate-400" />
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">Error Generating QR</span>
-                            </div>
-                          );
-                        }
-                      })()}
-                    </div>
-                    {/* Details */}
-                    <div className="flex-1 space-y-3 text-xs w-full">
-                      <div className="bg-blue-50/80 border border-blue-200/60 rounded-xl p-3 flex items-center justify-between">
-                        <div>
-                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 block">Total Payable Amount</span>
-                          <span className="text-lg font-black text-blue-950 font-mono">₹{(createdOrder?.finalAmount || getCheckoutTotal()).toLocaleString('en-IN')}</span>
-                        </div>
-                        <span className="px-2.5 py-1 bg-[#1E40AF] text-white rounded-lg text-[10px] font-bold uppercase">Dynamic UPI QR</span>
-                      </div>
-                      <div>
-                        <p className="text-slate-400 text-[10px] uppercase font-bold">UPI Account Holder Name</p>
-                        <p className="text-slate-900 font-extrabold text-sm">{paymentSettings.upiHolderName || 'Warisul Islam'}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-400 text-[10px] uppercase font-bold">UPI ID (VPA Address)</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <code className="bg-teal-50 text-teal-950 font-extrabold border border-teal-200 px-3 py-1.5 rounded-lg font-mono text-sm">{paymentSettings.upiId || '9149758743@slc'}</code>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(paymentSettings.upiId || '9149758743@slc');
-                              addToast('UPI ID copied to clipboard!', 'success');
-                            }}
-                            className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition text-xs font-bold flex items-center gap-1 shadow-sm cursor-pointer"
-                            title="Copy UPI ID"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                            <span>Copy ID</span>
-                          </button>
-                        </div>
-                      </div>
-                      {paymentSettings.upiInstructions &&
-                        <div className="bg-white p-3 rounded-xl border border-slate-200 text-slate-700 text-xs shadow-sm leading-relaxed">
-                          <span className="font-bold text-teal-800 block text-[10px] uppercase tracking-wider mb-0.5">Instructions:</span>
-                          {paymentSettings.upiInstructions}
-                        </div>
-                      }
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4 text-xs animate-fade-in">
-                    {/* Bank Transfer Information card */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 block">Total Payable Amount</span>
-                        <span className="text-lg font-black text-blue-950 font-mono">₹{(createdOrder?.finalAmount || getCheckoutTotal()).toLocaleString('en-IN')}</span>
-                      </div>
-                      <span className="px-2.5 py-1 bg-[#1E40AF] text-white rounded-lg text-[10px] font-bold uppercase">B2B Bank Clearance</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2.5">
-                        <div>
-                          <p className="text-slate-400 text-[10px] uppercase font-bold">Bank Name</p>
-                          <p className="text-slate-950 font-extrabold text-sm">{paymentSettings.bankName || 'HDFC Bank Ltd'}</p>
-                        </div>
-                        <div>
-                          <p className="text-slate-400 text-[10px] uppercase font-bold">Account Holder Name</p>
-                          <p className="text-slate-950 font-extrabold text-sm">{paymentSettings.bankHolderName || 'HealNex Medi Bazar Private Limited'}</p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2.5 border-t md:border-t-0 md:border-l border-slate-200 md:pl-4 pt-2.5 md:pt-0">
-                        <div>
-                          <p className="text-slate-400 text-[10px] uppercase font-bold">Bank Account Number</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <code className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-900 font-extrabold font-mono text-sm tracking-wide">
-                              {paymentSettings.bankAccountNumber || '50200098765432'}
-                            </code>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(paymentSettings.bankAccountNumber || '50200098765432');
-                                addToast('Account Number copied!', 'success');
-                              }}
-                              className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition cursor-pointer flex items-center justify-center"
-                              title="Copy Account Number"
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-slate-400 text-[10px] uppercase font-bold">IFSC Code (RTGS/NEFT/IMPS)</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <code className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-900 font-extrabold font-mono text-sm tracking-wide">
-                              {paymentSettings.bankIfsc || 'HDFC0001234'}
-                            </code>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(paymentSettings.bankIfsc || 'HDFC0001234');
-                                addToast('IFSC Code copied!', 'success');
-                              }}
-                              className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition cursor-pointer flex items-center justify-center"
-                              title="Copy IFSC"
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {(paymentSettings.bankInstructions || paymentSettings.netBankingInstructions) &&
-                      <div className="bg-white p-3 rounded-xl border border-slate-200 text-slate-700 text-xs shadow-sm leading-relaxed">
-                        <span className="font-bold text-teal-800 block text-[10px] uppercase tracking-wider mb-0.5">Clearing Instructions:</span>
-                        {paymentSettings.bankInstructions || paymentSettings.netBankingInstructions}
-                      </div>
-                    }
-                  </div>
-                )}
-              </div>
-
-              {/* Transaction Inputs - Step 5 Mandatory Fields */}
-              <div className="space-y-4 pt-3 border-t border-slate-100 text-xs font-semibold">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Confirm Settlement Transaction Details</h4>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="text-slate-400 block mb-1">UTR / Unique Transaction Reference *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Enter 12-digit UTR Number"
-                      value={manualTxId}
-                      onChange={(e) => setManualTxId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-600 transition font-mono uppercase text-xs font-bold text-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 block mb-1">Transaction ID / Reference ID *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. UPI9473827183 or REF328912"
-                      value={manualTxId} // Shares the reference or can input custom
-                      onChange={(e) => setManualTxId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-600 transition font-mono uppercase text-xs font-bold text-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 block mb-1">Sender Bank Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. SBI, HDFC, ICICI, etc."
-                      value={manualBankName}
-                      onChange={(e) => setManualBankName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-600 transition text-xs font-bold text-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-400 block mb-1">Payment Date &amp; Time *</label>
-                    <input
-                      type="datetime-local"
-                      required
-                      value={manualPaymentDate}
-                      onChange={(e) => setManualPaymentDate(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-600 transition text-xs font-bold text-slate-800"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="text-slate-400 block mb-1">Reference Notes (Optional)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Paid via corporate account"
-                      value={manualNote}
-                      onChange={(e) => setManualNote(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-600 transition text-xs"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="text-slate-400 block mb-1 font-bold">Payment Screenshot / Advice Receipt *</label>
-                    <div className="border border-dashed border-slate-300 rounded-xl p-4 bg-slate-50/50 hover:bg-slate-50 transition relative flex flex-col items-center justify-center text-center cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            if (file.size > 10 * 1024 * 1024) {
-                              addToast('Screenshot size must be less than 10MB.', 'error');
-                              return;
-                            }
-                            setScreenshotFile(file);
-                          }
-                        }}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                      />
-                      <Upload className="w-8 h-8 text-slate-400 mb-1" />
-                      {screenshotFile ? (
-                        <div>
-                          <p className="text-xs font-bold text-teal-800 flex items-center gap-1 justify-center">
-                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Selected: {screenshotFile.name} ({(screenshotFile.size / (1024 * 1024)).toFixed(2)} MB)
-                          </p>
-                          <p className="text-[10px] text-slate-400 font-medium">Click or drag new image to replace (Max 10MB)</p>
-                        </div>
-                      ) : (
-                        <div>
-                          <p className="text-xs text-slate-700 font-bold">Select or drag payment receipt screenshot</p>
-                          <p className="text-[10px] text-slate-400 font-medium">Supports JPG, PNG, JPEG formats (Max 10MB)</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-4">
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setCheckoutStep('checkout')}
-                    className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-center cursor-pointer transition text-xs"
-                  >
-                    Back to Shipping
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleUploadPaymentProof}
-                    disabled={!manualTxId.trim() || !screenshotFile || !manualBankName.trim() || !manualPaymentDate}
-                    className="w-2/3 bg-[#1E40AF] hover:bg-blue-750 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition text-xs"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Upload &amp; Submit Payment Proof</span>
-                  </button>
-                </div>
-              </div>
             </div>
           )}
 
           {checkoutStep === 'processing' && (
             <div className="lg:col-span-3 text-center py-20 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4 max-w-lg mx-auto">
               <Loader2 className="w-12 h-12 text-teal-700 animate-spin mx-auto" />
-              <h3 className="text-base font-bold text-slate-900">Processing Procurement Order...</h3>
+              <h3 className="text-base font-bold text-slate-900">Contacting Razorpay Secure Gateway...</h3>
+              <p className="text-xs text-slate-400">Verifying commercial accounts and clearing clinical consignment authorization</p>
             </div>
           )}
 
@@ -2801,10 +2079,10 @@ Generated via Google Workspace secure microservice.
             <div className="lg:col-span-3 text-center py-12 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-6 max-w-lg mx-auto p-6 animate-fade-in">
               <CheckCircle className="w-14 h-14 text-emerald-500 mx-auto" />
               <div>
-                <h3 className="text-lg font-bold text-slate-900 font-display">Procurement Order Submitted!</h3>
+                <h3 className="text-lg font-bold text-slate-900 font-display">Payment Securely Cleared!</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                   Your procurement order <strong className="text-slate-800">#{createdOrder.id}</strong> has been logged. 
-                  A notifications dispatch alert was triggered to the supplier network. Your order is currently awaiting payment verification.
+                  A notifications dispatch alert was triggered to the supplier network.
                 </p>
               </div>
 
@@ -2816,8 +2094,8 @@ Generated via Google Workspace secure microservice.
                   <span className="font-mono text-teal-800">₹{createdOrder.finalAmount.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>UPI Transaction/UTR No:</span>
-                  <span className="font-mono text-slate-600">{createdOrder.paymentId || createdOrder.paymentTxId || 'N/A'}</span>
+                  <span>Razorpay Reference No:</span>
+                  <span className="font-mono text-slate-600">{createdOrder.paymentId}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Shipment Service:</span>
@@ -3080,10 +2358,10 @@ Generated via Google Workspace secure microservice.
             <div className="lg:col-span-2 space-y-4">
               {orders.filter(o => {
                 if (ordersFilter === 'Pending Verification') {
-                  return o.status === 'Awaiting Payment Verification' || o.status === 'Pending Payment' || o.status === 'Payment Pending Verification' || o.status === 'Payment Rejected';
+                  return o.status === 'Awaiting Payment Verification' || o.status === 'Pending Payment';
                 }
                 if (ordersFilter === 'Active') {
-                  return ['Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped', 'Confirmed', 'Paid', 'Payment Verified'].includes(o.status);
+                  return ['Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped'].includes(o.status);
                 }
                 if (ordersFilter === 'Completed') {
                   return o.status === 'Delivered' || o.status === 'Completed';
@@ -3107,10 +2385,10 @@ Generated via Google Workspace secure microservice.
                 orders
                   .filter(o => {
                     if (ordersFilter === 'Pending Verification') {
-                      return o.status === 'Awaiting Payment Verification' || o.status === 'Pending Payment' || o.status === 'Payment Pending Verification' || o.status === 'Payment Rejected';
+                      return o.status === 'Awaiting Payment Verification' || o.status === 'Pending Payment';
                     }
                     if (ordersFilter === 'Active') {
-                      return ['Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped', 'Confirmed', 'Paid', 'Payment Verified'].includes(o.status);
+                      return ['Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped'].includes(o.status);
                     }
                     if (ordersFilter === 'Completed') {
                       return o.status === 'Delivered' || o.status === 'Completed';
@@ -3118,8 +2396,8 @@ Generated via Google Workspace secure microservice.
                     return true;
                   })
                   .map((order) => {
-                    const isAwaitingVerification = order.status === 'Payment Pending Verification' || order.status === 'Awaiting Payment Verification';
-                    const isPendingPayment = order.status === 'Pending Payment' || order.status === 'Payment Rejected';
+                    const isAwaitingVerification = order.status === 'Awaiting Payment Verification';
+                    const isPendingPayment = order.status === 'Pending Payment';
                     const isReuploadFormOpen = reuploadingOrderId === order.id;
 
                     return (
@@ -3263,16 +2541,18 @@ Generated via Google Workspace secure microservice.
                                   onClick={() => {
                                     setReuploadingOrderId(order.id);
                                     setManualTxId(order.paymentTxId || '');
+                                    setManualProofUrl(order.paymentProofUrl || '');
+                                    setManualProofFileName('previous_payment_receipt.png');
                                   }}
                                   className="w-full bg-teal-50 border border-teal-200 text-teal-800 font-bold py-2 rounded-xl text-center uppercase tracking-wider hover:bg-teal-100 transition flex items-center justify-center gap-1.5 cursor-pointer"
                                 >
                                   <RotateCcw className="w-4 h-4" />
-                                  Re-submit Transaction UTR
+                                  Upload / Re-submit Payment Proof
                                 </button>
                               ) : (
                                 <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-4">
                                   <div className="flex justify-between items-center">
-                                    <h5 className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Submit Transaction Reference</h5>
+                                    <h5 className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Submit Payment Certificate</h5>
                                     <button
                                       onClick={() => setReuploadingOrderId(null)}
                                       className="text-slate-400 hover:text-slate-600 font-bold text-xs"
@@ -3299,6 +2579,51 @@ Generated via Google Workspace secure microservice.
                                     )}
                                   </div>
 
+                                  {/* Re-upload uploader zone */}
+                                  <div
+                                    onDragEnter={handleDrag}
+                                    onDragOver={handleDrag}
+                                    onDragLeave={handleDrag}
+                                    onDrop={handleDrop}
+                                    className={`relative border-2 border-dashed rounded-xl p-5 text-center transition flex flex-col items-center justify-center cursor-pointer ${
+                                      dragActive 
+                                        ? 'border-teal-600 bg-teal-50/50' 
+                                        : manualProofUrl 
+                                          ? 'border-emerald-500 bg-emerald-50/20' 
+                                          : 'border-slate-300 bg-white hover:bg-slate-100/50'
+                                    }`}
+                                    onClick={() => document.getElementById(`manual-reupload-input-${order.id}`)?.click()}
+                                  >
+                                    <input
+                                      id={`manual-reupload-input-${order.id}`}
+                                      type="file"
+                                      accept=".jpg,.jpeg,.png,.pdf"
+                                      className="hidden"
+                                      onChange={handleFileChange}
+                                    />
+                                    
+                                    {manualProofUrl ? (
+                                      <div className="space-y-1.5">
+                                        <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-sm">
+                                          <Check className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                          <p className="text-[11px] font-bold text-slate-800">Screenshot Attached</p>
+                                          <p className="text-[9px] text-slate-400 font-mono mt-0.5 truncate max-w-xs">{manualProofFileName || 'payment_receipt.png'}</p>
+                                        </div>
+                                        {manualProofUrl && (
+                                          <img src={manualProofUrl} alt="Receipt Preview" className="w-14 h-14 object-cover mx-auto rounded border border-slate-200 mt-1 shadow-sm" />
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-1">
+                                        <Upload className="w-6 h-6 text-slate-400 mx-auto" />
+                                        <p className="text-[11px] font-semibold text-slate-700">Drag receipt screenshot or browse files <span className="text-rose-600 font-bold">*</span></p>
+                                        <p className="text-[8px] text-rose-600 font-bold uppercase tracking-wider">Screenshot Required (Max 10MB)</p>
+                                      </div>
+                                    )}
+                                  </div>
+
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
                                       <label className="text-slate-400 block mb-1 text-[10px]">Transaction ID / UTR Number *</label>
@@ -3320,114 +2645,37 @@ Generated via Google Workspace secure microservice.
                                         className="w-full bg-white border border-slate-200 rounded-lg p-2 outline-none focus:border-teal-700 transition text-[11px]"
                                       />
                                     </div>
-
                                   </div>
-
-                                  {/* Optional New Payment Receipt Screenshot Upload */}
-                                  <div className="space-y-1">
-                                    <label className="text-slate-400 block text-[10px] font-bold">New Payment Receipt Screenshot (Optional)</label>
-                                    <div className="border border-dashed border-slate-300 rounded-xl p-3 bg-white hover:bg-slate-50 transition relative flex flex-col items-center justify-center text-center cursor-pointer">
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => {
-                                          const file = e.target.files?.[0];
-                                          if (file) {
-                                            if (file.size > 10 * 1024 * 1024) {
-                                              addToast('Screenshot size must be less than 10MB.', 'error');
-                                              return;
-                                            }
-                                            setReuploadScreenshotFile(file);
-                                          }
-                                        }}
-                                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                      />
-                                      <Upload className="w-5 h-5 text-slate-400 mb-1" />
-                                      {reuploadScreenshotFile ? (
-                                        <div>
-                                          <p className="text-[11px] font-bold text-teal-800 flex items-center gap-1 justify-center">
-                                            <CheckCircle className="w-3 h-3 text-emerald-600" /> Selected: {reuploadScreenshotFile.name} ({(reuploadScreenshotFile.size / (1024 * 1024)).toFixed(2)} MB)
-                                          </p>
-                                          <p className="text-[9px] text-slate-400">Click to replace screenshot (Max 10MB)</p>
-                                        </div>
-                                      ) : (
-                                        <div>
-                                          <p className="text-[11px] text-slate-700 font-bold">Select or drag updated receipt screenshot</p>
-                                          <p className="text-[9px] text-slate-400">Optional. Choose if you want to upload a new proof file</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {screenshotUploading && (
-                                    <div className="bg-slate-100/80 p-3 rounded-xl border border-slate-200 text-center space-y-1.5">
-                                      <div className="flex justify-between items-center text-[9px] text-slate-500 font-bold uppercase tracking-wider">
-                                        <span>Uploading updated payment receipt...</span>
-                                        <span>{screenshotUploadProgress}%</span>
-                                      </div>
-                                      <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                                        <div 
-                                          className="bg-teal-600 h-full transition-all duration-300"
-                                          style={{ width: `${screenshotUploadProgress}%` }}
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
 
                                   <button
-                                    disabled={!manualTxId.trim() || screenshotUploading}
-                                    onClick={async () => {
+                                    onClick={() => {
                                       // process submit
                                       if (!manualTxId.trim()) {
                                         addToast('Please enter the Transaction ID / UTR Number.', 'error');
                                         return;
                                       }
-
-                                      let driveScreenshotUrl = '';
-                                      let firebaseScreenshotUrl = '';
-
-                                      if (reuploadScreenshotFile) {
-                                        try {
-                                          const fileBase64 = await fileToBase64(reuploadScreenshotFile);
-                                          driveScreenshotUrl = await uploadScreenshotToDrive(
-                                            fileBase64,
-                                            reuploadScreenshotFile.name,
-                                            reuploadScreenshotFile.type,
-                                            order.id
-                                          );
-                                        } catch (driveErr: any) {
-                                          console.warn('[Google Drive Upload] Failed, falling back to local simulation link:', driveErr);
-                                          driveScreenshotUrl = `https://drive.google.com/mock-file-link/${order.id}_screenshot`;
-                                        }
-
-                                        try {
-                                          const uploadRes = await uploadScreenshot(reuploadScreenshotFile);
-                                          firebaseScreenshotUrl = uploadRes.url;
-                                        } catch (fbErr) {
-                                          console.warn('[Firebase Storage Upload] Failed:', fbErr);
-                                          firebaseScreenshotUrl = driveScreenshotUrl;
-                                        }
+                                      if (!manualProofUrl) {
+                                        addToast('Payment receipt screenshot is strictly required! Please attach a valid screenshot.', 'error');
+                                        return;
                                       }
-
+                                      
                                       const currentOrders = dbLocal.getOrders();
                                       const idx = currentOrders.findIndex(o => o.id === order.id);
                                       if (idx > -1) {
                                         const originalOrder = currentOrders[idx];
                                         const updatedOrder: Order = {
                                           ...originalOrder,
-                                          status: 'Payment Pending Verification',
-                                          paymentStatus: 'Pending Verification',
+                                          status: 'Awaiting Payment Verification',
                                           paymentTxId: manualTxId.trim(),
+                                          paymentProofUrl: manualProofUrl,
                                           paymentNote: manualNote.trim(),
-                                          paymentScreenshotUrl: firebaseScreenshotUrl || originalOrder.paymentScreenshotUrl,
-                                          paymentScreenshotName: reuploadScreenshotFile ? reuploadScreenshotFile.name : originalOrder.paymentScreenshotName,
                                           paymentRejectionReason: undefined, // Clear rejection reason
                                           timeline: [
                                             ...(originalOrder.timeline || []),
                                             {
-                                              status: 'Payment Pending Verification',
+                                              status: 'Awaiting Payment Verification',
                                               time: new Date().toISOString(),
-                                              note: `Payment UTR re-submitted by customer with transaction ID ${manualTxId.trim()}.`
+                                              note: `Payment proof re-submitted by customer with transaction ID ${manualTxId.trim()}.`
                                             }
                                           ],
                                           paymentVerificationLogs: [
@@ -3437,7 +2685,7 @@ Generated via Google Workspace secure microservice.
                                               performedBy: currentUser?.name || 'Customer',
                                               performedByRole: 'customer',
                                               timestamp: new Date().toISOString(),
-                                              note: `Resubmitted payment UTR after admin feedback.`
+                                              note: `Resubmitted payment proof after admin feedback.`
                                             }
                                           ]
                                         };
@@ -3448,22 +2696,23 @@ Generated via Google Workspace secure microservice.
                                         dbLocal.addNotification(
                                           'admin',
                                           `Payment Proof Re-submitted`,
-                                          `Customer resubmitted payment UTR for Order #${order.id} with UTR ${manualTxId.trim()}.`,
+                                          `Customer resubmitted payment proof for Order #${order.id} with UTR ${manualTxId.trim()}.`,
                                           'payment_updated'
                                         );
                                         
-                                        addToast('Payment UTR submitted successfully!', 'success');
+                                        addToast('Payment proof submitted successfully!', 'success');
                                         // reset state
                                         setManualTxId('');
                                         setManualNote('');
-                                        setReuploadScreenshotFile(null);
+                                        setManualProofUrl('');
+                                        setManualProofFileName('');
                                         setReuploadingOrderId(null);
                                         loadData();
                                       }
                                     }}
                                     className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-2 rounded-xl text-center uppercase tracking-wider transition text-[11px] cursor-pointer shadow-sm"
                                   >
-                                    Submit Transaction UTR
+                                    Submit Clearance Receipt
                                   </button>
                                 </div>
                               )}

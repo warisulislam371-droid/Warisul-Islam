@@ -135,23 +135,6 @@ export interface Product {
     inquiries: number;
     sales: number;
   };
-  vendorPrice?: number;
-  commissionPercent?: number;
-  commissionAmount?: number;
-  customerPrice?: number;
-  vendor_price?: number;
-  commission_rate?: number;
-  final_price?: number;
-  vendor_payout?: number;
-}
-
-export interface CommissionSettings {
-  id: string;
-  enabled: boolean;
-  globalPercent: number;
-  categoryPercents: Record<string, number>;
-  brandPercents: Record<string, number>;
-  vendorPercents: Record<string, number>;
 }
 
 export interface Category {
@@ -208,8 +191,6 @@ export type OrderStatus =
   | 'Pending Payment'
   | 'Payment Submitted'
   | 'Awaiting Payment Verification'
-  | 'Payment Pending Verification'
-  | 'Payment Rejected'
   | 'Payment Verified'
   | 'Order Sent to Vendor'
   | 'Vendor Accepted'
@@ -229,7 +210,6 @@ export interface OrderItem {
   hsnCode: string;
   vendorId: string;
   vendorName: string;
-  vendorPrice?: number;
 }
 
 export interface OrderTimelineEvent {
@@ -302,8 +282,6 @@ export interface Order {
   customerId: string;
   customerName: string;
   customerEmail: string;
-  phone?: string;
-  address?: string;
   vendorId: string; // Single vendor or combined
   vendorName: string;
   items: OrderItem[];
@@ -320,16 +298,6 @@ export interface Order {
     state: string;
     pincode: string;
   };
-  billingAddress?: {
-    address: string;
-    city: string;
-    state: string;
-    pincode: string;
-  };
-  invoiceNumber?: string;
-  platformCommission?: number;
-  platformCommissionRate?: number;
-  dispatchDate?: string;
   shippingProvider?: 'Shiprocket' | 'Delhivery' | string;
   courierName?: string;
   trackingNumber?: string;
@@ -337,18 +305,11 @@ export interface Order {
   timeline: OrderTimelineEvent[];
   createdAt: string;
   // Manual Payment Fields
+  paymentProofUrl?: string;
   paymentTxId?: string; // Transaction ID or UTR Number
   paymentNote?: string;
   paymentRejectionReason?: string;
   paymentVerificationLogs?: PaymentVerificationLog[];
-  orderStatus?: string;
-  paymentStatus?: string;
-  payment_method?: string;
-  upi_transaction_id?: string;
-  payment_status?: string;
-  order_status?: string;
-  paymentScreenshotUrl?: string;
-  paymentScreenshotName?: string;
 }
 
 export interface RFQ {
@@ -489,7 +450,7 @@ export interface PaymentClearanceRequest {
   adminNote?: string;
   processedAt?: string;
   paymentReference?: string;
-  paymentMode?: 'NEFT' | 'RTGS' | 'IMPS' | 'UPI' | 'Bank Transfer';
+  paymentMode?: 'NEFT' | 'RTGS' | 'IMPS' | 'UPI' | 'Razorpay';
   grossSales?: number;
   commissionRate?: number;
   commissionDeducted?: number;
@@ -508,16 +469,6 @@ export interface PromoBanner {
   positionOrder: number;
   isActive: boolean;
   createdAt: string;
-}
-
-export interface AuditLog {
-  id: string;
-  orderId?: string;
-  userId: string;
-  action: 'Order Created' | 'Payment Uploaded' | 'Payment Verified' | 'Order Confirmed' | 'Order Shipped' | 'Order Delivered' | 'Order Cancelled' | 'Refund Processed' | string;
-  dateTime: string;
-  ipAddress?: string;
-  details: string;
 }
 
 

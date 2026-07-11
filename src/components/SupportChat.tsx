@@ -113,7 +113,7 @@ export default function SupportChat({ currentUser, onNavigate, addToast }: Suppo
   const whatsappUrl = `https://wa.me/${waDigits}?text=${prefilledMessage}`;
 
   return (
-    <div className="w-full font-sans">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 font-sans">
       
       {/* Floating WhatsApp support launcher */}
       <a

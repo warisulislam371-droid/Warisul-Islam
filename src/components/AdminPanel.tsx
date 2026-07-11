@@ -1,12 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
-import { updateOrderStatus as updateOrderStatusInSheets } from '../lib/sheets';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
-import { GoogleSheetsSync } from './GoogleSheetsSync';
-import { deleteObject, ref as storageRef } from 'firebase/storage';
-import { storage } from '../firebase';
 import {
   TrendingUp,
   Users,
@@ -95,7 +91,7 @@ const generateAdminDocumentCanvas = (docTitle: string, fileName: string, company
   ctx.fillText('HEALNEX SECURE MEDICAL PORTAL', 40, 58);
   ctx.font = '12px monospace';
   ctx.fillStyle = '#e0f2fe';
-  ctx.fillText('CLINICAL AUDITING HUB • RECONCILIATION GATEWAY • FIREBASE SECURE STORAGE', 40, 88);
+  ctx.fillText('CLINICAL AUDITING HUB • RECONCILIATION GATEWAY • SUPABASE STORAGE', 40, 88);
   
   // Watermark
   ctx.save();
@@ -151,7 +147,7 @@ const generateAdminDocumentCanvas = (docTitle: string, fileName: string, company
   ctx.font = '13px system-ui, sans-serif';
   ctx.fillText('Database Backend:', 60, 360);
   ctx.fillStyle = '#1e293b';
-  ctx.fillText('Firebase Cloud Storage (Secured-Signed)', 220, 360);
+  ctx.fillText('Supabase Storage buckets (Secured-Signed)', 220, 360);
   
   ctx.fillStyle = '#475569';
   ctx.font = '13px system-ui, sans-serif';
@@ -191,7 +187,7 @@ const generateAdminDocumentCanvas = (docTitle: string, fileName: string, company
   // Footer notice
   ctx.fillStyle = '#94a3b8';
   ctx.font = '10px monospace';
-  ctx.fillText('CONFIDENTIAL MEDICAL RECORD INDEXED TO FIREBASE. DISCLOSURE PROHIBITED BY DATA LAW.', 40, 750);
+  ctx.fillText('CONFIDENTIAL MEDICAL RECORD INDEXED TO SUPABASE. DISCLOSURE PROHIBITED BY DATA LAW.', 40, 750);
   
   return canvas.toDataURL('image/jpeg', 0.7);
 };
@@ -209,70 +205,13 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   
-  // Google Sheets DB States
-  const [sheetIdOrders, setSheetIdOrders] = useState(localStorage.getItem('GOOGLE_SHEET_ID_ORDERS') || '');
-  const [sheetIdUsers, setSheetIdUsers] = useState(localStorage.getItem('GOOGLE_SHEET_ID_USERS') || '');
-  const [sheetIdProducts, setSheetIdProducts] = useState(localStorage.getItem('GOOGLE_SHEET_ID_PRODUCTS') || '');
-  const [sheetsApiKey, setSheetsApiKey] = useState(localStorage.getItem('VITE_NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY') || '');
-  const [isSyncingSheets, setIsSyncingSheets] = useState(false);
-
-  const handleSaveSheetsConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    localStorage.setItem('GOOGLE_SHEET_ID_ORDERS', sheetIdOrders.trim());
-    localStorage.setItem('GOOGLE_SHEET_ID_USERS', sheetIdUsers.trim());
-    localStorage.setItem('GOOGLE_SHEET_ID_PRODUCTS', sheetIdProducts.trim());
-    if (sheetsApiKey.trim()) {
-      localStorage.setItem('VITE_NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY', sheetsApiKey.trim());
-    } else {
-      localStorage.removeItem('VITE_NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY');
-    }
-    addToast('Google Sheets Database configuration saved successfully!', 'success');
-  };
-
-  const handleSyncLiveSheets = async () => {
-    setIsSyncingSheets(true);
-    try {
-      addToast('Syncing database from Google Sheets...', 'info');
-      await dbLocal.syncDataFromSheets();
-      setOrders(dbLocal.getOrders());
-      setProducts(dbLocal.getProducts());
-      addToast('Live database successfully synchronized with Google Sheets!', 'success');
-    } catch (err: any) {
-      addToast(`Sync failed: ${err?.message || 'Check your Spreadsheet IDs and API Key'}`, 'error');
-    } finally {
-      setIsSyncingSheets(false);
-    }
-  };
-  
   // Custom push trigger form state
   const [pushTitle, setPushTitle] = useState('');
   const [pushMessage, setPushMessage] = useState('');
   const [pushTarget, setPushTarget] = useState('admin');
   const [pushType, setPushType] = useState('clinical_broadcast');
   
-  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-settings'>(() => {
-    const saved = localStorage.getItem('healnex_admin_active_tab');
-    if (saved) {
-      localStorage.removeItem('healnex_admin_active_tab');
-      return saved as any;
-    }
-    return 'kpis';
-  });
-
-  // Commission Settings State
-  const [commEnabled, setCommEnabled] = useState<boolean>(true);
-  const [commGlobal, setCommGlobal] = useState<number>(7);
-  const [commCategories, setCommCategories] = useState<Record<string, number>>({});
-  const [commBrands, setCommBrands] = useState<Record<string, number>>({});
-  const [commVendors, setCommVendors] = useState<Record<string, number>>({});
-
-  // Form helpers
-  const [newCatKey, setNewCatKey] = useState('');
-  const [newCatVal, setNewCatVal] = useState<number>(7);
-  const [newBrandKey, setNewBrandKey] = useState('');
-  const [newBrandVal, setNewBrandVal] = useState<number>(7);
-  const [newVendorKey, setNewVendorKey] = useState('');
-  const [newVendorVal, setNewVendorVal] = useState<number>(7);
+  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners'>('kpis');
 
   // Promo Banners State
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>(dbLocal.getPromoBanners());
@@ -483,13 +422,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     setWhatsappLogs(dbLocal.getWhatsAppClickLogs());
     setClearanceRequests(dbLocal.getClearanceRequests());
     setPromoBanners(dbLocal.getPromoBanners());
-
-    const comm = dbLocal.getCommissionSettings();
-    setCommEnabled(comm.enabled !== false);
-    setCommGlobal(comm.globalPercent ?? 7);
-    setCommCategories(comm.categoryPercents || {});
-    setCommBrands(comm.brandPercents || {});
-    setCommVendors(comm.vendorPercents || {});
   };
 
   const handleApproveClearance = (reqId: string) => {
@@ -604,12 +536,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
   useEffect(() => {
     loadData();
-
-    // Background sync from Google Sheets on mount
-    dbLocal.syncDataFromSheets().then(() => {
-      loadData();
-    }).catch(err => console.warn('Failed to auto-sync Google Sheets on mount:', err));
-
     const handleDbUpdate = () => loadData();
     window.addEventListener('healnex_db_update', handleDbUpdate);
     return () => window.removeEventListener('healnex_db_update', handleDbUpdate);
@@ -661,35 +587,20 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     reader.readAsDataURL(file);
   };
 
-  const safeDeleteStorageFile = async (url?: string) => {
-    if (!url || !url.startsWith('http') || !url.includes('firebasestorage')) {
-      return;
-    }
-    try {
-      const fileRef = storageRef(storage, url);
-      await deleteObject(fileRef);
-      console.log('Firebase Storage payment receipt deleted successfully:', url);
-    } catch (err) {
-      console.warn('Failed to delete payment receipt from Firebase Storage:', err);
-    }
-  };
-
   const handleVerifyPayment = (orderId: string) => {
     const currentOrders = dbLocal.getOrders();
     const idx = currentOrders.findIndex(o => o.id === orderId);
     if (idx > -1) {
       const originalOrder = currentOrders[idx];
-
       const updatedOrder: Order = {
         ...originalOrder,
-        status: 'Confirmed', // Requirement 8
-        paymentStatus: 'Verified',
+        status: 'Paid',
         timeline: [
           ...(originalOrder.timeline || []),
           {
-            status: 'Confirmed',
+            status: 'Paid',
             time: new Date().toISOString(),
-            note: `Payment UTR verified by administrator ${currentUser?.name || 'Admin'}. Order status changed to Confirmed & sent to vendor dashboard.`
+            note: `Payment verified by administrator ${currentUser?.name || 'Admin'}. Order status changed to Paid & sent to vendor dashboard.`
           }
         ],
         paymentVerificationLogs: [
@@ -699,23 +610,18 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             performedBy: currentUser?.name || 'Administrator',
             performedByRole: 'admin',
             timestamp: new Date().toISOString(),
-            note: `Validated manual transaction UTR successfully.`
+            note: `Validated transaction and cleared receipt.`
           }
         ]
       };
       currentOrders[idx] = updatedOrder;
       dbLocal.saveOrders(currentOrders);
-
-      // Async sync to Google Sheets
-      updateOrderStatusInSheets(orderId, 'Confirmed').catch(err => {
-        console.error('Failed to sync order status confirmation to Google Sheets:', err);
-      });
       
       // Notify Customer & Vendor
       dbLocal.addNotification(
         originalOrder.customerId,
         `Payment Verified`,
-        `Your manual payment UTR for Order #${orderId} was successfully validated. Procurement sent to supplier for delivery.`,
+        `Your payment receipt for Order #${orderId} was successfully validated. Procurement sent to supplier for delivery.`,
         'payment_approved'
       );
       dbLocal.addNotification(
@@ -740,17 +646,16 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     const idx = currentOrders.findIndex(o => o.id === orderId);
     if (idx > -1) {
       const originalOrder = currentOrders[idx];
-
       const updatedOrder: Order = {
         ...originalOrder,
-        status: 'Payment Rejected', // Requirement 7
+        status: 'Pending Payment',
         paymentRejectionReason: rejectionReasonText.trim(),
         timeline: [
           ...(originalOrder.timeline || []),
           {
-            status: 'Payment Rejected',
+            status: 'Pending Payment',
             time: new Date().toISOString(),
-            note: `Payment reference rejected by administrator: ${rejectionReasonText.trim()}`
+            note: `Payment rejected by administrator: ${rejectionReasonText.trim()}`
           }
         ],
         paymentVerificationLogs: [
@@ -760,27 +665,22 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             performedBy: currentUser?.name || 'Administrator',
             performedByRole: 'admin',
             timestamp: new Date().toISOString(),
-            note: `Rejected payment UTR. Reason: ${rejectionReasonText.trim()}`
+            note: `Rejected payment receipt. Reason: ${rejectionReasonText.trim()}`
           }
         ]
       };
       currentOrders[idx] = updatedOrder;
       dbLocal.saveOrders(currentOrders);
-
-      // Async sync to Google Sheets
-      updateOrderStatusInSheets(orderId, 'Payment Rejected').catch(err => {
-        console.error('Failed to sync order status rejection to Google Sheets:', err);
-      });
       
       // Notify Customer
       dbLocal.addNotification(
         originalOrder.customerId,
-        `Payment UTR Rejected`,
-        `Verification failed for Order #${orderId} payment reference. Reason: "${rejectionReasonText.trim()}"`,
+        `Payment Receipt Rejected`,
+        `Verification failed for Order #${orderId} payment proof. Reason: "${rejectionReasonText.trim()}"`,
         'payment_rejected'
       );
       
-      addToast(`Rejected payment UTR reference for Order #${orderId}. Notification dispatched.`, 'info');
+      addToast(`Rejected payment receipt for Order #${orderId}. Notification dispatched.`, 'info');
       setRejectingOrderId(null);
       setRejectionReasonText('');
       loadData();
@@ -862,7 +762,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const pendingProductsCount = products.filter(p => p.status === 'Pending').length;
   const activeRfqsCount = dbLocal.getRfqs().filter(r => r.status === 'Open').length;
   const openTicketsCount = tickets.filter(t => t.status !== 'Closed').length;
-  const pendingPaymentsCount = orders.filter(o => o.status === 'Awaiting Payment Verification' || o.status === 'Payment Pending Verification').length;
+  const pendingPaymentsCount = orders.filter(o => o.status === 'Awaiting Payment Verification').length;
 
   // Actions
   const handleVendorStatus = (
@@ -1280,7 +1180,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
   return (
     <>
-      <div className="w-full font-sans print:hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 font-sans print:hidden">
       
       {/* Admin Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6 mb-8">
@@ -1385,12 +1285,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             )}
           </button>
           <button
-            onClick={() => setActiveTab('commission-settings')}
-            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'commission-settings' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            🏷️ Commission Settings
-          </button>
-          <button
             onClick={() => setActiveTab('audit')}
             className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'audit' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
           >
@@ -1402,42 +1296,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       {/* tab view layouts */}
       {activeTab === 'kpis' && (
         <div className="space-y-8 animate-fade-in">
-          {/* Platform Status & Active Infrastructure Nodes section */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-50 text-[#1E40AF] rounded-xl">
-                  <Activity className="w-6 h-6 animate-pulse" />
-                </div>
-                <div>
-                  <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Platform Status</p>
-                  <p className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
-                    LIVE &amp; STABLE
-                  </p>
-                </div>
-              </div>
-              <span className="text-[10px] font-mono bg-green-50 text-green-700 px-2.5 py-1 rounded-lg border border-green-200">
-                99.98% Uptime
-              </span>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-50 text-[#1E40AF] rounded-xl">
-                  <Server className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Active Infrastructure Nodes</p>
-                  <p className="text-sm font-bold text-slate-900">128 / 150 Operational</p>
-                </div>
-              </div>
-              <span className="text-[10px] font-mono bg-blue-50 text-[#1E40AF] px-2.5 py-1 rounded-lg border border-blue-200">
-                FCM Active
-              </span>
-            </div>
-          </div>
-
           {/* KPI Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
             <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
@@ -1611,11 +1469,10 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 Monitor vendor order acceptances, packaging status, courier dispatch partners, and tracking coordinates.
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
-              <span className="text-xs font-bold px-3 py-1.5 bg-slate-100 text-slate-700 rounded-xl">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700">
                 Total Orders: <strong className="font-mono">{orders.length}</strong>
               </span>
-              <GoogleSheetsSync data={orders} dataType="orders" buttonText="Export All Orders" />
             </div>
           </div>
 
@@ -1657,9 +1514,9 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                     </div>
                   </div>
 
-                   <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Buyer & Consignment Info */}
-                    <div className="space-y-1.5 border-b sm:border-b-0 lg:border-r border-slate-100 pb-4 sm:pb-0 lg:pr-4">
+                    <div className="space-y-1.5 border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-4">
                       <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Procurement Hospital Target</p>
                       <p className="font-bold text-slate-800 text-sm">{order.shippingAddress.address || 'Hospital Center'}</p>
                       <p className="text-slate-500">{order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pincode}</p>
@@ -1667,7 +1524,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                     </div>
 
                     {/* Assigned Vendor Partner */}
-                    <div className="space-y-1.5 border-b sm:border-b-0 lg:border-r border-slate-100 pb-4 sm:pb-0 lg:pr-4">
+                    <div className="space-y-1.5 border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 md:pr-4">
                       <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Assigned Vendor Supplier</p>
                       <p className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                         <Building2 className="w-4 h-4 text-teal-700" />
@@ -1675,27 +1532,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       </p>
                       <p className="text-slate-500 text-[11px] font-medium">Items Count: {order.items.length} product(s)</p>
                       <p className="text-teal-800 font-bold text-sm mt-2 font-mono">Total Value: ₹{order.finalAmount.toLocaleString('en-IN')}</p>
-                    </div>
-
-                    {/* Payment Receipt / UTR Verification info */}
-                    <div className="space-y-1.5 border-b sm:border-b-0 lg:border-r border-slate-100 pb-4 sm:pb-0 lg:pr-4">
-                      <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Manual Payment Verification Info</p>
-                      {(order.paymentTxId || order.paymentScreenshotUrl) ? (
-                        <div className="space-y-1.5">
-                          <p className="font-mono text-[11px]">UTR / TxID: <strong className="text-slate-900 font-bold bg-slate-100 px-1 py-0.5 rounded border select-all">{order.paymentTxId || 'N/A'}</strong></p>
-                          {order.paymentNote && <p className="text-slate-500 text-[10px] italic">"{order.paymentNote}"</p>}
-                          {order.paymentScreenshotUrl && (
-                            <div className="mt-2">
-                              <a href={order.paymentScreenshotUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[10px] font-bold text-teal-700 hover:text-teal-800 hover:underline">
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>View Payment Screenshot</span>
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-slate-400 italic">No manual transaction reference submitted yet.</p>
-                      )}
                     </div>
 
                     {/* Courier Dispatch Coordinates */}
@@ -2465,11 +2301,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                   Full administrative control over marketplace inventory: audit listings, approve & publish to live customer portal, or reject listings with notes.
                 </p>
               </div>
-              <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
-                <GoogleSheetsSync data={filteredProducts} dataType="products" buttonText="Export Filtered Catalog" />
-                <div className="flex items-center gap-2 text-xs font-bold bg-teal-50 text-teal-800 px-4 py-2.5 rounded-xl border border-teal-200">
-                  <Shield className="w-4 h-4 text-teal-600" /> Catalog Audit Mode Active
-                </div>
+              <div className="flex items-center gap-2 text-xs font-bold bg-teal-50 text-teal-800 px-4 py-2.5 rounded-xl border border-teal-200">
+                <Shield className="w-4 h-4 text-teal-600" /> Catalog Audit Mode Active
               </div>
             </div>
 
@@ -2686,35 +2519,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                               <span>Stock: <strong className="text-slate-800 font-mono font-bold">{p.stockQuantity} {p.unit || 'Piece(s)'}</strong></span>
                               <span>MOQ: <strong className="text-slate-700">{p.moq}</strong></span>
                               <span>Upload Date: <strong className="text-indigo-700">{uploadDate}</strong></span>
-                            </div>
-
-                            {/* Commission & Pricing details */}
-                            <div className="mt-3 bg-slate-50/80 rounded-xl p-3 text-xs max-w-2xl border border-slate-200">
-                              <span className="font-extrabold block text-slate-800 uppercase tracking-wider text-[10px] pb-1 border-b border-slate-200 mb-2">
-                                Commercial Pricing & Commission Split Audit:
-                              </span>
-                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-[11px]">
-                                <div>
-                                  <span className="text-slate-400 block text-[9px] uppercase">Vendor Price</span>
-                                  <span className="font-bold text-slate-700">₹{(p.vendor_price ?? p.vendorPrice ?? p.price).toLocaleString('en-IN')}</span>
-                                </div>
-                                <div>
-                                  <span className="text-slate-400 block text-[9px] uppercase">Comm. Rate</span>
-                                  <span className="font-bold text-indigo-700 font-mono">{p.commission_rate ?? p.commissionPercent ?? 7}%</span>
-                                </div>
-                                <div>
-                                  <span className="text-slate-400 block text-[9px] uppercase">Comm. Amt</span>
-                                  <span className="font-bold text-rose-600">₹{((p.final_price ?? p.customerPrice ?? p.price) - (p.vendor_payout ?? p.vendorPrice ?? p.price)).toLocaleString('en-IN')}</span>
-                                </div>
-                                <div>
-                                  <span className="text-slate-400 block text-[9px] uppercase">Final Price</span>
-                                  <span className="font-extrabold text-teal-800">₹{(p.final_price ?? p.customerPrice ?? p.price).toLocaleString('en-IN')}</span>
-                                </div>
-                                <div>
-                                  <span className="text-slate-400 block text-[9px] uppercase">Vendor Payout</span>
-                                  <span className="font-bold text-emerald-700">₹{(p.vendor_payout ?? p.vendorPrice ?? p.price).toLocaleString('en-IN')}</span>
-                                </div>
-                              </div>
                             </div>
 
                             {/* Show rejection or changes requested reason if present */}
@@ -3149,21 +2953,21 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
               <ClipboardList className="w-5 h-5 text-teal-700" />
               Manual Payment Clearance Audit Desk
             </h2>
-            <p className="text-xs text-slate-500 mt-1">Audit offline UPI and Bank transfer UTR numbers manually against your bank statements before confirming orders.</p>
+            <p className="text-xs text-slate-500 mt-1">Audit offline UPI screenshots and Bank transfers before dispatching clearance certificates to vendors.</p>
           </div>
 
-          {orders.filter(o => o.status === 'Awaiting Payment Verification' || o.status === 'Payment Pending Verification').length === 0 ? (
+          {orders.filter(o => o.status === 'Awaiting Payment Verification').length === 0 ? (
             <div className="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center space-y-4 max-w-xl mx-auto">
               <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto" />
               <div>
                 <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide">All Payments Audited</h4>
-                <p className="text-xs text-slate-400 mt-1">There are no pending manual payment references awaiting administrative clearance.</p>
+                <p className="text-xs text-slate-400 mt-1">There are no pending manual payment receipts awaiting administrative clearance.</p>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6">
               {orders
-                .filter(o => o.status === 'Awaiting Payment Verification' || o.status === 'Payment Pending Verification')
+                .filter(o => o.status === 'Awaiting Payment Verification')
                 .map((order) => {
                   const isRejecting = rejectingOrderId === order.id;
 
@@ -3222,23 +3026,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                           </div>
                         </div>
 
-                        {order.paymentScreenshotUrl && (
-                          <div className="space-y-2">
-                            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Uploaded Payment Screenshot / Receipt</p>
-                            <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 p-2 text-center">
-                              <a href={order.paymentScreenshotUrl} target="_blank" rel="noreferrer" title="Click to view full image in a new tab" className="inline-block relative group">
-                                <img 
-                                  src={order.paymentScreenshotUrl} 
-                                  alt="Payment Receipt Screenshot" 
-                                  className="max-h-48 rounded-lg object-contain mx-auto shadow-sm transition hover:scale-105 cursor-pointer"
-                                  referrerPolicy="no-referrer"
-                                />
-                                <span className="absolute bottom-2 right-2 bg-slate-900/80 text-white text-[9px] font-bold px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">View Full Size</span>
-                              </a>
-                            </div>
-                          </div>
-                        )}
-
                         {/* Audit Actions */}
                         <div className="pt-4 border-t border-slate-100 flex flex-wrap gap-3">
                           {!isRejecting ? (
@@ -3252,14 +3039,14 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-sm transition"
                               >
                                 <CheckCircle className="w-4 h-4" />
-                                Approve & Confirm Order
+                                Approve & Route to Vendor
                               </button>
                               <button
                                 onClick={() => setRejectingOrderId(order.id)}
                                 className="bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-4 py-2.5 rounded-xl uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition"
                               >
                                 <XCircle className="w-4 h-4" />
-                                Reject Payment / UTR
+                                Reject Receipt Proof
                               </button>
                             </>
                           ) : (
@@ -3269,7 +3056,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                 <label className="text-slate-500 block mb-1 text-[10px] font-bold">Specify Rejection Reason (sent to customer) *</label>
                                 <input
                                   type="text"
-                                  placeholder="e.g. Transaction ID does not match, amount mismatch..."
+                                  placeholder="e.g. Transaction ID does not match, screenshot blurred, amount mismatch..."
                                   value={rejectionReasonText}
                                   onChange={(e) => setRejectionReasonText(e.target.value)}
                                   className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs outline-none focus:border-rose-600 transition font-medium text-slate-800"
@@ -3282,14 +3069,21 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                 <div className="flex flex-wrap gap-1">
                                   <button
                                     type="button"
-                                    onClick={() => setRejectionReasonText("Reported Transaction Reference (UTR) is invalid or could not be verified in our bank statement. Please verify and re-submit.")}
+                                    onClick={() => setRejectionReasonText("Screenshot blurred or incomplete. Please upload a clear, full-screen receipt screenshot with transaction UTR visible.")}
                                     className="px-2 py-1 bg-white border border-rose-100 hover:bg-rose-100 hover:border-rose-200 text-rose-700 text-[9px] font-bold rounded transition text-left"
                                   >
-                                    🔑 Invalid Transaction ID
+                                    📸 Request New Screenshot (Blurred)
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => setRejectionReasonText("The transferred amount does not match the procurement order total. Please check and re-submit with correct reference details.")}
+                                    onClick={() => setRejectionReasonText("Transaction UTR ID reported does not match the uploaded receipt proof. Please check your bank logs and re-submit.")}
+                                    className="px-2 py-1 bg-white border border-rose-100 hover:bg-rose-100 hover:border-rose-200 text-rose-700 text-[9px] font-bold rounded transition text-left"
+                                  >
+                                    🔑 Incorrect UTR ID
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRejectionReasonText("The transferred amount on the receipt does not match the procurement order total. Please upload correct payment proof.")}
                                     className="px-2 py-1 bg-white border border-rose-100 hover:bg-rose-100 hover:border-rose-200 text-rose-700 text-[9px] font-bold rounded transition text-left"
                                   >
                                     💰 Amount Mismatch
@@ -3316,34 +3110,45 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         </div>
                       </div>
 
-                      {/* Right Column: Statement Checklist Visual */}
-                      <div className="p-6 bg-slate-50/80 flex flex-col justify-between items-stretch text-left">
-                        <div className="w-full space-y-4">
-                          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Manual Statement Checklist</p>
+                      {/* Right Column: Payment Proof Receipt Visual */}
+                      <div className="p-6 bg-slate-50/80 flex flex-col justify-between items-center text-center">
+                        <div className="w-full space-y-2">
+                          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider text-left">Uploaded Payment Proof</p>
                           
-                          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs text-slate-600 font-medium">
-                            <p className="font-bold text-teal-800 uppercase text-[9px] tracking-wider">Audit Checklist Steps:</p>
-                            <div className="flex gap-2 items-start">
-                              <span className="text-teal-600 font-bold">✔</span>
-                              <p>Open your bank account statement or business payment gateway app.</p>
+                          {order.paymentProofUrl ? (
+                            <div className="space-y-3">
+                              {/* Document frame */}
+                              <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-sm relative group overflow-hidden">
+                                <img
+                                  src={order.paymentProofUrl}
+                                  alt="Customer Payment Receipt"
+                                  className="w-full h-48 object-contain rounded"
+                                  referrerPolicy="no-referrer"
+                                />
+                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                  <a
+                                    href={order.paymentProofUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="bg-white text-slate-800 text-[10px] font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-1 hover:bg-slate-100"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    View Full Document
+                                  </a>
+                                </div>
+                              </div>
+                              <p className="text-[10px] text-slate-400 truncate max-w-[200px] mx-auto font-mono">receipt_screenshot.png</p>
                             </div>
-                            <div className="flex gap-2 items-start">
-                              <span className="text-teal-600 font-bold">✔</span>
-                              <p>Look for the transaction with UTR Reference ID: <strong className="text-slate-950 font-mono select-all bg-slate-50 border px-1.5 py-0.5 rounded text-[11px] font-bold">{order.paymentTxId || 'N/A'}</strong></p>
+                          ) : (
+                            <div className="border border-dashed border-slate-300 rounded-xl p-8 bg-slate-100 text-slate-400 flex flex-col items-center justify-center space-y-2">
+                              <AlertCircle className="w-8 h-8 text-slate-300" />
+                              <p className="text-[11px] font-semibold">No Receipt Uploaded</p>
                             </div>
-                            <div className="flex gap-2 items-start">
-                              <span className="text-teal-600 font-bold">✔</span>
-                              <p>Match the transferred amount: <strong className="text-slate-950 font-extrabold text-sm">₹{order.finalAmount.toLocaleString('en-IN')}</strong></p>
-                            </div>
-                            <div className="flex gap-2 items-start">
-                              <span className="text-teal-600 font-bold">✔</span>
-                              <p>Confirm the payment status, then Approve or Reject on the left panel.</p>
-                            </div>
-                          </div>
+                          )}
                         </div>
 
-                        <div className="w-full border-t border-slate-200/60 pt-4 mt-6 text-[10px] text-slate-400 font-medium">
-                          Audit logs logged under administrator key.
+                        <div className="w-full border-t border-slate-200/60 pt-4 mt-4 text-[10px] text-slate-400 font-medium">
+                          Audit logs logged under super admin key.
                         </div>
                       </div>
 
@@ -4388,434 +4193,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             </div>
 
           </form>
-
-          {/* Google Sheets Database Connection Card */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-xs mt-8">
-            <div className="p-4 border-b border-slate-100 bg-emerald-50/50 flex justify-between items-center">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-                Google Sheets Database Connector (Firebase Alternative)
-              </h3>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full uppercase">Active</span>
-              </div>
-            </div>
-            <div className="p-6 space-y-4 font-medium text-slate-600">
-              <p className="text-xs text-slate-500 leading-relaxed mb-2">
-                All transactional order data, user profiles, and product catalogs are stored directly in your connected Google Sheets. Configure your spreadsheet targets below.
-              </p>
-
-              <form onSubmit={handleSaveSheetsConfig} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-slate-500 block mb-1 font-bold">Healnex_Orders Spreadsheet ID *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Spreadsheet ID or URL"
-                      value={sheetIdOrders}
-                      onChange={(e) => setSheetIdOrders(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-600 transition font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-500 block mb-1 font-bold">Healnex_Users Spreadsheet ID *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Spreadsheet ID or URL"
-                      value={sheetIdUsers}
-                      onChange={(e) => setSheetIdUsers(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-600 transition font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-500 block mb-1 font-bold">Healnex_Products Spreadsheet ID *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Spreadsheet ID or URL"
-                      value={sheetIdProducts}
-                      onChange={(e) => setSheetIdProducts(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-600 transition font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-slate-500 block mb-1 font-bold">Google Sheets API Key (Fallback Override)</label>
-                  <input
-                    type="password"
-                    placeholder="NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY"
-                    value={sheetsApiKey}
-                    onChange={(e) => setSheetsApiKey(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-600 transition font-mono"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">If blank, utilizes the platform's configured credentials.</p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row justify-between items-center pt-3 gap-3 border-t border-slate-100">
-                  <div className="flex gap-2">
-                    <button
-                      type="submit"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-xl uppercase tracking-wider text-[10px] shadow transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      Save Connector IDs
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSyncLiveSheets}
-                      disabled={isSyncingSheets}
-                      className="bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-bold py-2.5 px-5 rounded-xl uppercase tracking-wider text-[10px] transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSheets ? 'animate-spin' : ''}`} />
-                      {isSyncingSheets ? 'Syncing...' : 'Sync Live Sheets Now'}
-                    </button>
-                  </div>
-
-                  <div className="text-[10px] text-slate-400 flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Synced {orders.length} orders & {products.length} catalog items</span>
-                  </div>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Admin Commission Settings Tab */}
-      {activeTab === 'commission-settings' && (
-        <div className="space-y-6 animate-fade-in pb-12">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h2 className="text-base font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
-              🏷️ Marketplace Commission Settings
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">Configure global and fine-grained commission rules for clinical equipment sales. Automatic commission is split from vendor prices during checkout.</p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              {/* General Config Card */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider pb-2 border-b border-slate-100">
-                  Global Configuration
-                </h3>
-                
-                <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <input
-                    type="checkbox"
-                    id="comm-enabled-toggle"
-                    checked={commEnabled}
-                    onChange={(e) => setCommEnabled(e.target.checked)}
-                    className="w-4.5 h-4.5 text-teal-700 rounded border-slate-300 focus:ring-teal-500"
-                  />
-                  <div>
-                    <label htmlFor="comm-enabled-toggle" className="block text-xs font-bold text-slate-800 cursor-pointer">
-                      Enable Marketplace Commissions
-                    </label>
-                    <p className="text-[10px] text-slate-500">If disabled, all commissions will be computed as 0% across all products.</p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block mb-1.5 text-xs font-bold text-slate-800">Global Default Commission (%)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={commGlobal}
-                    onChange={(e) => setCommGlobal(Number(e.target.value))}
-                    disabled={!commEnabled}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-mono text-slate-800 disabled:bg-slate-100 disabled:text-slate-400"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Fallback commission rate applied to products if no category, brand, or vendor overrides match (Default: 7%).</p>
-                </div>
-              </div>
-
-              {/* Category Overrides */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider pb-2 border-b border-slate-100">
-                  Category-Wise Commission Overrides
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <div className="md:col-span-2">
-                    <label className="block mb-1 text-[10px] font-bold text-slate-600">Select Category</label>
-                    <select
-                      value={newCatKey}
-                      onChange={(e) => setNewCatKey(e.target.value)}
-                      disabled={!commEnabled}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 text-xs text-slate-800"
-                    >
-                      <option value="">-- Select Category --</option>
-                      {dbLocal.getCategories().map(c => (
-                        <option key={c.id} value={c.name}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block mb-1 text-[10px] font-bold text-slate-600">Commission %</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={newCatVal}
-                        onChange={(e) => setNewCatVal(Number(e.target.value))}
-                        disabled={!commEnabled}
-                        className="w-full bg-white border border-slate-200 rounded-lg p-2 outline-none font-mono text-xs text-slate-800"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!newCatKey) return;
-                          setCommCategories({ ...commCategories, [newCatKey]: newCatVal });
-                          setNewCatKey('');
-                        }}
-                        disabled={!commEnabled || !newCatKey}
-                        className="bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs px-3 rounded-lg disabled:bg-slate-300 shrink-0"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h4 className="text-[11px] font-extrabold text-slate-500 uppercase">Active Category Overrides</h4>
-                  {Object.keys(commCategories).length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">No category overrides configured.</p>
-                  ) : (
-                    <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto border border-slate-200 rounded-xl">
-                      {Object.entries(commCategories).map(([key, val]) => (
-                        <div key={key} className="p-3 flex justify-between items-center text-xs hover:bg-slate-50">
-                          <span className="font-bold text-slate-700">{key}</span>
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono font-bold bg-teal-50 text-teal-700 px-2 py-0.5 rounded-lg">{val}%</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const copy = { ...commCategories };
-                                delete copy[key];
-                                setCommCategories(copy);
-                              }}
-                              className="text-rose-600 hover:text-rose-800 font-bold"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Brand Overrides */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider pb-2 border-b border-slate-100">
-                  Brand-Wise Commission Overrides
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <div className="md:col-span-2">
-                    <label className="block mb-1 text-[10px] font-bold text-slate-600">Select Brand</label>
-                    <select
-                      value={newBrandKey}
-                      onChange={(e) => setNewBrandKey(e.target.value)}
-                      disabled={!commEnabled}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 text-xs text-slate-800"
-                    >
-                      <option value="">-- Select Brand --</option>
-                      {dbLocal.getBrands().map(b => (
-                        <option key={b.id} value={b.name}>{b.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block mb-1 text-[10px] font-bold text-slate-600">Commission %</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={newBrandVal}
-                        onChange={(e) => setNewBrandVal(Number(e.target.value))}
-                        disabled={!commEnabled}
-                        className="w-full bg-white border border-slate-200 rounded-lg p-2 outline-none font-mono text-xs text-slate-800"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!newBrandKey) return;
-                          setCommBrands({ ...commBrands, [newBrandKey]: newBrandVal });
-                          setNewBrandKey('');
-                        }}
-                        disabled={!commEnabled || !newBrandKey}
-                        className="bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs px-3 rounded-lg disabled:bg-slate-300 shrink-0"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h4 className="text-[11px] font-extrabold text-slate-500 uppercase">Active Brand Overrides</h4>
-                  {Object.keys(commBrands).length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">No brand overrides configured.</p>
-                  ) : (
-                    <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto border border-slate-200 rounded-xl">
-                      {Object.entries(commBrands).map(([key, val]) => (
-                        <div key={key} className="p-3 flex justify-between items-center text-xs hover:bg-slate-50">
-                          <span className="font-bold text-slate-700">{key}</span>
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono font-bold bg-teal-50 text-teal-700 px-2 py-0.5 rounded-lg">{val}%</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const copy = { ...commBrands };
-                                delete copy[key];
-                                setCommBrands(copy);
-                              }}
-                              className="text-rose-600 hover:text-rose-800 font-bold"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Vendor Overrides */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider pb-2 border-b border-slate-100">
-                  Vendor-Wise Commission Overrides
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <div className="md:col-span-2">
-                    <label className="block mb-1 text-[10px] font-bold text-slate-600">Select Vendor</label>
-                    <select
-                      value={newVendorKey}
-                      onChange={(e) => setNewVendorKey(e.target.value)}
-                      disabled={!commEnabled}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 text-xs text-slate-800"
-                    >
-                      <option value="">-- Select Vendor --</option>
-                      {vendors.map(v => (
-                        <option key={v.id} value={v.id}>{v.companyName} ({v.id})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block mb-1 text-[10px] font-bold text-slate-600">Commission %</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={newVendorVal}
-                        onChange={(e) => setNewVendorVal(Number(e.target.value))}
-                        disabled={!commEnabled}
-                        className="w-full bg-white border border-slate-200 rounded-lg p-2 outline-none font-mono text-xs text-slate-800"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!newVendorKey) return;
-                          setCommVendors({ ...commVendors, [newVendorKey]: newVendorVal });
-                          setNewVendorKey('');
-                        }}
-                        disabled={!commEnabled || !newVendorKey}
-                        className="bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs px-3 rounded-lg disabled:bg-slate-300 shrink-0"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h4 className="text-[11px] font-extrabold text-slate-500 uppercase">Active Vendor Overrides</h4>
-                  {Object.keys(commVendors).length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">No vendor overrides configured.</p>
-                  ) : (
-                    <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto border border-slate-200 rounded-xl">
-                      {Object.entries(commVendors).map(([key, val]) => {
-                        const vObj = vendors.find(v => v.id === key);
-                        const label = vObj ? vObj.companyName : key;
-                        return (
-                          <div key={key} className="p-3 flex justify-between items-center text-xs hover:bg-slate-50">
-                            <span className="font-bold text-slate-700">{label}</span>
-                            <div className="flex items-center gap-3">
-                              <span className="font-mono font-bold bg-teal-50 text-teal-700 px-2 py-0.5 rounded-lg">{val}%</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const copy = { ...commVendors };
-                                  delete copy[key];
-                                  setCommVendors(copy);
-                                }}
-                                className="text-rose-600 hover:text-rose-800 font-bold"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              {/* Info panel */}
-              <div className="bg-gradient-to-br from-teal-700 to-teal-900 text-white rounded-2xl p-6 shadow-sm">
-                <h3 className="text-xs font-bold uppercase tracking-wider mb-2">Commission Splitting Rules</h3>
-                <p className="text-[11px] leading-relaxed text-teal-50">
-                  Commissions are computed hierarchically in real-time when vendors edit or submit products:
-                </p>
-                <ol className="list-decimal list-inside text-[11px] space-y-2 mt-3 text-teal-100">
-                  <li><strong>Vendor-specific</strong> overrides are matched first.</li>
-                  <li><strong>Category-specific</strong> overrides are checked second.</li>
-                  <li><strong>Brand-specific</strong> overrides are checked third.</li>
-                  <li><strong>Global commission</strong> serves as the default fallback.</li>
-                </ol>
-                <div className="mt-5 pt-4 border-t border-teal-600/50 text-[10px] text-teal-200">
-                  * Note: Turning off commissions forces a 0% rate regardless of overrides.
-                </div>
-              </div>
-
-              {/* Action Sidebar */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 text-center space-y-4">
-                <p className="text-xs text-slate-600 leading-normal">
-                  All updates will propagate globally in real-time to the B2B store. Newly submitted or updated product prices will compute using these configurations.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    dbLocal.saveCommissionSettings({
-                      id: 'commission_settings_config',
-                      enabled: commEnabled,
-                      globalPercent: commGlobal,
-                      categoryPercents: commCategories,
-                      brandPercents: commBrands,
-                      vendorPercents: commVendors
-                    });
-                    addToast('Commission settings saved and synchronized globally! 🏷️', 'success');
-                  }}
-                  className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-3 px-4 rounded-xl uppercase text-[11px] tracking-wider transition-all shadow-md cursor-pointer"
-                >
-                  Save settings
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
@@ -5785,7 +5162,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
                   {selectedReportType === 'payments' && (() => {
                     const totalManualAmount = paymentsReportData.reduce((s, o) => s + o.finalAmount, 0);
-                    const pendingVerifCount = paymentsReportData.filter(o => o.status === 'Awaiting Payment Verification' || o.status === 'Payment Pending Verification').length;
+                    const pendingVerifCount = paymentsReportData.filter(o => o.status === 'Awaiting Payment Verification').length;
                     return (
                       <>
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
@@ -5803,7 +5180,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
                           <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Cleared Rate</span>
                           <span className="text-xl font-bold font-mono text-slate-900 mt-1 block">
-                            {paymentsReportData.length > 0 ? `${((paymentsReportData.filter(o => o.status !== 'Awaiting Payment Verification' && o.status !== 'Payment Pending Verification' && o.status !== 'Pending Payment').length / paymentsReportData.length) * 100).toFixed(0)}%` : '100%'}
+                            {paymentsReportData.length > 0 ? `${((paymentsReportData.filter(o => o.status !== 'Awaiting Payment Verification' && o.status !== 'Pending Payment').length / paymentsReportData.length) * 100).toFixed(0)}%` : '100%'}
                           </span>
                         </div>
                       </>
@@ -6607,7 +5984,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
                   // Generate beautiful preview image
                   const previewBase64 = generateAdminDocumentCanvas(finalLabel, finalName, selectedVendorDoc.companyName);
-                  const isRealUpload = finalUrl && (finalUrl.startsWith('data:') || (finalUrl.startsWith('http') && !finalUrl.includes('firebasestorage.app')));
+                  const isRealUpload = finalUrl && (finalUrl.startsWith('data:') || (finalUrl.startsWith('http') && !finalUrl.includes('healnex-storage.supabase.co')));
                   const displayUrl = isRealUpload ? finalUrl : previewBase64;
                   const isPdfFile = displayUrl.startsWith('data:application/pdf') || displayUrl.toLowerCase().endsWith('.pdf');
 
