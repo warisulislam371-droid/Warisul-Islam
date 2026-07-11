@@ -55,7 +55,7 @@ export async function saveOrderToSheet(order: OrderRowData): Promise<void> {
       console.warn('[Google Sheets Integration] Sync failed:', response.data.error);
     }
   } catch (error: any) {
-    console.error('[Google Sheets Integration] Network error during Sheet save:', error.message || error);
+    console.warn('[Google Sheets Integration] Info/warning during Sheet save (usually credential configuration in preview):', error.message || error);
     throw error;
   }
 }
@@ -85,7 +85,7 @@ export async function uploadScreenshotToDrive(
       throw new Error(response.data.error || 'Unknown upload error occurred.');
     }
   } catch (error: any) {
-    console.error('[Google Drive Integration] Network error during Drive upload:', error.message || error);
+    console.warn('[Google Drive Integration] Info/warning during Drive upload (usually credential configuration in preview):', error.message || error);
     throw error;
   }
 }

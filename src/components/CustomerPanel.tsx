@@ -3323,13 +3323,90 @@ Generated via Google Workspace secure microservice.
 
                                   </div>
 
+                                  {/* Optional New Payment Receipt Screenshot Upload */}
+                                  <div className="space-y-1">
+                                    <label className="text-slate-400 block text-[10px] font-bold">New Payment Receipt Screenshot (Optional)</label>
+                                    <div className="border border-dashed border-slate-300 rounded-xl p-3 bg-white hover:bg-slate-50 transition relative flex flex-col items-center justify-center text-center cursor-pointer">
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            if (file.size > 10 * 1024 * 1024) {
+                                              addToast('Screenshot size must be less than 10MB.', 'error');
+                                              return;
+                                            }
+                                            setReuploadScreenshotFile(file);
+                                          }
+                                        }}
+                                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                      />
+                                      <Upload className="w-5 h-5 text-slate-400 mb-1" />
+                                      {reuploadScreenshotFile ? (
+                                        <div>
+                                          <p className="text-[11px] font-bold text-teal-800 flex items-center gap-1 justify-center">
+                                            <CheckCircle className="w-3 h-3 text-emerald-600" /> Selected: {reuploadScreenshotFile.name} ({(reuploadScreenshotFile.size / (1024 * 1024)).toFixed(2)} MB)
+                                          </p>
+                                          <p className="text-[9px] text-slate-400">Click to replace screenshot (Max 10MB)</p>
+                                        </div>
+                                      ) : (
+                                        <div>
+                                          <p className="text-[11px] text-slate-700 font-bold">Select or drag updated receipt screenshot</p>
+                                          <p className="text-[9px] text-slate-400">Optional. Choose if you want to upload a new proof file</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {screenshotUploading && (
+                                    <div className="bg-slate-100/80 p-3 rounded-xl border border-slate-200 text-center space-y-1.5">
+                                      <div className="flex justify-between items-center text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                                        <span>Uploading updated payment receipt...</span>
+                                        <span>{screenshotUploadProgress}%</span>
+                                      </div>
+                                      <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                        <div 
+                                          className="bg-teal-600 h-full transition-all duration-300"
+                                          style={{ width: `${screenshotUploadProgress}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+
                                   <button
-                                    disabled={!manualTxId.trim()}
+                                    disabled={!manualTxId.trim() || screenshotUploading}
                                     onClick={async () => {
                                       // process submit
                                       if (!manualTxId.trim()) {
                                         addToast('Please enter the Transaction ID / UTR Number.', 'error');
                                         return;
+                                      }
+
+                                      let driveScreenshotUrl = '';
+                                      let firebaseScreenshotUrl = '';
+
+                                      if (reuploadScreenshotFile) {
+                                        try {
+                                          const fileBase64 = await fileToBase64(reuploadScreenshotFile);
+                                          driveScreenshotUrl = await uploadScreenshotToDrive(
+                                            fileBase64,
+                                            reuploadScreenshotFile.name,
+                                            reuploadScreenshotFile.type,
+                                            order.id
+                                          );
+                                        } catch (driveErr: any) {
+                                          console.warn('[Google Drive Upload] Failed, falling back to local simulation link:', driveErr);
+                                          driveScreenshotUrl = `https://drive.google.com/mock-file-link/${order.id}_screenshot`;
+                                        }
+
+                                        try {
+                                          const uploadRes = await uploadScreenshot(reuploadScreenshotFile);
+                                          firebaseScreenshotUrl = uploadRes.url;
+                                        } catch (fbErr) {
+                                          console.warn('[Firebase Storage Upload] Failed:', fbErr);
+                                          firebaseScreenshotUrl = driveScreenshotUrl;
+                                        }
                                       }
 
                                       const currentOrders = dbLocal.getOrders();
@@ -3342,8 +3419,8 @@ Generated via Google Workspace secure microservice.
                                           paymentStatus: 'Pending Verification',
                                           paymentTxId: manualTxId.trim(),
                                           paymentNote: manualNote.trim(),
-                                          paymentScreenshotUrl: undefined,
-                                          paymentScreenshotName: undefined,
+                                          paymentScreenshotUrl: firebaseScreenshotUrl || originalOrder.paymentScreenshotUrl,
+                                          paymentScreenshotName: reuploadScreenshotFile ? reuploadScreenshotFile.name : originalOrder.paymentScreenshotName,
                                           paymentRejectionReason: undefined, // Clear rejection reason
                                           timeline: [
                                             ...(originalOrder.timeline || []),

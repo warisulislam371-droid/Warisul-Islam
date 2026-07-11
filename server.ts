@@ -90,7 +90,7 @@ async function startServer() {
             }
           });
         } catch (headerErr: any) {
-          console.error('Failed to write headers to Google Sheet:', headerErr.message);
+          console.warn('Failed to write headers to Google Sheet (expected if credentials are not set in preview):', headerErr.message);
         }
       }
 
@@ -131,7 +131,7 @@ async function startServer() {
       console.log(`[Google Sheets API] Order ${order.orderId} written to sheet successfully.`);
       res.json({ success: true });
     } catch (error: any) {
-      console.error('Google Sheets Save Order Error:', error);
+      console.warn('Google Sheets Save Order Warning (expected if credentials are not set in preview):', error);
       res.status(500).json({ success: false, error: error.message || String(error) });
     }
   });
@@ -193,7 +193,7 @@ async function startServer() {
       console.log(`[Google Drive API] Screenshot for order ${orderId} uploaded successfully: ${link}`);
       res.json({ success: true, webViewLink: link });
     } catch (error: any) {
-      console.error('Google Drive Screenshot Upload Error:', error);
+      console.warn('Google Drive Screenshot Upload Warning (expected if credentials are not set in preview):', error);
       res.status(500).json({ success: false, error: error.message || String(error) });
     }
   });

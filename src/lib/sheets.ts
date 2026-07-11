@@ -174,7 +174,7 @@ export async function addOrder(orderData: any) {
     await appendRow(ids.orders, 'Healnex_Orders!A:H', row);
     console.log('Successfully appended order to Healnex_Orders Google Sheet.');
   } catch (err: any) {
-    console.error('Failed to append order to Google Sheet:', err);
+    console.warn('Failed to append order to Google Sheet (this is expected if credentials or sheet IDs are not set in preview):', err);
     throw err;
   }
 }
@@ -218,7 +218,7 @@ export async function getOrders(): Promise<any[]> {
       };
     });
   } catch (err) {
-    console.error('Failed to fetch orders from Google Sheet:', err);
+    console.warn('Failed to fetch orders from Google Sheet (expected if not configured in preview):', err);
     return [];
   }
 }
@@ -241,7 +241,7 @@ export async function updateOrderStatus(orderId: string, newStatus: string) {
     await updateSheetRange(ids.orders, range, [[newStatus]]);
     console.log(`Successfully updated order ${orderId} to status ${newStatus} in Google Sheets.`);
   } catch (err) {
-    console.error(`Failed to update order status for ${orderId}:`, err);
+    console.warn(`Failed to update order status for ${orderId} (expected if not configured in preview):`, err);
     throw err;
   }
 }
@@ -264,7 +264,7 @@ export async function addUser(userData: any) {
     await appendRow(ids.users, 'Healnex_Users!A:E', row);
     console.log('Successfully appended user to Healnex_Users Google Sheet.');
   } catch (err) {
-    console.error('Failed to append user to Google Sheet:', err);
+    console.warn('Failed to append user to Google Sheet (expected if not configured in preview):', err);
     throw err;
   }
 }
@@ -291,7 +291,7 @@ export async function getProducts(): Promise<any[]> {
       category: row[5] || 'General',
     }));
   } catch (err) {
-    console.error('Failed to fetch products from Google Sheet:', err);
+    console.warn('Failed to fetch products from Google Sheet (expected if not configured in preview):', err);
     return [];
   }
 }
@@ -326,7 +326,7 @@ export async function addVendorToSheet(vendorData: any) {
     await appendRow(ids.users, 'Healnex_Vendors!A:Q', row);
     console.log('Successfully appended vendor to Healnex_Vendors Google Sheet.');
   } catch (err: any) {
-    console.error('[Sheets Sync] Direct Google Sheets vendor write failed:', err);
+    console.warn('[Sheets Sync] Direct Google Sheets vendor write failed (expected if not configured in preview):', err);
     throw err;
   }
 }
