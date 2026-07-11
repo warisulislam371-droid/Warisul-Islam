@@ -250,7 +250,14 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [pushTarget, setPushTarget] = useState('admin');
   const [pushType, setPushType] = useState('clinical_broadcast');
   
-  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-settings'>('kpis');
+  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-settings'>(() => {
+    const saved = localStorage.getItem('healnex_admin_active_tab');
+    if (saved) {
+      localStorage.removeItem('healnex_admin_active_tab');
+      return saved as any;
+    }
+    return 'kpis';
+  });
 
   // Commission Settings State
   const [commEnabled, setCommEnabled] = useState<boolean>(true);
@@ -855,7 +862,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const pendingProductsCount = products.filter(p => p.status === 'Pending').length;
   const activeRfqsCount = dbLocal.getRfqs().filter(r => r.status === 'Open').length;
   const openTicketsCount = tickets.filter(t => t.status !== 'Closed').length;
-  const pendingPaymentsCount = orders.filter(o => o.status === 'Awaiting Payment Verification').length;
+  const pendingPaymentsCount = orders.filter(o => o.status === 'Awaiting Payment Verification' || o.status === 'Payment Pending Verification').length;
 
   // Actions
   const handleVendorStatus = (
@@ -5778,7 +5785,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
                   {selectedReportType === 'payments' && (() => {
                     const totalManualAmount = paymentsReportData.reduce((s, o) => s + o.finalAmount, 0);
-                    const pendingVerifCount = paymentsReportData.filter(o => o.status === 'Awaiting Payment Verification').length;
+                    const pendingVerifCount = paymentsReportData.filter(o => o.status === 'Awaiting Payment Verification' || o.status === 'Payment Pending Verification').length;
                     return (
                       <>
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
@@ -5796,7 +5803,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
                           <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Cleared Rate</span>
                           <span className="text-xl font-bold font-mono text-slate-900 mt-1 block">
-                            {paymentsReportData.length > 0 ? `${((paymentsReportData.filter(o => o.status !== 'Awaiting Payment Verification' && o.status !== 'Pending Payment').length / paymentsReportData.length) * 100).toFixed(0)}%` : '100%'}
+                            {paymentsReportData.length > 0 ? `${((paymentsReportData.filter(o => o.status !== 'Awaiting Payment Verification' && o.status !== 'Payment Pending Verification' && o.status !== 'Pending Payment').length / paymentsReportData.length) * 100).toFixed(0)}%` : '100%'}
                           </span>
                         </div>
                       </>

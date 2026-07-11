@@ -229,6 +229,7 @@ export interface OrderItem {
   hsnCode: string;
   vendorId: string;
   vendorName: string;
+  vendorPrice?: number;
 }
 
 export interface OrderTimelineEvent {
@@ -319,6 +320,16 @@ export interface Order {
     state: string;
     pincode: string;
   };
+  billingAddress?: {
+    address: string;
+    city: string;
+    state: string;
+    pincode: string;
+  };
+  invoiceNumber?: string;
+  platformCommission?: number;
+  platformCommissionRate?: number;
+  dispatchDate?: string;
   shippingProvider?: 'Shiprocket' | 'Delhivery' | string;
   courierName?: string;
   trackingNumber?: string;
@@ -497,6 +508,16 @@ export interface PromoBanner {
   positionOrder: number;
   isActive: boolean;
   createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  orderId?: string;
+  userId: string;
+  action: 'Order Created' | 'Payment Uploaded' | 'Payment Verified' | 'Order Confirmed' | 'Order Shipped' | 'Order Delivered' | 'Order Cancelled' | 'Refund Processed' | string;
+  dateTime: string;
+  ipAddress?: string;
+  details: string;
 }
 
 

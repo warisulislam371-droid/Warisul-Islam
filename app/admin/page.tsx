@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { getAuditLogs, getAllOrders, AuditLog, Order } from '../../src/lib/firestore';
-import { Shield, CreditCard, MessageSquare, ShieldCheck, ClipboardList, TrendingUp, DollarSign, AlertCircle, RefreshCw } from 'lucide-react';
+import { dbLocal } from '../../src/db';
+import { Shield, CreditCard, MessageSquare, ShieldCheck, ClipboardList, TrendingUp, DollarSign, AlertCircle, RefreshCw, Building2 } from 'lucide-react';
 import { formatDate, formatCurrency } from '../../src/lib/utils';
 
 export default function AdminDashboardPage({ navigateTo }: { navigateTo?: (view: string, path: string) => void }) {
@@ -74,7 +75,7 @@ export default function AdminDashboardPage({ navigateTo }: { navigateTo?: (view:
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Metric Card 1 */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
           <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
@@ -99,6 +100,19 @@ export default function AdminDashboardPage({ navigateTo }: { navigateTo?: (view:
 
         {/* Metric Card 3 */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
+          <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+            <Building2 className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Pending Vendor Audits</p>
+            <p className="text-xl font-extrabold text-slate-900 dark:text-slate-100">
+              {dbLocal.getVendors().filter(v => v.status === 'Pending').length} vendors
+            </p>
+          </div>
+        </div>
+
+        {/* Metric Card 4 */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
           <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
             <TrendingUp className="w-6 h-6" />
           </div>
@@ -112,7 +126,7 @@ export default function AdminDashboardPage({ navigateTo }: { navigateTo?: (view:
       {/* Control center shortcuts */}
       <div className="space-y-3">
         <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Operation Shortcuts</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <button
             onClick={() => localNavigate('admin-payment-settings', '/admin/settings/payment')}
             className="p-5 bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-950/30 border border-slate-200 dark:border-slate-800 rounded-2xl text-left transition shadow-sm cursor-pointer group space-y-2"
@@ -154,6 +168,27 @@ export default function AdminDashboardPage({ navigateTo }: { navigateTo?: (view:
             <div>
               <p className="font-bold text-xs text-slate-900 dark:text-slate-50">Payment Verification</p>
               <p className="text-[11px] text-slate-400 mt-0.5">Audit transaction UTRs and release orders.</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => {
+              localStorage.setItem('healnex_admin_active_tab', 'vendors');
+              localNavigate('admin', '/admin');
+            }}
+            className="p-5 bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-950/30 border border-slate-200 dark:border-slate-800 rounded-2xl text-left transition shadow-sm cursor-pointer group space-y-2"
+          >
+            <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center relative">
+              <Building2 className="w-5 h-5 group-hover:scale-110 transition" />
+              {dbLocal.getVendors().filter(v => v.status === 'Pending').length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 rounded-full bg-rose-600 text-[9px] font-bold text-white flex items-center justify-center animate-pulse">
+                  {dbLocal.getVendors().filter(v => v.status === 'Pending').length}
+                </span>
+              )}
+            </div>
+            <div>
+              <p className="font-bold text-xs text-slate-900 dark:text-slate-50">Vendors Verification</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Approve or reject pending manufacturers & vendors.</p>
             </div>
           </button>
         </div>

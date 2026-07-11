@@ -1,4 +1,4 @@
-import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest } from './types';
+import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, AuditLog } from './types';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_BLOGS, DEFAULT_SUPER_ADMIN, INITIAL_BRANDS } from './data';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from './utils/sliceQrSvg';
 import { 
@@ -826,6 +826,7 @@ export const dbLocal = {
     const old = this.getVendors();
     this.set(STORAGE_KEYS.VENDORS, vendors);
     syncListToFirestoreWithDeletions('vendors', vendors, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Products
@@ -1245,6 +1246,26 @@ export const dbLocal = {
     logs.unshift(newLog);
     this.set(STORAGE_KEYS.WHATSAPP_CLICK_LOGS, logs);
     syncListToFirestoreWithDeletions('whatsapp_click_logs', logs, []);
+  },
+
+  // Audit Logs
+  getAuditLogs(): AuditLog[] {
+    return this.get('healnex_audit_logs', []) as AuditLog[];
+  },
+  logAudit(userId: string, action: string, details: string, orderId?: string) {
+    const logs = this.getAuditLogs();
+    const newLog: AuditLog = sanitizeForFirestore({
+      id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      orderId,
+      userId,
+      action,
+      dateTime: new Date().toISOString(),
+      ipAddress: '127.0.0.1',
+      details,
+    });
+    logs.unshift(newLog);
+    this.set('healnex_audit_logs', logs);
+    syncListToFirestoreWithDeletions('audit_logs', logs, []);
   },
 
   // Utility to push notifications

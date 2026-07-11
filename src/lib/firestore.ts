@@ -156,7 +156,7 @@ export async function getPaymentSettings(): Promise<PaymentSettings> {
       return defaultPaymentSettings;
     }
   } catch (error) {
-    console.error('Error fetching payment settings from Firestore:', error);
+    console.warn('Error fetching payment settings from Firestore (using local fallback):', error);
     return defaultPaymentSettings;
   }
 }
@@ -177,7 +177,7 @@ export async function getWhatsAppSettings(): Promise<WhatsAppSettings> {
       return defaultWhatsAppSettings;
     }
   } catch (error) {
-    console.error('Error fetching WhatsApp settings from Firestore:', error);
+    console.warn('Error fetching WhatsApp settings from Firestore (using local fallback):', error);
     return defaultWhatsAppSettings;
   }
 }

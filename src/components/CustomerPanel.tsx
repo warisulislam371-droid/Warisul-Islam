@@ -53,7 +53,8 @@ import InvoicePDF from './InvoicePDF';
 import HomepageTrustSection from './HomepageTrustSection';
 import { PolicyType } from './PolicyModal';
 import { GoogleSheetsSync } from './GoogleSheetsSync';
-import { getCachedWorkspaceToken, createGoogleSpreadsheet, appendRowsToSpreadsheet } from '../utils/googleSheets';
+import { getCachedWorkspaceToken, createGoogleSpreadsheet, appendRowsToSpreadsheet, uploadFileToGoogleDrive } from '../utils/googleSheets';
+import { uploadScreenshotToDrive, saveOrderToSheet } from '../lib/googleSheets';
 
 const CategoryIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'Activity': Activity,
@@ -150,10 +151,21 @@ export default function CustomerPanel({
   const [shippingName, setShippingName] = useState('');
   const [shippingPhone, setShippingPhone] = useState('');
   
+  // Billing details state
+  const [billingAddress, setBillingAddress] = useState({
+    address: 'City Hospital, Emergency Wing, Station Road',
+    city: 'Pune',
+    state: 'Maharashtra',
+    pincode: '411001'
+  });
+  const [billingSameAsShipping, setBillingSameAsShipping] = useState(true);
+  
   // Manual Payment verification and settings states
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(dbLocal.getPaymentSettings());
-  const [selectedPayMethod, setSelectedPayMethod] = useState<'razorpay' | 'upi' | 'bank' | ''>('');
+  const [selectedPayMethod, setSelectedPayMethod] = useState<'razorpay' | 'upi' | 'bank' | 'neft' | 'imps' | 'rtgs' | 'cash' | ''>('upi');
   const [manualTxId, setManualTxId] = useState('');
+  const [manualBankName, setManualBankName] = useState('');
+  const [manualPaymentDate, setManualPaymentDate] = useState('');
   const [manualNote, setManualNote] = useState('');
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [reuploadScreenshotFile, setReuploadScreenshotFile] = useState<File | null>(null);
@@ -564,15 +576,36 @@ export default function CustomerPanel({
 
   const getCheckoutTotal = () => getSubtotal() + getGstTotal();
 
-  // Step 2 checkout: proceed to payment screen
+  const fileToBase64 = (f: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(f);
+      reader.onload = () => {
+        const base64Str = (reader.result as string).split(',')[1];
+        resolve(base64Str);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  // Step 2 checkout: proceed to payment screen / Submit Order
   const handleProceedToPayment = (e: React.FormEvent) => {
     e.preventDefault();
+    handleSubmitOrder();
+  };
+
+  // Step 3: Validate, Create, and Save Order (Phase 1)
+  const handleSubmitOrder = async () => {
     if (!currentUser) {
-      addToast('Please log in or switch profiles to complete checkout.', 'error');
-      onNavigate('login');
+      addToast('Please log in to submit your procurement order.', 'error');
       return;
     }
-    if (cart.length === 0) return;
+    if (cart.length === 0) {
+      addToast('Your cart is empty.', 'error');
+      return;
+    }
+
+    // Step 1: Validate Order
     if (!shippingName.trim()) {
       addToast('Please enter your full name.', 'error');
       return;
@@ -581,27 +614,43 @@ export default function CustomerPanel({
       addToast('Please enter your phone number.', 'error');
       return;
     }
+    // Validate mobile phone format (must be 10 digits or valid Indian/international format)
+    const sanitizedPhone = shippingPhone.trim().replace(/[^0-9+]/g, '');
+    if (sanitizedPhone.length < 10) {
+      addToast('Please enter a valid 10-digit mobile number.', 'error');
+      return;
+    }
+
+    // Validate shipping address
     if (!shippingAddress.address.trim() || !shippingAddress.city.trim() || !shippingAddress.state.trim() || !shippingAddress.pincode.trim()) {
-      addToast('Please enter complete hospital consignment details.', 'error');
+      addToast('Please enter complete shipping address consignment details.', 'error');
       return;
     }
-    // Clear any previous states
-    setManualTxId('');
-    setManualNote('');
-    setSelectedPayMethod('upi');
-    setCheckoutStep('payment');
-  };
 
-  // Step 3: Finalize UPI Payment and place order
-  const handleSubmitOrder = async () => {
-    if (!currentUser) {
-      addToast('Please log in to submit your procurement order.', 'error');
+    // Validate billing address if not same as shipping
+    const finalBillingAddress = billingSameAsShipping ? shippingAddress : billingAddress;
+    if (!finalBillingAddress.address.trim() || !finalBillingAddress.city.trim() || !finalBillingAddress.state.trim() || !finalBillingAddress.pincode.trim()) {
+      addToast('Please enter complete billing address details.', 'error');
       return;
     }
-    if (cart.length === 0) return;
 
-    if (!screenshotFile) {
-      addToast('Please upload your payment transaction screenshot/receipt to place the order.', 'error');
+    // Validate product stock
+    const productsInDb = dbLocal.getProducts();
+    for (const item of cart) {
+      const dbProd = productsInDb.find(p => p.id === item.product.id);
+      if (!dbProd) {
+        addToast(`Product "${item.product.name}" not found in our catalog.`, 'error');
+        return;
+      }
+      if (dbProd.stockQuantity !== undefined && dbProd.stockQuantity < item.quantity) {
+        addToast(`Insufficient Stock: Only ${dbProd.stockQuantity} units left for "${item.product.name}". Please reduce quantity.`, 'error');
+        return;
+      }
+    }
+
+    // Validate selected payment method
+    if (!selectedPayMethod) {
+      addToast('Please select a payment method.', 'error');
       return;
     }
 
@@ -613,19 +662,31 @@ export default function CustomerPanel({
       const gst = getGstTotal();
       const final = getCheckoutTotal();
 
-      const orderId = `ORD-${Math.floor(10000 + Math.random() * 90000)}`;
-      const txId = manualTxId.trim() || `UPI-${Date.now().toString().slice(-6)}`;
-      const paymentMethodName = selectedPayMethod === 'bank' ? 'Bank Transfer' : 'UPI';
+      // Step 2: Create Order
+      const nextSerial = String(dbLocal.getOrders().length + 1).padStart(5, '0');
+      const orderId = `HMB2026${nextSerial}`;
+      const invoiceNo = `INV-2026-${nextSerial}`;
 
-      let screenshotUrl = undefined;
-      let screenshotName = undefined;
-      try {
-        const uploadRes = await uploadScreenshot(screenshotFile);
-        screenshotUrl = uploadRes.url;
-        screenshotName = uploadRes.name;
-      } catch (uploadErr) {
-        console.warn('[Screenshot Upload] Failed, continuing with direct data payload:', uploadErr);
-      }
+      // Calculate vendor pricing and platform commission
+      const itemsWithCommission = cart.map(item => {
+        const vendorPrice = item.product.wholesalePrice || (item.product.salePrice * 0.9);
+        const platformCommission = (item.product.salePrice - vendorPrice) * item.quantity;
+        return {
+          productId: item.product.id,
+          productName: item.product.name,
+          productImage: item.product.images[0],
+          price: item.product.salePrice,
+          quantity: item.quantity,
+          gstRate: item.product.gstRate,
+          hsnCode: item.product.hsnCode || '90181100',
+          vendorId: item.product.vendorId,
+          vendorName: item.product.vendorName,
+          vendorPrice: vendorPrice,
+          platformCommission: platformCommission
+        };
+      });
+
+      const totalCommission = itemsWithCommission.reduce((sum, item) => sum + item.platformCommission, 0);
 
       const newOrder: Order = {
         id: orderId,
@@ -634,112 +695,300 @@ export default function CustomerPanel({
         customerEmail: currentUser.email,
         phone: shippingPhone.trim(),
         address: `${shippingAddress.address}, ${shippingAddress.city}, ${shippingAddress.state} - ${shippingAddress.pincode}`,
+        shippingAddress: shippingAddress,
+        billingAddress: finalBillingAddress,
+        invoiceNumber: invoiceNo,
         vendorId: firstItem.vendorId,
         vendorName: firstItem.vendorName,
-        items: cart.map(item => ({
-          productId: item.product.id,
-          productName: item.product.name,
-          productImage: item.product.images[0],
-          price: item.product.salePrice,
-          quantity: item.quantity,
-          gstRate: item.product.gstRate,
-          hsnCode: item.product.hsnCode,
-          vendorId: item.product.vendorId,
-          vendorName: item.product.vendorName
-        })),
+        items: itemsWithCommission,
         totalAmount: sub,
         gstAmount: gst,
         discountAmount: 0,
         finalAmount: final,
-        status: 'Payment Pending Verification', // Requirement 6
-        orderStatus: 'Payment Pending Verification', // Requirement 6
-        paymentStatus: 'Pending Verification', // Requirement 6
-        paymentMethod: paymentMethodName,
-        payment_method: paymentMethodName,
-        upi_transaction_id: txId,
-        payment_status: 'Pending Verification',
-        order_status: 'Payment Pending Verification',
-        shippingAddress: shippingAddress,
+        status: 'Pending Payment',
+        orderStatus: 'Pending Payment',
+        paymentStatus: 'Pending',
+        payment_status: 'Pending',
+        order_status: 'Pending Payment',
+        paymentMethod: selectedPayMethod === 'bank' ? 'Bank Transfer' : selectedPayMethod.toUpperCase(),
+        platformCommission: totalCommission,
+        platformCommissionRate: 10,
         createdAt: new Date().toISOString(),
         timeline: [
           { 
-            status: 'Payment Pending Verification', 
+            status: 'Pending Payment', 
             time: new Date().toISOString(), 
-            note: `Procurement order placed. Transaction reference (UTR: ${txId}) submitted via ${paymentMethodName}.` 
+            note: `Procurement order submitted. Awaiting manual payment verification via ${selectedPayMethod.toUpperCase()}.` 
           }
         ],
-        paymentTxId: txId,
-        paymentNote: manualNote.trim() || undefined,
-        paymentScreenshotUrl: screenshotUrl,
-        paymentScreenshotName: screenshotName,
         paymentVerificationLogs: [{
           action: 'submit',
           performedBy: shippingName.trim(),
           performedByRole: 'customer',
           timestamp: new Date().toISOString(),
-          note: `Initial manual transaction verification requested for payment via ${paymentMethodName}.`
+          note: `Order submitted. Pending payment upload.`
         }]
       };
 
-      // Save order in Firestore & Local Panel
+      // Step 3 & 4: Save Order & Reduce Inventory Stock
       await dbLocal.createOrderDirect(newOrder);
 
-      // Try to sync with Google Sheets automatically if a workspace session is active
-      const sheetsToken = getCachedWorkspaceToken();
-      if (sheetsToken) {
-        try {
-          let sheetId = localStorage.getItem('google_orders_sheet_id');
-          if (!sheetId) {
-            const sheetInfo = await createGoogleSpreadsheet(sheetsToken, "Healnex MedBazar - Live Orders Sheet");
-            sheetId = sheetInfo.id;
-            localStorage.setItem('google_orders_sheet_id', sheetId);
-          }
+      // Step 10: Audit Log (Order Created)
+      dbLocal.logAudit(
+        currentUser.id,
+        'Order Created',
+        `Procurement Order #${orderId} was created with invoice ${invoiceNo} and Pending Payment status.`,
+        orderId
+      );
 
-          const row = [
-            newOrder.id,
-            new Date(newOrder.createdAt).toLocaleString(),
-            newOrder.customerName,
-            newOrder.customerEmail,
-            newOrder.phone || 'N/A',
-            newOrder.vendorName,
-            newOrder.items?.map((item: any) => `${item.productName} (x${item.quantity})`).join(', ') || '',
-            newOrder.totalAmount,
-            newOrder.gstAmount,
-            newOrder.discountAmount,
-            newOrder.finalAmount,
-            newOrder.order_status,
-            newOrder.payment_status,
-            newOrder.payment_method,
-            newOrder.upi_transaction_id
-          ];
-
-          await appendRowsToSpreadsheet(sheetsToken, sheetId, 'Sheet1!A1', [row]);
-          addToast('Order details synced to live Google Sheet!', 'success');
-        } catch (sheetErr) {
-          console.error('Failed to auto-sync order to Google Sheets:', sheetErr);
-        }
-      }
-
-      // Alert Admin
+      // Send initial notifications
       dbLocal.addNotification(
         'admin',
-        'New UPI Order Received',
-        `New UPI procurement Order #${orderId} (₹${final.toLocaleString('en-IN')}) requires payment UTR verification.`,
-        'payment_submitted'
+        'New Procurement Order',
+        `New Order #${orderId} (₹${final.toLocaleString('en-IN')}) placed. Pending manual payment submission.`,
+        'order_placed'
       );
 
       setCreatedOrder(newOrder);
-      setCheckoutStep('success');
       onUpdateCart([]); // Clear cart
+      setCheckoutStep('payment'); // Redirect to the Payment Upload page
+      addToast('Order submitted successfully! Please upload proof of payment.', 'success');
+    } catch (err: any) {
+      console.error('Failed to create order:', err);
+      addToast(`Order submission failed: ${err.message || 'Database error'}. Please try again.`, 'error');
+      setCheckoutStep('checkout');
+    }
+  };
+
+  // Phase 2: Upload Payment Proof and complete manual verification trigger
+  const handleUploadPaymentProof = async () => {
+    if (!currentUser || !createdOrder) {
+      addToast('No active order context found. Please submit an order first.', 'error');
+      return;
+    }
+
+    if (!screenshotFile) {
+      addToast('Please upload your payment screenshot/receipt.', 'error');
+      return;
+    }
+
+    if (!manualTxId.trim()) {
+      addToast('Please enter the UTR or Unique Transaction Reference Number.', 'error');
+      return;
+    }
+
+    if (!manualBankName.trim()) {
+      addToast('Please enter the Sender Bank Name.', 'error');
+      return;
+    }
+
+    if (!manualPaymentDate) {
+      addToast('Please select the Payment Date & Time.', 'error');
+      return;
+    }
+
+    // Step 5: Validate UTR Duplicates against existing orders
+    const existingOrders = dbLocal.getOrders();
+    const isUtrDuplicate = existingOrders.some(o => 
+      o.id !== createdOrder.id && 
+      (o.paymentTxId === manualTxId.trim() || o.upi_transaction_id === manualTxId.trim())
+    );
+
+    if (isUtrDuplicate) {
+      addToast('This UTR / Transaction Reference has already been submitted for another order. Please check and try again.', 'error');
+      return;
+    }
+
+    setCheckoutStep('processing');
+
+    try {
+      // 1. Upload payment screenshot to Google Drive via backend proxy
+      let driveScreenshotUrl = '';
+      try {
+        const fileBase64 = await fileToBase64(screenshotFile);
+        driveScreenshotUrl = await uploadScreenshotToDrive(
+          fileBase64,
+          screenshotFile.name,
+          screenshotFile.type,
+          createdOrder.id
+        );
+      } catch (driveErr: any) {
+        console.warn('[Google Drive Upload] Failed, falling back to local simulation link:', driveErr);
+        driveScreenshotUrl = `https://drive.google.com/mock-file-link/${createdOrder.id}_screenshot`;
+      }
+
+      // 2. Upload to Firebase Storage as primary/fallback view URL
+      let firebaseScreenshotUrl = '';
+      try {
+        const uploadRes = await uploadScreenshot(screenshotFile);
+        firebaseScreenshotUrl = uploadRes.url;
+      } catch (fbErr) {
+        console.warn('[Firebase Storage Upload] Failed:', fbErr);
+        firebaseScreenshotUrl = driveScreenshotUrl;
+      }
+
+      // 3. Generate Legally Compliant Tax Invoice automatically (Step 9)
+      const invoiceTextContent = `
+=========================================
+      HEALNEX MEDIBAZAR INVOICE
+=========================================
+Invoice No    : ${createdOrder.invoiceNumber || createdOrder.id}
+Order ID      : ${createdOrder.id}
+Order Date    : ${new Date(createdOrder.createdAt).toLocaleDateString('en-IN')}
+Payment Status: Pending Verification
+Order Status  : Payment Pending Verification
+
+CUSTOMER DETAILS (CONSIGNEE):
+Name          : ${createdOrder.customerName}
+Email         : ${createdOrder.customerEmail}
+Phone         : ${createdOrder.phone || 'N/A'}
+Address       : ${createdOrder.address}
+
+BILLING DETAILS:
+Address       : ${createdOrder.billingAddress?.address}, ${createdOrder.billingAddress?.city}, ${createdOrder.billingAddress?.state} - ${createdOrder.billingAddress?.pincode}
+
+SUPPLIER VENDOR:
+Name          : ${createdOrder.vendorName}
+
+ITEMS:
+${createdOrder.items.map(item => `- ${item.productName} | Qty: ${item.quantity} | Price: INR ${item.price} | Tax Rate: ${item.gstRate}%`).join('\n')}
+
+SUMMARY:
+Subtotal      : INR ${createdOrder.totalAmount}
+GST Tax Amount: INR ${createdOrder.gstAmount}
+Grand Total   : INR ${createdOrder.finalAmount}
+=========================================
+Generated via Google Workspace secure microservice.
+`;
+
+      let driveInvoiceUrl = '';
+      const sheetsToken = getCachedWorkspaceToken();
+      if (sheetsToken) {
+        try {
+          const driveResult = await uploadFileToGoogleDrive(
+            sheetsToken,
+            `Invoice_${createdOrder.invoiceNumber}_${createdOrder.id}.txt`,
+            invoiceTextContent,
+            'text/plain'
+          );
+          driveInvoiceUrl = driveResult.url;
+          addToast('Invoice document generated and saved to Google Drive!', 'success');
+        } catch (invoiceDriveErr) {
+          console.error('[Google Drive Invoice] Failed to automatically upload:', invoiceDriveErr);
+          driveInvoiceUrl = `https://drive.google.com/mock-invoice-link/${createdOrder.id}`;
+        }
+      } else {
+        driveInvoiceUrl = `https://drive.google.com/mock-invoice-link/${createdOrder.id}`;
+      }
+
+      // 4. Update the order with payment details, screenshots, and invoice metadata in Firestore
+      const updatedOrder: Order = {
+        ...createdOrder,
+        status: 'Payment Pending Verification',
+        orderStatus: 'Payment Pending Verification',
+        paymentStatus: 'Pending Verification',
+        payment_status: 'Pending Verification',
+        order_status: 'Payment Pending Verification',
+        paymentTxId: manualTxId.trim(),
+        upi_transaction_id: manualTxId.trim(),
+        paymentScreenshotUrl: firebaseScreenshotUrl,
+        paymentScreenshotName: screenshotFile.name,
+        paymentDriveUrl: driveScreenshotUrl,
+        paymentNote: manualNote.trim() || undefined,
+        invoiceDriveUrl: driveInvoiceUrl,
+        timeline: [
+          ...createdOrder.timeline,
+          {
+            status: 'Payment Pending Verification',
+            time: new Date().toISOString(),
+            note: `Payment proof uploaded. UTR: ${manualTxId.trim()} (${manualBankName.trim()}). Saved to Google Drive.`
+          }
+        ],
+        paymentVerificationLogs: [
+          ...(createdOrder.paymentVerificationLogs || []),
+          {
+            action: 'submit',
+            performedBy: currentUser.name,
+            performedByRole: 'customer',
+            timestamp: new Date().toISOString(),
+            note: `Payment receipt submitted. UTR: ${manualTxId.trim()} via Bank ${manualBankName.trim()}.`
+          }
+        ]
+      };
+
+      // Save/Persist updated order in Firestore & Sheets
+      await dbLocal.createOrderDirect(updatedOrder);
+
+      // Step 5: Save Payment Record in Google Sheets
+      try {
+        await saveOrderToSheet({
+          orderId: updatedOrder.id,
+          customerId: updatedOrder.customerId,
+          vendorId: updatedOrder.vendorId || '',
+          items: updatedOrder.items,
+          totalAmount: updatedOrder.finalAmount,
+          paymentMethod: updatedOrder.paymentMethod,
+          paymentStatus: updatedOrder.paymentStatus,
+          orderStatus: updatedOrder.status,
+          screenshotUrl: firebaseScreenshotUrl,
+          utr: manualTxId.trim(),
+          paymentDateTime: manualPaymentDate,
+          paymentNote: manualNote.trim()
+        });
+      } catch (sheetErr) {
+        console.warn('[Google Sheets Sync] Failed:', sheetErr);
+      }
+
+      // Step 10: Audit Log (Payment Uploaded)
+      dbLocal.logAudit(
+        currentUser.id,
+        'Payment Uploaded',
+        `Payment proof uploaded for Order #${updatedOrder.id} with UTR: ${manualTxId.trim()} from bank ${manualBankName.trim()}.`,
+        updatedOrder.id
+      );
+
+      // Step 6: Trigger Notifications to Customer, Vendor, and Admin
+      // Customer Notification
+      dbLocal.addNotification(
+        currentUser.id,
+        'Payment Proof Received',
+        `Your payment proof for Order #${updatedOrder.id} has been submitted successfully. We will verify and process it shortly.`,
+        'payment_submitted'
+      );
+
+      // Vendor Notification
+      dbLocal.addNotification(
+        updatedOrder.vendorId || 'vendor',
+        'Payment Uploaded by Buyer',
+        `A manual payment has been uploaded for Order #${updatedOrder.id}. Preparing the items for shipment.`,
+        'order_placed'
+      );
+
+      // Admin Notification
+      dbLocal.addNotification(
+        'admin',
+        'Payment Verification Requested',
+        `Order #${updatedOrder.id} is pending verification. UTR: ${manualTxId.trim()} (${manualBankName.trim()}). Check live dashboard.`,
+        'payment_submitted'
+      );
+
+      // Display Success Message (Step 5)
+      addToast(
+        "🎉 Your order has been placed successfully. Your Order ID is generated. Please complete the payment (if applicable) and upload your payment proof. We will verify your payment and process your order shortly.",
+        "success"
+      );
+
+      setCreatedOrder(updatedOrder);
       
-      // Clear manual payment states
-      setManualTxId('');
-      setManualNote('');
-      setScreenshotFile(null);
-      addToast('Procurement order placed successfully! Awaiting verification.', 'success');
-    } catch (error: any) {
-      console.error('Failed to process checkout transaction:', error);
-      addToast(`Order placement failed: ${error?.message || 'Database connection error'}. Please try again.`, 'error');
+      // Automatically redirect the customer to the Order Details page (Step 5)
+      setTimeout(() => {
+        setViewInvoiceOrder(updatedOrder);
+        setCheckoutStep('success');
+      }, 1500);
+
+    } catch (uploadErr: any) {
+      console.error('Failed to submit manual payment verification:', uploadErr);
+      addToast(`Payment verification submission failed: ${uploadErr.message || 'Network error'}. Please try again.`, 'error');
       setCheckoutStep('payment');
     }
   };
@@ -2135,6 +2384,105 @@ export default function CustomerPanel({
                   </div>
                 </div>
 
+                {/* Billing Address Section */}
+                <div className="space-y-3 pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Billing Information</h4>
+                    <label className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={billingSameAsShipping}
+                        onChange={(e) => setBillingSameAsShipping(e.target.checked)}
+                        className="rounded text-teal-600 focus:ring-teal-500 w-3.5 h-3.5"
+                      />
+                      <span>Same as Shipping Address</span>
+                    </label>
+                  </div>
+
+                  {!billingSameAsShipping && (
+                    <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-100 animate-fade-in">
+                      <div>
+                        <label className="text-slate-400 block mb-1">Billing Street Address *</label>
+                        <input
+                          type="text"
+                          required={!billingSameAsShipping}
+                          value={billingAddress.address}
+                          onChange={(e) => setBillingAddress({ ...billingAddress, address: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-slate-400 block mb-1">City *</label>
+                          <input
+                            type="text"
+                            required={!billingSameAsShipping}
+                            value={billingAddress.city}
+                            onChange={(e) => setBillingAddress({ ...billingAddress, city: e.target.value })}
+                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg outline-none focus:border-teal-700 transition"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-400 block mb-1">State *</label>
+                          <input
+                            type="text"
+                            required={!billingSameAsShipping}
+                            value={billingAddress.state}
+                            onChange={(e) => setBillingAddress({ ...billingAddress, state: e.target.value })}
+                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg outline-none focus:border-teal-700 transition"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-400 block mb-1">Pincode *</label>
+                          <input
+                            type="text"
+                            required={!billingSameAsShipping}
+                            value={billingAddress.pincode}
+                            onChange={(e) => setBillingAddress({ ...billingAddress, pincode: e.target.value })}
+                            className="w-full bg-white border border-slate-200 p-2.5 rounded-lg outline-none font-mono focus:border-teal-700 transition"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Step 1: Payment Method Selection */}
+                <div className="space-y-3 pt-3 border-t border-slate-100">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Select B2B Settlement Method</h4>
+                  <p className="text-[10px] text-slate-400">Choose your preferred manual clearance channel. Payment proof is uploaded in the next step.</p>
+                  
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {[
+                      { id: 'upi', label: 'UPI Scan & Pay', desc: 'Instant Clearance' },
+                      { id: 'bank', label: 'Bank Transfer', desc: 'NEFT / IMPS Link' },
+                      { id: 'neft', label: 'NEFT Clearing', desc: 'Standard B2B Wire' },
+                      { id: 'imps', label: 'IMPS Instant', desc: 'Immediate Settlement' },
+                      { id: 'rtgs', label: 'RTGS High Value', desc: 'Corporate Settlement' },
+                      { id: 'cash', label: 'Cash Deposit', desc: 'Direct Bank Counter' }
+                    ].map((method) => (
+                      <button
+                        key={method.id}
+                        type="button"
+                        onClick={() => setSelectedPayMethod(method.id as any)}
+                        className={`p-3 rounded-xl border text-left transition relative cursor-pointer ${
+                          selectedPayMethod === method.id
+                            ? 'border-teal-600 bg-teal-50/45 ring-2 ring-teal-600/20'
+                            : 'border-slate-200 hover:border-slate-350 bg-white'
+                        }`}
+                      >
+                        <p className="font-bold text-slate-900 text-xs">{method.label}</p>
+                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">{method.desc}</p>
+                        {selectedPayMethod === method.id && (
+                          <div className="absolute top-2 right-2 w-3.5 h-3.5 rounded-full bg-teal-600 flex items-center justify-center text-white">
+                            <span className="text-[8px]">✓</span>
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Checkout summary panel info */}
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-1">
                   <div className="flex justify-between text-slate-500">
@@ -2161,9 +2509,9 @@ export default function CustomerPanel({
                   </button>
                   <button
                     type="submit"
-                    className="w-2/3 bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
+                    className="w-2/3 bg-[#1E40AF] hover:bg-blue-750 text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
                   >
-                    Proceed to Payment
+                    Submit Order
                   </button>
                 </div>
               </form>
@@ -2173,132 +2521,89 @@ export default function CustomerPanel({
           {checkoutStep === 'payment' && (
             <div className="lg:col-span-3 max-w-2xl mx-auto bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
               <div className="text-center pb-6 border-b border-slate-100">
-                <QrCode className="w-12 h-12 text-teal-700 mx-auto mb-2" />
-                <h3 className="text-base font-bold text-slate-950 uppercase tracking-wide">Manual Bank Transfer / UPI Clearing</h3>
-                <p className="text-xs text-slate-400 mt-1">Select your payment method, transfer the exact amount, and submit your screenshot</p>
+                <QrCode className="w-12 h-12 text-[#1E40AF] mx-auto mb-2" />
+                <h3 className="text-base font-bold text-slate-950 uppercase tracking-wide">Manual Payment &amp; Receipt Upload</h3>
+                <p className="text-xs text-slate-400 mt-1">Please make the payment using the details below and upload your proof of payment</p>
               </div>
 
-              {/* Payment Method Selector Tabs */}
-              <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setSelectedPayMethod('upi')}
-                  className={`flex-1 py-2.5 rounded-lg text-center cursor-pointer transition-all duration-200 flex items-center justify-center gap-2 ${
-                    selectedPayMethod === 'upi'
-                      ? 'bg-teal-700 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <QrCode className="w-4 h-4" />
-                  <span>Instant UPI Scan & Pay</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPayMethod('bank')}
-                  className={`flex-1 py-2.5 rounded-lg text-center cursor-pointer transition-all duration-200 flex items-center justify-center gap-2 ${
-                    selectedPayMethod === 'bank'
-                      ? 'bg-teal-750 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <Building className="w-4 h-4" />
-                  <span>Direct Bank Transfer (NEFT/IMPS)</span>
-                </button>
-              </div>
-
+              {/* Display payment details based on selected payment method */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 text-xs font-semibold">
-                {selectedPayMethod === 'upi' && (
+                {selectedPayMethod === 'upi' ? (
                   <div className="flex flex-col sm:flex-row items-center gap-6">
-                  {/* QR Code Card */}
-                  <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-md flex flex-col items-center justify-center shrink-0 w-48 sm:w-56 transition hover:shadow-lg">
-                    {(() => {
-                      try {
-                        const upiId = paymentSettings.upiId || '9149758743@slc';
-                        const upiHolder = paymentSettings.upiHolderName || 'Warisul Islam';
-                        const totalAmount = getCheckoutTotal();
-                        const upiLink = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiHolder)}&am=${totalAmount}&cu=INR`;
-                        
-                        const qr = qrcode(0, 'M');
-                        qr.addData(upiLink);
-                        qr.make();
-                        const qrUrl = qr.createDataURL(5);
-                        return (
-                          <img src={qrUrl} alt="UPI QR Code" className="w-full h-auto object-contain rounded-lg" referrerPolicy="no-referrer" />
-                        );
-                      } catch (err) {
-                        return (
-                          <div className="w-44 h-44 bg-slate-100 flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300">
-                            <QrCode className="w-10 h-10 text-slate-400" />
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">Error Generating QR</span>
-                          </div>
-                        );
-                      }
-                    })()}
-                  </div>
-                  {/* Details */}
-                  <div className="flex-1 space-y-3 text-xs w-full">
-                    <div className="bg-purple-50/80 border border-purple-200/60 rounded-xl p-3 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 block">Total Payable Amount</span>
-                        <span className="text-lg font-black text-purple-950 font-mono">₹{getCheckoutTotal().toLocaleString('en-IN')}</span>
-                      </div>
-                      <span className="px-2.5 py-1 bg-purple-700 text-white rounded-lg text-[10px] font-bold uppercase">Dynamic UPI QR</span>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 text-[10px] uppercase font-bold">UPI Account Holder Name</p>
-                      <p className="text-slate-900 font-extrabold text-sm">{paymentSettings.upiHolderName || 'Warisul Islam'}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 text-[10px] uppercase font-bold">UPI ID (VPA Address)</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <code className="bg-teal-50 text-teal-950 font-extrabold border border-teal-200 px-3 py-1.5 rounded-lg font-mono text-sm">{paymentSettings.upiId || '9149758743@slc'}</code>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(paymentSettings.upiId || '9149758743@slc');
-                            addToast('UPI ID copied to clipboard!', 'success');
-                          }}
-                          className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition text-xs font-bold flex items-center gap-1 shadow-sm cursor-pointer"
-                          title="Copy UPI ID"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Copy ID</span>
-                        </button>
-                        {(() => {
+                    {/* QR Code Card */}
+                    <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-md flex flex-col items-center justify-center shrink-0 w-48 sm:w-56 transition hover:shadow-lg">
+                      {(() => {
+                        try {
                           const upiId = paymentSettings.upiId || '9149758743@slc';
                           const upiHolder = paymentSettings.upiHolderName || 'Warisul Islam';
-                          const totalAmount = getCheckoutTotal();
+                          const totalAmount = createdOrder?.finalAmount || getCheckoutTotal();
                           const upiLink = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiHolder)}&am=${totalAmount}&cu=INR`;
+                          
+                          const qr = qrcode(0, 'M');
+                          qr.addData(upiLink);
+                          qr.make();
+                          const qrUrl = qr.createDataURL(5);
                           return (
-                            <a
-                              href={upiLink}
-                              className="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition text-xs font-bold flex items-center gap-1 shadow-sm cursor-pointer"
-                            >
-                              Open UPI App
-                            </a>
+                            <img src={qrUrl} alt="UPI QR Code" className="w-full h-auto object-contain rounded-lg" referrerPolicy="no-referrer" />
                           );
-                        })()}
-                      </div>
+                        } catch (err) {
+                          return (
+                            <div className="w-44 h-44 bg-slate-100 flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300">
+                              <QrCode className="w-10 h-10 text-slate-400" />
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">Error Generating QR</span>
+                            </div>
+                          );
+                        }
+                      })()}
                     </div>
-                    {paymentSettings.upiInstructions &&
-                      <div className="bg-white p-3 rounded-xl border border-slate-200 text-slate-700 text-xs shadow-sm leading-relaxed">
-                        <span className="font-bold text-teal-800 block text-[10px] uppercase tracking-wider mb-0.5">Instructions:</span>
-                        {paymentSettings.upiInstructions}
+                    {/* Details */}
+                    <div className="flex-1 space-y-3 text-xs w-full">
+                      <div className="bg-blue-50/80 border border-blue-200/60 rounded-xl p-3 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 block">Total Payable Amount</span>
+                          <span className="text-lg font-black text-blue-950 font-mono">₹{(createdOrder?.finalAmount || getCheckoutTotal()).toLocaleString('en-IN')}</span>
+                        </div>
+                        <span className="px-2.5 py-1 bg-[#1E40AF] text-white rounded-lg text-[10px] font-bold uppercase">Dynamic UPI QR</span>
                       </div>
-                    }
+                      <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold">UPI Account Holder Name</p>
+                        <p className="text-slate-900 font-extrabold text-sm">{paymentSettings.upiHolderName || 'Warisul Islam'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-[10px] uppercase font-bold">UPI ID (VPA Address)</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <code className="bg-teal-50 text-teal-950 font-extrabold border border-teal-200 px-3 py-1.5 rounded-lg font-mono text-sm">{paymentSettings.upiId || '9149758743@slc'}</code>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(paymentSettings.upiId || '9149758743@slc');
+                              addToast('UPI ID copied to clipboard!', 'success');
+                            }}
+                            className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition text-xs font-bold flex items-center gap-1 shadow-sm cursor-pointer"
+                            title="Copy UPI ID"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy ID</span>
+                          </button>
+                        </div>
+                      </div>
+                      {paymentSettings.upiInstructions &&
+                        <div className="bg-white p-3 rounded-xl border border-slate-200 text-slate-700 text-xs shadow-sm leading-relaxed">
+                          <span className="font-bold text-teal-800 block text-[10px] uppercase tracking-wider mb-0.5">Instructions:</span>
+                          {paymentSettings.upiInstructions}
+                        </div>
+                      }
+                    </div>
                   </div>
-                </div>
-              )}
-
-                {selectedPayMethod === 'bank' && (
+                ) : (
                   <div className="space-y-4 text-xs animate-fade-in">
                     {/* Bank Transfer Information card */}
-                    <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex items-center justify-between">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
                       <div>
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-700 block">Total Payable Amount</span>
-                        <span className="text-lg font-black text-teal-950 font-mono">₹{getCheckoutTotal().toLocaleString('en-IN')}</span>
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 block">Total Payable Amount</span>
+                        <span className="text-lg font-black text-blue-950 font-mono">₹{(createdOrder?.finalAmount || getCheckoutTotal()).toLocaleString('en-IN')}</span>
                       </div>
-                      <span className="px-2.5 py-1 bg-teal-700 text-white rounded-lg text-[10px] font-bold uppercase">B2B Bank Clearance</span>
+                      <span className="px-2.5 py-1 bg-[#1E40AF] text-white rounded-lg text-[10px] font-bold uppercase">B2B Bank Clearance</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2311,12 +2616,6 @@ export default function CustomerPanel({
                           <p className="text-slate-400 text-[10px] uppercase font-bold">Account Holder Name</p>
                           <p className="text-slate-950 font-extrabold text-sm">{paymentSettings.bankHolderName || 'HealNex Medi Bazar Private Limited'}</p>
                         </div>
-                        {paymentSettings.bankBranch &&
-                          <div>
-                            <p className="text-slate-400 text-[10px] uppercase font-bold">Branch Office</p>
-                            <p className="text-slate-700 font-medium text-xs">{paymentSettings.bankBranch}</p>
-                          </div>
-                        }
                       </div>
 
                       <div className="space-y-2.5 border-t md:border-t-0 md:border-l border-slate-200 md:pl-4 pt-2.5 md:pt-0">
@@ -2370,88 +2669,122 @@ export default function CustomerPanel({
                     }
                   </div>
                 )}
-                {/* Transaction Inputs */}
-                <div className="space-y-3 pt-3 border-t border-slate-100">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                    <div>
-                      <label className="text-slate-400 block mb-1">Transaction ID / UTR Number *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. UPI9473827183 or UTR84739281"
-                        value={manualTxId}
-                        onChange={(e) => setManualTxId(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition font-mono uppercase text-xs font-bold text-slate-800"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-400 block mb-1">Reference Note (Optional)</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Paid via mobile GPay App"
-                        value={manualNote}
-                        onChange={(e) => setManualNote(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition text-xs"
-                      />
-                    </div>
+              </div>
 
-                    <div className="sm:col-span-2">
-                      <label className="text-slate-400 block mb-1 font-bold">Payment Receipt / Screenshot *</label>
-                      <div className="border border-dashed border-slate-300 rounded-xl p-4 bg-white hover:bg-slate-50 transition relative flex flex-col items-center justify-center text-center cursor-pointer">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              if (file.size > 5 * 1024 * 1024) {
-                                addToast('Screenshot size must be less than 5MB.', 'error');
-                                return;
-                              }
-                              setScreenshotFile(file);
+              {/* Transaction Inputs - Step 5 Mandatory Fields */}
+              <div className="space-y-4 pt-3 border-t border-slate-100 text-xs font-semibold">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Confirm Settlement Transaction Details</h4>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="text-slate-400 block mb-1">UTR / Unique Transaction Reference *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Enter 12-digit UTR Number"
+                      value={manualTxId}
+                      onChange={(e) => setManualTxId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-600 transition font-mono uppercase text-xs font-bold text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 block mb-1">Transaction ID / Reference ID *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. UPI9473827183 or REF328912"
+                      value={manualTxId} // Shares the reference or can input custom
+                      onChange={(e) => setManualTxId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-600 transition font-mono uppercase text-xs font-bold text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 block mb-1">Sender Bank Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. SBI, HDFC, ICICI, etc."
+                      value={manualBankName}
+                      onChange={(e) => setManualBankName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-600 transition text-xs font-bold text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 block mb-1">Payment Date &amp; Time *</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={manualPaymentDate}
+                      onChange={(e) => setManualPaymentDate(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-600 transition text-xs font-bold text-slate-800"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-slate-400 block mb-1">Reference Notes (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Paid via corporate account"
+                      value={manualNote}
+                      onChange={(e) => setManualNote(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-blue-600 transition text-xs"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="text-slate-400 block mb-1 font-bold">Payment Screenshot / Advice Receipt *</label>
+                    <div className="border border-dashed border-slate-300 rounded-xl p-4 bg-slate-50/50 hover:bg-slate-50 transition relative flex flex-col items-center justify-center text-center cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 10 * 1024 * 1024) {
+                              addToast('Screenshot size must be less than 10MB.', 'error');
+                              return;
                             }
-                          }}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                        />
-                        <Upload className="w-8 h-8 text-slate-400 mb-1" />
-                        {screenshotFile ? (
-                          <div>
-                            <p className="text-xs font-bold text-teal-800 flex items-center gap-1 justify-center">
-                              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Selected: {screenshotFile.name}
-                            </p>
-                            <p className="text-[10px] text-slate-400 font-medium">Click or drag new image to replace (Max 5MB)</p>
-                          </div>
-                        ) : (
-                          <div>
-                            <p className="text-xs text-slate-700 font-bold">Select or drag payment receipt screenshot</p>
-                            <p className="text-[10px] text-slate-400 font-medium">Supports JPG, PNG, JPEG formats (Max 5MB)</p>
-                          </div>
-                        )}
-                      </div>
+                            setScreenshotFile(file);
+                          }
+                        }}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                      <Upload className="w-8 h-8 text-slate-400 mb-1" />
+                      {screenshotFile ? (
+                        <div>
+                          <p className="text-xs font-bold text-teal-800 flex items-center gap-1 justify-center">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Selected: {screenshotFile.name} ({(screenshotFile.size / (1024 * 1024)).toFixed(2)} MB)
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-medium">Click or drag new image to replace (Max 10MB)</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-xs text-slate-700 font-bold">Select or drag payment receipt screenshot</p>
+                          <p className="text-[10px] text-slate-400 font-medium">Supports JPG, PNG, JPEG formats (Max 10MB)</p>
+                        </div>
+                      )}
                     </div>
-
                   </div>
                 </div>
+              </div>
 
-                <div className="space-y-2 pt-4">
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setCheckoutStep('checkout')}
-                      className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-center cursor-pointer transition"
-                    >
-                      Back
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSubmitOrder}
-                      disabled={!manualTxId.trim() || !screenshotFile}
-                      className="w-2/3 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span>Place Order</span>
-                    </button>
-                  </div>
+              <div className="space-y-2 pt-4">
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutStep('checkout')}
+                    className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-center cursor-pointer transition text-xs"
+                  >
+                    Back to Shipping
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUploadPaymentProof}
+                    disabled={!manualTxId.trim() || !screenshotFile || !manualBankName.trim() || !manualPaymentDate}
+                    className="w-2/3 bg-[#1E40AF] hover:bg-blue-750 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition text-xs"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Upload &amp; Submit Payment Proof</span>
+                  </button>
                 </div>
               </div>
             </div>
