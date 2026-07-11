@@ -773,12 +773,10 @@ export const dbLocal = {
       const adminIdx = users.findIndex(u => u.role === 'super_admin' || u.id === 'user-superadmin');
       if (adminIdx !== -1) {
         const admin = users[adminIdx];
-        if (admin.email !== 'warisulislam371@gmail.com' || admin.password !== 'Waris@123' || admin.forcePasswordChange) {
+        if (admin.email !== 'warisulislam371@gmail.com') {
           users[adminIdx] = {
             ...admin,
-            email: 'warisulislam371@gmail.com',
-            password: 'Waris@123',
-            forcePasswordChange: false
+            email: 'warisulislam371@gmail.com'
           };
           this.set(STORAGE_KEYS.USERS, users);
         }

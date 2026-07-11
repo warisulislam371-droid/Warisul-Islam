@@ -2,6 +2,8 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
+import { google } from 'googleapis';
+import { Readable } from 'stream';
 import { generateSitemapXml, generateRobotsTxt } from './src/seo/generator';
 
 dotenv.config();
@@ -21,6 +23,180 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+  // Helper for Google API Auth
+  const getGoogleAuth = () => {
+    const serviceAccountEmail = process.env.GOOGLE_SERVICE_AC;
+    const privateKey = process.env.GOOGLE_PRIVATE_KE?.replace(/\\n/g, '\n');
+
+    if (!serviceAccountEmail || !privateKey) {
+      console.warn('Google Service Account credentials (GOOGLE_SERVICE_AC, GOOGLE_PRIVATE_KE) are not fully configured.');
+      return null;
+    }
+
+    return new google.auth.JWT({
+      email: serviceAccountEmail,
+      key: privateKey,
+      scopes: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive',
+        'https://www.googleapis.com/auth/drive.file'
+      ]
+    });
+  };
+
+  // Google Sheets Save Order Endpoint
+  app.post('/api/sheets/save-order', async (req, res) => {
+    try {
+      const order = req.body;
+      const spreadsheetId = process.env.GOOGLE_ORDERS_SH;
+
+      if (!spreadsheetId) {
+        console.warn('GOOGLE_ORDERS_SH environment variable is missing.');
+        return res.json({ success: false, error: 'GOOGLE_ORDERS_SH environment variable is missing.' });
+      }
+
+      const auth = getGoogleAuth();
+      if (!auth) {
+        console.warn('Google service account auth is not configured.');
+        return res.json({ success: false, error: 'Google service account credentials missing or invalid.' });
+      }
+
+      const sheets = google.sheets({ version: 'v4', auth });
+      const range = 'Sheet1!A:P';
+
+      // Check if headers are already written
+      let hasHeaders = false;
+      try {
+        const checkRes = await sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: 'Sheet1!A1:P1'
+        });
+        hasHeaders = checkRes.data.values && checkRes.data.values.length > 0;
+      } catch (getErr) {
+        console.log('Sheet1 A1:P1 range lookup failed, attempting to create range headers.');
+      }
+
+      if (!hasHeaders) {
+        try {
+          await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: 'Sheet1!A1:P1',
+            valueInputOption: 'RAW',
+            requestBody: {
+              values: [[
+                'Order ID', 'Customer ID', 'Vendor ID', 'Items', 'Total Amount', 'Payment Method', 'Payment Status', 'Order Status', 'Screenshot URL', 'UTR', 'Payment Date Time', 'Payment Note', 'Rejection Reason', 'Assigned To Vendor', 'Created At', 'Updated At'
+              ]]
+            }
+          });
+        } catch (headerErr: any) {
+          console.error('Failed to write headers to Google Sheet:', headerErr.message);
+        }
+      }
+
+      // Format items to standard string
+      let itemsStr = order.items;
+      if (typeof itemsStr !== 'string') {
+        itemsStr = JSON.stringify(itemsStr);
+      }
+
+      const rowValues = [
+        order.orderId || '',
+        order.customerId || '',
+        order.vendorId || '',
+        itemsStr || '[]',
+        order.totalAmount || 0,
+        order.paymentMethod || '',
+        order.paymentStatus || '',
+        order.orderStatus || '',
+        order.screenshotUrl || '',
+        order.utr || '',
+        order.paymentDateTime || '',
+        order.paymentNote || '',
+        order.rejectionReason || '',
+        order.assignedToVendor || '',
+        order.createdAt || new Date().toISOString(),
+        order.updatedAt || new Date().toISOString()
+      ];
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [rowValues]
+        }
+      });
+
+      console.log(`[Google Sheets API] Order ${order.orderId} written to sheet successfully.`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Google Sheets Save Order Error:', error);
+      res.status(500).json({ success: false, error: error.message || String(error) });
+    }
+  });
+
+  // Google Drive Upload Screenshot Endpoint
+  app.post('/api/drive/upload-screenshot', async (req, res) => {
+    try {
+      const { fileBase64, fileName, mimeType, orderId } = req.body;
+
+      if (!fileBase64) {
+        return res.status(400).json({ success: false, error: 'Missing fileBase64 content.' });
+      }
+
+      const auth = getGoogleAuth();
+      if (!auth) {
+        console.warn('Google service account auth is not configured for Drive upload.');
+        return res.json({ success: false, error: 'Google service account credentials missing or invalid.' });
+      }
+
+      const drive = google.drive({ version: 'v3', auth });
+      const buffer = Buffer.from(fileBase64, 'base64');
+      const fileMetadata = {
+        name: `${orderId}_${fileName || 'payment_screenshot.png'}`,
+        parents: [] // root
+      };
+
+      const media = {
+        mimeType: mimeType || 'image/png',
+        body: Readable.from(buffer)
+      };
+
+      const driveResponse = await drive.files.create({
+        requestBody: fileMetadata,
+        media,
+        fields: 'id, webViewLink, webContentLink'
+      });
+
+      const fileId = driveResponse.data.id;
+
+      // Make readable by anyone with the link
+      try {
+        await drive.permissions.create({
+          fileId,
+          requestBody: {
+            role: 'reader',
+            type: 'anyone'
+          }
+        });
+      } catch (permError: any) {
+        console.warn('Could not make Drive file public, proceeding anyway:', permError.message);
+      }
+
+      const updatedFile = await drive.files.get({
+        fileId,
+        fields: 'id, webViewLink, webContentLink'
+      });
+
+      const link = updatedFile.data.webViewLink || driveResponse.data.webViewLink;
+      console.log(`[Google Drive API] Screenshot for order ${orderId} uploaded successfully: ${link}`);
+      res.json({ success: true, webViewLink: link });
+    } catch (error: any) {
+      console.error('Google Drive Screenshot Upload Error:', error);
+      res.status(500).json({ success: false, error: error.message || String(error) });
+    }
+  });
 
   // Local fallback scoring for semantic search
   const runLocalSearch = (searchQuery: string, products: any[]) => {

@@ -12,7 +12,15 @@ import WhatsAppWidget from './components/WhatsAppWidget';
 import TrustAndSafetyPage from './components/TrustAndSafetyPage';
 import ReviewsPage from './components/ReviewsPage';
 import PolicyModal, { PolicyType } from './components/PolicyModal';
-import { LogIn, User as UserIcon, Store, KeyRound, ArrowRight, Menu, ChevronLeft, ChevronRight, Activity, ShoppingCart, MessageSquare, BookOpen, FileText, ClipboardList, HelpCircle, Palette, Moon, Sun, Heart, Sparkles, SlidersHorizontal, UserPlus, LogOut } from 'lucide-react';
+import { LogIn, User as UserIcon, Store, KeyRound, ArrowRight, Menu, ChevronLeft, ChevronRight, Activity, ShoppingCart, MessageSquare, BookOpen, FileText, ClipboardList, HelpCircle, Palette, Moon, Sun, Heart, Sparkles, SlidersHorizontal, UserPlus, LogOut, ShieldCheck } from 'lucide-react';
+
+import AdminPaymentSettingsPage from '../app/admin/settings/payment/page';
+import AdminWhatsAppSettingsPage from '../app/admin/settings/whatsapp/page';
+import AdminVerificationDashboard from '../app/admin/verification/page';
+import AdminDashboardPage from '../app/admin/page';
+import VendorOrdersPage from '../app/vendor/orders/page';
+import CheckoutManualPage from '../app/checkout/page';
+import WhatsappButton from './components/WhatsappButton';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -289,6 +297,54 @@ export default function App() {
                 }
               },
               {
+                id: 'checkout',
+                label: 'Manual Checkout (UI)',
+                icon: ShoppingCart,
+                badge: null,
+                show: currentUser?.role === 'super_admin' || currentUser?.role === 'admin',
+                onClick: () => setCurrentView('checkout')
+              },
+              {
+                id: 'admin-dashboard',
+                label: 'Admin Command Center',
+                icon: ShieldCheck,
+                badge: null,
+                show: currentUser?.role === 'super_admin' || currentUser?.role === 'admin',
+                onClick: () => setCurrentView('admin-dashboard')
+              },
+              {
+                id: 'admin-payment-settings',
+                label: 'Payment Gateway Setup',
+                icon: KeyRound,
+                badge: null,
+                show: currentUser?.role === 'super_admin' || currentUser?.role === 'admin',
+                onClick: () => setCurrentView('admin-payment-settings')
+              },
+              {
+                id: 'admin-whatsapp-settings',
+                label: 'WhatsApp Setup',
+                icon: MessageSquare,
+                badge: null,
+                show: currentUser?.role === 'super_admin' || currentUser?.role === 'admin',
+                onClick: () => setCurrentView('admin-whatsapp-settings')
+              },
+              {
+                id: 'admin-verification',
+                label: 'Payment Verification',
+                icon: ShieldCheck,
+                badge: null,
+                show: currentUser?.role === 'super_admin' || currentUser?.role === 'admin',
+                onClick: () => setCurrentView('admin-verification')
+              },
+              {
+                id: 'vendor-orders',
+                label: 'Vendor Fulfillment',
+                icon: ClipboardList,
+                badge: null,
+                show: currentUser?.role === 'vendor' || currentUser?.role === 'super_admin' || currentUser?.role === 'admin',
+                onClick: () => setCurrentView('vendor-orders')
+              },
+              {
                 id: 'admin',
                 label: 'Super Admin Desk',
                 icon: SlidersHorizontal,
@@ -301,7 +357,7 @@ export default function App() {
                 label: 'Vendor Desk',
                 icon: Store,
                 badge: null,
-                show: currentUser?.role === 'vendor',
+                show: currentUser?.role === 'vendor' || currentUser?.role === 'super_admin' || currentUser?.role === 'admin',
                 onClick: () => setCurrentView('vendor')
               },
               {
@@ -501,6 +557,30 @@ export default function App() {
               <AdminPanel currentUser={currentUser} addToast={addToast} />
             )}
 
+            {currentView === 'admin-payment-settings' && (
+              <AdminPaymentSettingsPage />
+            )}
+
+            {currentView === 'admin-whatsapp-settings' && (
+              <AdminWhatsAppSettingsPage />
+            )}
+
+            {currentView === 'admin-verification' && (
+              <AdminVerificationDashboard />
+            )}
+
+            {currentView === 'admin-dashboard' && (
+              <AdminDashboardPage navigateTo={(view, path) => setCurrentView(view)} />
+            )}
+
+            {currentView === 'vendor-orders' && (
+              <VendorOrdersPage />
+            )}
+
+            {currentView === 'checkout' && (
+              <CheckoutManualPage />
+            )}
+
             {/* Supplier Vendor Console */}
             {currentView === 'vendor' && (
               <VendorPanel currentUser={currentUser} addToast={addToast} />
@@ -597,7 +677,7 @@ export default function App() {
       </div>
 
       {/* Global Admin-Managed WhatsApp Support Widget */}
-      <WhatsAppWidget currentUser={currentUser} currentView={currentView} />
+      <WhatsappButton customerName={currentUser?.name || 'Customer'} />
 
     </div>
   );

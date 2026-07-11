@@ -362,8 +362,8 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
       return;
     }
 
-    // Force password reset workflow for Default Super Admin if password matches default '654321'
-    if (match.email === 'warisulislam371@gmail.com' && match.password === '654321') {
+    // Force password reset workflow for Default Super Admin if password matches default 'Waris@123'
+    if (match.email === 'warisulislam371@gmail.com' && match.password === 'Waris@123') {
       setTempAdminUser(match);
       setMode('force_reset');
       return;
