@@ -44,8 +44,7 @@ export default function App() {
   // Unified high-density toast state
   const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
   const addToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    const randomSuffix = Math.random().toString(36).substring(2, 9);
-    const id = `toast-${Date.now()}-${randomSuffix}`;
+    const id = `toast-${Date.now()}`;
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
@@ -119,9 +118,217 @@ export default function App() {
 
   return (
     <div className={`flex h-screen w-screen overflow-hidden font-sans selection:bg-teal-700 selection:text-white transition-colors duration-300 theme-${designTemplate} ${
-      isDarkMode ? 'bg-slate-950 text-slate-100 dark' : 'bg-white text-slate-800'
+      isDarkMode ? 'bg-slate-950 text-slate-100 dark' : 'bg-slate-100 text-slate-800'
     }`}>
       
+      {/* Left Sidebar (Only visible on medium screens and up) */}
+      <aside className="w-56 bg-teal-700 flex flex-col text-white shrink-0 hidden md:flex border-r border-teal-900/40 shadow-xl">
+        {/* Brand Header */}
+        <div className="p-4 border-b border-teal-800">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="bg-white p-1 rounded-lg shadow-sm">
+              <svg className="w-5 h-5 text-teal-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path>
+              </svg>
+            </div>
+            <span className="font-bold text-xl tracking-tight leading-none font-display">HEALNEX</span>
+          </div>
+          <p className="text-[10px] uppercase tracking-widest opacity-70 font-bold font-display">Medi Bazar India</p>
+        </div>
+
+        {/* Sidebar Nav items */}
+        <nav className="flex-1 py-3 px-2.5 space-y-1 overflow-y-auto">
+          <div className="text-[9px] text-teal-300 font-bold uppercase tracking-wider px-2 mb-1.5 flex items-center justify-between">
+            <span>Control Center</span>
+            <button 
+              onClick={toggleDarkMode}
+              className="text-[9px] bg-teal-800/65 hover:bg-teal-800 px-1.5 py-0.5 rounded text-teal-200 transition font-sans cursor-pointer"
+              title="Toggle Clinical Theme"
+            >
+              {isDarkMode ? '🌙 Dark' : '☀️ Light'}
+            </button>
+          </div>
+
+          {/* Quick Sign In / Sign Up Auth Buttons */}
+          <div className="px-2 pb-2.5 mb-2.5 border-b border-teal-800/60">
+            <p className="text-[8px] text-teal-200 uppercase tracking-wider mb-1.5 font-bold opacity-80">Account Gateway</p>
+            <div className="grid grid-cols-2 gap-1">
+              <button
+                onClick={() => {
+                  setAuthModalMode('login');
+                  setShowAuth(true);
+                }}
+                className="py-1 px-1.5 bg-teal-800/60 hover:bg-white hover:text-teal-950 text-teal-100 text-[8px] font-bold rounded-md uppercase tracking-tight transition flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                title="Sign In to account"
+              >
+                <span>🔑 Sign In</span>
+              </button>
+              <button
+                onClick={() => {
+                  setAuthModalMode('register_customer');
+                  setShowAuth(true);
+                }}
+                className="py-1 px-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[8px] font-bold rounded-md uppercase tracking-tight transition flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                title="Create a new account"
+              >
+                <span>✨ Sign Up</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Dynamic Design Templates Grid Switcher */}
+          <div className="px-2 pb-2.5 mb-2.5 border-b border-teal-800/60">
+            <p className="text-[8px] text-teal-200 uppercase tracking-wider mb-1.5 font-bold opacity-80">Design Template</p>
+            <div className="grid grid-cols-2 gap-1">
+              {[
+                { id: 'sapphire', label: 'Sapphire Blue', color: 'bg-blue-500' },
+                { id: 'emerald', label: 'Emerald Mint', color: 'bg-emerald-500' },
+                { id: 'amethyst', label: 'Amethyst Biotech', color: 'bg-purple-500' },
+                { id: 'crimson', label: 'Crimson Cardio', color: 'bg-rose-500' }
+              ].map((tpl) => (
+                <button
+                  key={tpl.id}
+                  onClick={() => changeDesignTemplate(tpl.id)}
+                  className={`py-1 px-1.5 text-[7.5px] rounded-md font-bold uppercase tracking-tight text-left transition-all cursor-pointer flex items-center gap-1 ${
+                    designTemplate === tpl.id 
+                      ? 'bg-white text-teal-950 scale-[1.02] shadow-sm' 
+                      : 'bg-teal-800/40 hover:bg-teal-800/80 text-teal-100 hover:text-white'
+                  }`}
+                  title={`Switch to ${tpl.label}`}
+                >
+                  <span className={`w-1 h-1 rounded-full ${tpl.color} shrink-0 block`} />
+                  <span className="truncate">{tpl.id === 'sapphire' ? 'Sapphire' : tpl.id === 'emerald' ? 'Emerald' : tpl.id === 'amethyst' ? 'Biotech' : 'Cardio'}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Marketplace */}
+          <button 
+            onClick={() => {
+              setCurrentView('marketplace');
+              setSearchQuery('');
+              setSelectedCategoryName('');
+            }}
+            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors text-left ${
+              currentView === 'marketplace' ? 'bg-teal-800 text-white shadow-sm' : 'hover:bg-teal-800/55 text-teal-100'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${currentView === 'marketplace' ? 'bg-orange-400 animate-ping' : 'bg-transparent'}`}></span>
+            Marketplace
+          </button>
+
+          {/* Super Admin Desk (Conditional) */}
+          {currentUser?.role === 'super_admin' && (
+            <button 
+              onClick={() => setCurrentView('admin')}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors text-left ${
+                currentView === 'admin' ? 'bg-teal-800 text-white shadow-sm' : 'hover:bg-teal-800/55 text-teal-100'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${currentView === 'admin' ? 'bg-orange-400 animate-pulse' : 'bg-transparent'}`}></span>
+              Super Admin Desk
+            </button>
+          )}
+
+          {/* Supplier Vendor Desk (Conditional) */}
+          {currentUser?.role === 'vendor' && (
+            <button 
+              onClick={() => setCurrentView('vendor')}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors text-left ${
+                currentView === 'vendor' ? 'bg-teal-800 text-white shadow-sm' : 'hover:bg-teal-800/55 text-teal-100'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${currentView === 'vendor' ? 'bg-orange-400 animate-pulse' : 'bg-transparent'}`}></span>
+              Vendor Desk
+            </button>
+          )}
+
+          {/* RFQ Procurement */}
+          <button 
+            onClick={() => setCurrentView('rfqs')}
+            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors text-left ${
+              currentView === 'rfqs' ? 'bg-teal-800 text-white shadow-sm' : 'hover:bg-teal-800/55 text-teal-100'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${currentView === 'rfqs' ? 'bg-orange-400 animate-ping' : 'bg-transparent'}`}></span>
+            RFQ Procurement
+          </button>
+
+          {/* My Orders for Customer */}
+          {currentUser && currentUser.role === 'customer' && (
+            <button 
+              onClick={() => setCurrentView('orders')}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors text-left ${
+                currentView === 'orders' ? 'bg-teal-800 text-white shadow-sm' : 'hover:bg-teal-800/55 text-teal-100'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${currentView === 'orders' ? 'bg-orange-400 animate-pulse' : 'bg-transparent'}`}></span>
+              My Orders
+            </button>
+          )}
+
+          <div className="text-[9px] text-teal-300 font-bold uppercase tracking-wider px-2 mt-4 mb-1.5">Operations</div>
+
+          {/* Shopping Cart */}
+          <button 
+            onClick={() => setCurrentView('cart')}
+            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors text-left ${
+              currentView === 'cart' ? 'bg-teal-800 text-white shadow-sm' : 'hover:bg-teal-800/55 text-teal-100'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${currentView === 'cart' ? 'bg-orange-400' : 'bg-transparent'}`}></span>
+              <span>Checkout Cart</span>
+            </div>
+            {cart.length > 0 && (
+              <span className="bg-orange-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                {cart.reduce((sum, item) => sum + item.quantity, 0)}
+              </span>
+            )}
+          </button>
+
+          {/* Support Tickets */}
+          <button 
+            onClick={() => setCurrentView('tickets')}
+            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors text-left ${
+              currentView === 'tickets' ? 'bg-teal-800 text-white shadow-sm' : 'hover:bg-teal-800/55 text-teal-100'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${currentView === 'tickets' ? 'bg-orange-400' : 'bg-transparent'}`}></span>
+            Support Tickets
+          </button>
+
+          {/* Clinical Blogs */}
+          <button 
+            onClick={() => setCurrentView('blogs')}
+            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors text-left ${
+              currentView === 'blogs' ? 'bg-teal-800 text-white shadow-sm' : 'hover:bg-teal-800/55 text-teal-100'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${currentView === 'blogs' ? 'bg-orange-400' : 'bg-transparent'}`}></span>
+            Clinical Blogs
+          </button>
+        </nav>
+
+        {/* Sidebar Profile Session / Login Panel on Left Corner */}
+        {currentUser && (
+          <div className="p-4 bg-teal-950/60 mt-auto border-t border-teal-800">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs shadow-md shrink-0">
+                {currentUser.name.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="truncate leading-tight">
+                <p className="text-xs font-bold text-white truncate">{currentUser.name}</p>
+                <p className="text-[9px] opacity-65 uppercase font-mono tracking-wider truncate">
+                  {currentUser.role.replace('_', ' ')}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </aside>
+
       {/* Right Column Layout Panel */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         
