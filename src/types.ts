@@ -310,6 +310,8 @@ export interface Order {
   paymentNote?: string;
   paymentRejectionReason?: string;
   paymentVerificationLogs?: PaymentVerificationLog[];
+  cashfreeOrderId?: string;
+  cashfreePaymentSessionId?: string;
 }
 
 export interface RFQ {

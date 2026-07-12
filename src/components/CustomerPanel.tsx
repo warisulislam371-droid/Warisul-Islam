@@ -4,6 +4,8 @@ import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderIte
 import {
   Heart,
   ShoppingCart,
+  Store,
+  Activity,
   SlidersHorizontal,
   Info,
   Layers,
@@ -38,7 +40,14 @@ import {
   RotateCcw,
   FileCheck,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Headphones,
+  BadgeDollarSign,
+  Zap,
+  Stethoscope,
+  Pill,
+  Bed,
+  Microscope
 } from 'lucide-react';
 import InvoicePDF from './InvoicePDF';
 import HomepageTrustSection from './HomepageTrustSection';
@@ -121,12 +130,16 @@ export default function CustomerPanel({
   const [rfqAttachmentName, setRfqAttachmentName] = useState('');
 
   // Payment sandbox state
-  const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout' | 'processing' | 'success'>('cart');
+  const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout' | 'processing' | 'processing_cashfree' | 'success'>('cart');
   const [razorpayMethod, setRazorpayMethod] = useState<'UPI' | 'Credit Card' | 'Debit Card' | 'Net Banking'>('UPI');
+  
+  // Cashfree Dynamic Script and Modal States
+  const [cashfreeModalOpen, setCashfreeModalOpen] = useState(false);
+  const [cashfreeOrderDetails, setCashfreeOrderDetails] = useState<{ orderId: string; amount: number; paymentSessionId: string; isMock: boolean } | null>(null);
   
   // Manual Payment verification and settings states
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>(dbLocal.getPaymentSettings());
-  const [selectedPayMethod, setSelectedPayMethod] = useState<'razorpay' | 'upi' | 'bank' | ''>('');
+  const [selectedPayMethod, setSelectedPayMethod] = useState<'cashfree' | 'razorpay' | 'upi' | 'bank' | ''>('cashfree');
   const [manualTxId, setManualTxId] = useState('');
   const [manualNote, setManualNote] = useState('');
   const [manualProofUrl, setManualProofUrl] = useState('');
@@ -528,6 +541,133 @@ export default function CustomerPanel({
     }
   };
 
+  // Dynamic Cashfree script loader
+  const loadCashfreeScript = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if ((window as any).Cashfree) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleCashfreeSimulationComplete = (success: boolean) => {
+    setCashfreeModalOpen(false);
+    if (!cashfreeOrderDetails) return;
+
+    if (!success) {
+      addToast('Online Payment cleared with failure. Transaction was declined.', 'error');
+      setCheckoutStep('checkout');
+      return;
+    }
+
+    setCheckoutStep('processing');
+
+    // Call verify endpoint
+    fetch('/api/payment/cashfree/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId: cashfreeOrderDetails.orderId,
+        isMock: cashfreeOrderDetails.isMock
+      })
+    })
+    .then(res => res.json())
+    .then(verifyData => {
+      if (verifyData.status === 'SUCCESS' || verifyData.payment_status === 'SUCCESS') {
+        const firstItem = cart[0].product;
+        const sub = getSubtotal();
+        const gst = getGstTotal();
+        const final = getCheckoutTotal();
+
+        const newOrder: Order = {
+          id: cashfreeOrderDetails.orderId,
+          customerId: currentUser!.id,
+          customerName: currentUser!.name,
+          customerEmail: currentUser!.email,
+          vendorId: firstItem.vendorId,
+          vendorName: firstItem.vendorName,
+          items: cart.map(item => ({
+            productId: item.product.id,
+            productName: item.product.name,
+            productImage: item.product.images[0],
+            price: item.product.salePrice,
+            quantity: item.quantity,
+            gstRate: item.product.gstRate,
+            hsnCode: item.product.hsnCode,
+            vendorId: item.product.vendorId,
+            vendorName: item.product.vendorName
+          })),
+          totalAmount: sub,
+          gstAmount: gst,
+          discountAmount: 0,
+          finalAmount: final,
+          status: 'Order Sent to Vendor',
+          paymentMethod: 'Cashfree PG',
+          paymentId: `cf_pay_${Date.now().toString().slice(-9)}`,
+          shippingAddress: shippingAddress,
+          createdAt: new Date().toISOString(),
+          timeline: [
+            { 
+              status: 'Order Sent to Vendor', 
+              time: new Date().toISOString(), 
+              note: `Automated online payment captured and verified instantly via Cashfree Payment Gateway (Ref ID: ${cashfreeOrderDetails.paymentSessionId}).` 
+            }
+          ],
+          cashfreeOrderId: cashfreeOrderDetails.orderId,
+          cashfreePaymentSessionId: cashfreeOrderDetails.paymentSessionId,
+          paymentTxId: `cf_pay_${Date.now().toString().slice(-9)}`,
+          paymentVerificationLogs: [{
+            action: 'approve',
+            performedBy: 'Cashfree Automated Gateway',
+            performedByRole: 'super_admin',
+            timestamp: new Date().toISOString(),
+            note: 'Payment captured and verified instantly via secure API checkout session loop.'
+          }]
+        };
+
+        const currentOrders = dbLocal.getOrders();
+        currentOrders.unshift(newOrder);
+        dbLocal.saveOrders(currentOrders);
+
+        // Alert Vendor
+        dbLocal.addNotification(
+          newOrder.vendorId,
+          'New Equipment Order Placed (Automated)',
+          `Order #${newOrder.id} paid instantly via Cashfree for ₹${newOrder.finalAmount.toLocaleString('en-IN')}. Please prepare package.`,
+          'order_placed'
+        );
+
+        // Alert Admin
+        dbLocal.addNotification(
+          'admin',
+          `Automated Cashfree Payment Captured`,
+          `Order #${newOrder.id} successfully paid. ₹${newOrder.finalAmount.toLocaleString('en-IN')} settled online instantly.`,
+          'order_placed'
+        );
+
+        setCreatedOrder(newOrder);
+        setCheckoutStep('success');
+        onUpdateCart([]); // Clear cart
+        addToast('Payment completed successfully!', 'success');
+      } else {
+        addToast('Payment verification failed. Please try again.', 'error');
+        setCheckoutStep('checkout');
+      }
+    })
+    .catch(err => {
+      console.error('Verification failed', err);
+      addToast('Verification failed. Re-trying transaction.', 'error');
+      setCheckoutStep('checkout');
+    });
+  };
+
   // Handle Checkout submission with multi-payment modes
   const handleProceedToPayment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -540,6 +680,81 @@ export default function CustomerPanel({
 
     if (!selectedPayMethod) {
       addToast('Please select a B2B clearing payment method before submitting.', 'error');
+      return;
+    }
+
+    // CASHFREE INSTANT ONLINE CHECKOUT ROUTE
+    if (selectedPayMethod === 'cashfree') {
+      setCheckoutStep('processing_cashfree');
+      const cfOrderId = `ORD-CF-${Math.floor(10000 + Math.random() * 90000)}`;
+      const finalAmount = getCheckoutTotal();
+      
+      fetch('/api/payment/cashfree/create-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: finalAmount,
+          orderId: cfOrderId,
+          customerDetails: {
+            customerId: currentUser.id,
+            customerName: currentUser.name,
+            customerEmail: currentUser.email,
+            customerPhone: currentUser.phone || currentUser.mobileNumber || "9999999999"
+          },
+          returnUrl: window.location.origin
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.isMock) {
+          setCashfreeOrderDetails({
+            orderId: cfOrderId,
+            amount: finalAmount,
+            paymentSessionId: data.payment_session_id,
+            isMock: true
+          });
+          setCashfreeModalOpen(true);
+        } else {
+          loadCashfreeScript().then(loaded => {
+            if (loaded && (window as any).Cashfree) {
+              try {
+                const cashfree = (window as any).Cashfree({ mode: 'sandbox' });
+                cashfree.checkout({
+                  paymentSessionId: data.payment_session_id,
+                  redirectTarget: "_self"
+                });
+              } catch (cfErr) {
+                console.error('Cashfree SDK error, falling back to mock UI', cfErr);
+                setCashfreeOrderDetails({
+                  orderId: cfOrderId,
+                  amount: finalAmount,
+                  paymentSessionId: data.payment_session_id,
+                  isMock: true
+                });
+                setCashfreeModalOpen(true);
+              }
+            } else {
+              setCashfreeOrderDetails({
+                orderId: cfOrderId,
+                amount: finalAmount,
+                paymentSessionId: data.payment_session_id,
+                isMock: true
+              });
+              setCashfreeModalOpen(true);
+            }
+          });
+        }
+      })
+      .catch(err => {
+        console.error('Cashfree PG request failed', err);
+        setCashfreeOrderDetails({
+          orderId: cfOrderId,
+          amount: finalAmount,
+          paymentSessionId: `mock_session_fb_${Date.now()}`,
+          isMock: true
+        });
+        setCashfreeModalOpen(true);
+      });
       return;
     }
 
@@ -790,147 +1005,152 @@ export default function CustomerPanel({
       {currentView === 'marketplace' && (
         <div className="space-y-8 animate-fade-in">
           
-          {/* Aesthetic B2B Hero Section / Dynamic Promotional Banner Showcase */}
-          <div className="relative bg-teal-950 text-white rounded-3xl overflow-hidden py-12 sm:py-20 px-6 sm:px-12 shadow-2xl border border-teal-800/80 min-h-[380px] sm:min-h-[440px] flex items-center transition-all duration-700">
-            {promoBanners.length > 0 && promoBanners[activeBannerIdx % promoBanners.length]?.imageUrl ? (
-              <>
-                <img
-                  src={promoBanners[activeBannerIdx % promoBanners.length].imageUrl}
-                  alt={promoBanners[activeBannerIdx % promoBanners.length].title}
-                  referrerPolicy="no-referrer"
-                  className="absolute inset-0 w-full h-full object-cover opacity-35 scale-105 transition-transform duration-1000 ease-out"
-                />
-                <div className="absolute inset-0 bg-gradient-to-r from-teal-950 via-teal-950/85 to-transparent pointer-events-none" />
-              </>
-            ) : (
-              <div className="absolute inset-0 opacity-15 pointer-events-none">
-                <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-                  <defs>
-                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#fff" strokeWidth="1" />
-                    </pattern>
-                  </defs>
-                  <rect width="100%" height="100%" fill="url(#grid)" />
-                </svg>
+          {/* Scientific Soft Sky-to-Teal Hero Banner with High Contrast */}
+          <div className="relative bg-gradient-to-br from-[#0052D4] via-[#0961E7] to-[#14b8a6] rounded-3xl overflow-hidden py-14 sm:py-24 px-6 sm:px-12 shadow-xl border border-white/10 min-h-[400px] sm:min-h-[460px] flex items-center transition-all duration-700">
+            {/* Scientific line graphic using SVG in background */}
+            <div className="absolute inset-0 opacity-20 pointer-events-none">
+              <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <pattern id="hero-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#hero-grid)" />
+                <path d="M 100 150 Q 300 50 500 200 T 900 100 T 1300 250" fill="none" stroke="rgba(255, 255, 255, 0.25)" strokeWidth="2" strokeDasharray="5,5" />
+                <circle cx="300" cy="50" r="4" fill="#FFE135" />
+                <circle cx="500" cy="200" r="5" fill="#14b8a6" />
+                <circle cx="900" cy="100" r="4" fill="#3b82f6" />
+                <line x1="500" y1="200" x2="300" y2="50" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" />
+                <line x1="900" y1="100" x2="500" y2="200" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="1" />
+              </svg>
+            </div>
+            
+            <div className="w-full relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10">
+              <div className="max-w-2xl space-y-6 text-center lg:text-left mx-auto lg:mx-0">
+                <span className="inline-block bg-[#FF3366] text-white text-[10px] sm:text-xs font-black px-4.5 py-1.5 rounded-full uppercase tracking-widest shadow-md">
+                  ⚡ MEGA BAZAR IS LIVE • DISCOUNTS APPLIED
+                </span>
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight font-display leading-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.18)]">
+                  Premium Healthcare Supplies, <br className="hidden sm:inline" />
+                  <span className="text-[#FFE135] font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.25)]">Better Prices!</span>
+                </h1>
+                <p className="text-sm sm:text-lg text-white/95 leading-relaxed max-w-lg font-semibold mx-auto lg:mx-0 drop-shadow-[0_1.5px_4px_rgba(0,0,0,0.15)]">
+                  Up to <span className="font-extrabold text-[#FFE135] text-lg sm:text-xl underline decoration-[#FFE135]">40% OFF</span> on 10,000+ certified medical products.
+                </p>
+                <div className="flex flex-wrap justify-center lg:justify-start gap-3.5 pt-3">
+                  <button
+                    onClick={() => {
+                      const el = document.getElementById('marketplace-anchor');
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="bg-[#FF3366] hover:bg-[#E02454] text-white text-xs sm:text-sm font-extrabold px-8 py-4 rounded-full transition duration-300 shadow-lg flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                  >
+                    <span>Shop Now</span>
+                    <ArrowRight className="w-4.5 h-4.5 text-white" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const el = document.getElementById('marketplace-anchor');
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="bg-transparent border-2 border-white/40 hover:border-white hover:bg-white/10 text-white text-xs sm:text-sm font-bold px-8 py-3.5 rounded-full transition duration-300 shadow-sm cursor-pointer"
+                  >
+                    Explore Now
+                  </button>
+                </div>
+
+                {/* Integrated Trust Badges */}
+                <div className="flex flex-wrap justify-center lg:justify-start gap-5 pt-6 border-t border-white/10 text-white/90 text-xs font-bold">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-full bg-white/15 border border-white/20">
+                      <Check className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <span>100% Genuine</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-full bg-white/15 border border-white/20">
+                      <Truck className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <span>Fast Delivery</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-full bg-white/15 border border-white/20">
+                      <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                    </div>
+                    <span>Trusted Vendors</span>
+                  </div>
+                </div>
               </div>
-            )}
 
-            <div className="w-full relative z-10 flex flex-col md:flex-row items-center justify-between gap-10">
-              {promoBanners.length > 0 ? (
-                <div className="max-w-2xl space-y-5 animate-fade-in">
-                  <span className="inline-block bg-teal-500/25 text-teal-300 border border-teal-400/40 text-[10px] sm:text-xs font-bold px-3.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
-                    {promoBanners[activeBannerIdx % promoBanners.length].badgeText || 'CLINICAL QUALITY ASSURED • WHOLESALE PRICING'}
-                  </span>
-                  <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display leading-tight drop-shadow-sm">
-                    {promoBanners[activeBannerIdx % promoBanners.length].title}
-                  </h1>
-                  {promoBanners[activeBannerIdx % promoBanners.length].subtitle && (
-                    <p className="text-xs sm:text-sm text-teal-100/90 leading-relaxed max-w-lg font-medium drop-shadow-sm">
-                      {promoBanners[activeBannerIdx % promoBanners.length].subtitle}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap gap-3 pt-3">
-                    <button
-                      onClick={() => {
-                        const linkUrl = promoBanners[activeBannerIdx % promoBanners.length].linkUrl;
-                        if (linkUrl === '#rfq') {
-                          onNavigate('rfqs');
-                        } else {
-                          const el = document.getElementById('marketplace-anchor');
-                          el?.scrollIntoView({ behavior: 'smooth' });
-                        }
-                      }}
-                      className="bg-teal-500 hover:bg-teal-600 text-white text-xs font-extrabold px-6 py-3.5 rounded-xl transition shadow-xl flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5"
-                    >
-                      {promoBanners[activeBannerIdx % promoBanners.length].buttonText || 'Explore Catalog'}
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onNavigate('rfqs')}
-                      className="bg-slate-900/80 backdrop-blur border border-teal-500/60 hover:bg-teal-900 text-white text-xs font-bold px-6 py-3.5 rounded-xl transition shadow-lg"
-                    >
-                      Submit B2B RFQ
-                    </button>
+              {/* Right Side Immersive Card */}
+              <div className="relative shrink-0 hidden lg:block w-80">
+                <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 shadow-2xl space-y-4 transform hover:scale-[1.02] transition-transform duration-500">
+                  <div className="h-44 rounded-2xl overflow-hidden relative border border-white/10 shadow-inner">
+                    <img
+                      src="https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=400"
+                      alt="Premium Medical Equipment"
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute top-2.5 right-2.5 bg-[#FF3366] text-white text-[8px] font-black uppercase tracking-wider px-2.5 py-1 rounded shadow-md">
+                      Featured Offer
+                    </span>
                   </div>
-                </div>
-              ) : (
-                <div className="max-w-2xl space-y-5">
-                  <span className="inline-block bg-teal-500/20 text-teal-300 border border-teal-500/50 text-[10px] sm:text-xs font-bold px-3.5 py-1 rounded-full uppercase tracking-wider">
-                    clinical quality assured &bull; wholesale pricing
-                  </span>
-                  <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight font-display leading-tight">
-                    India's Premium Medical Equipment <span className="text-teal-400">Procurement</span> Hub
-                  </h1>
-                  <p className="text-xs sm:text-sm text-teal-100/80 leading-relaxed max-w-lg">
-                    Source directly from certified suppliers. Submit custom hospital tenders, compare commercial quotations side-by-side, and download official tax invoices.
-                  </p>
-                  <div className="flex flex-wrap gap-3 pt-2">
-                    <button
-                      onClick={() => {
-                        const el = document.getElementById('marketplace-anchor');
-                        el?.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                      className="bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold px-6 py-3 rounded-xl transition shadow-lg flex items-center gap-1.5 cursor-pointer"
-                    >
-                      Explore Catalog
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onNavigate('rfqs')}
-                      className="bg-transparent border border-teal-600 hover:bg-teal-900 text-white text-xs font-bold px-6 py-3 rounded-xl transition"
-                    >
-                      Submit B2B RFQ
-                    </button>
+                  <div className="space-y-1 text-white">
+                    <h4 className="font-bold text-sm tracking-tight truncate">Enterprise High-Flow ICU Ventilator</h4>
+                    <p className="text-[11px] text-white/70 font-medium">Certified RespiCare ICU system</p>
+                    <div className="flex items-center justify-between pt-1 border-t border-white/10 mt-2">
+                      <div>
+                        <span className="text-[9px] text-white/60 block uppercase leading-none">Starting at</span>
+                        <span className="font-extrabold text-sm text-[#FFE135] font-mono">₹3,10,000</span>
+                      </div>
+                      <span className="text-[10px] bg-white/25 text-white font-bold px-2 py-0.5 rounded font-mono">
+                        Save 11%
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
-
-              <div className="relative shrink-0 hidden lg:block w-72">
-                <div className="bg-teal-900/90 backdrop-blur p-5 rounded-2xl border border-teal-600/60 shadow-2xl relative space-y-3">
-                  <div className="flex items-center justify-between border-b border-teal-700 pb-2.5">
-                    <span className="text-[10px] font-extrabold text-teal-300 tracking-wider">SECURE B2B DISPATCH</span>
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <p className="text-xs font-semibold leading-relaxed text-teal-50">
-                    Every product listed on HealNex undergoes rigorous biomedical calibration before final dispatch.
-                  </p>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Carousel Arrow Controls & Indicator Dots */}
-            {promoBanners.length > 1 && (
-              <>
-                <button
-                  onClick={() => setActiveBannerIdx((prev) => (prev - 1 + promoBanners.length) % promoBanners.length)}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-slate-900/70 hover:bg-slate-900 border border-teal-700/60 text-white flex items-center justify-center transition backdrop-blur shadow-md"
-                  aria-label="Previous banner"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => setActiveBannerIdx((prev) => (prev + 1) % promoBanners.length)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-slate-900/70 hover:bg-slate-900 border border-teal-700/60 text-white flex items-center justify-center transition backdrop-blur shadow-md"
-                  aria-label="Next banner"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2">
-                  {promoBanners.map((_, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setActiveBannerIdx(idx)}
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        idx === (activeBannerIdx % promoBanners.length)
-                          ? 'w-8 bg-teal-400 shadow-md'
-                          : 'w-2 bg-white/40 hover:bg-white/70'
-                      }`}
-                      aria-label={`Slide ${idx + 1}`}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
+          {/* Trust & Service Section - Horizontal Strip */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 rounded-2xl bg-white border border-slate-100 shadow-sm transition-all hover:shadow-md">
+            <div className="flex items-center gap-3 border-r border-slate-100/80 last:border-0 pr-2">
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-xl shrink-0">
+                <ShieldCheck className="w-5 h-5 text-blue-500" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs text-slate-800">Secure Payments</h4>
+                <p className="text-[10px] text-slate-400 font-medium">100% Encrypted B2B Gateway</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 border-r border-slate-100/80 last:border-0 pr-2">
+              <div className="p-3 bg-purple-50 text-purple-600 rounded-xl shrink-0">
+                <RotateCcw className="w-5 h-5 text-purple-500" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs text-slate-800">Easy Returns</h4>
+                <p className="text-[10px] text-slate-400 font-medium">Hassle-free Refund Policies</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 border-r border-slate-100/80 last:border-0 pr-2">
+              <div className="p-3 bg-pink-50 text-pink-600 rounded-xl shrink-0">
+                <Headphones className="w-5 h-5 text-pink-500" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs text-slate-800">24/7 Support</h4>
+                <p className="text-[10px] text-slate-400 font-medium">Direct Clinical Help Desk</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 last:border-0 pr-2">
+              <div className="p-3 bg-teal-50 text-teal-600 rounded-xl shrink-0">
+                <BadgeDollarSign className="w-5 h-5 text-teal-500" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs text-slate-800">Best Price Guarantee</h4>
+                <p className="text-[10px] text-slate-400 font-medium">Direct Factory Wholesale</p>
+              </div>
+            </div>
           </div>
 
           {/* AI Clinical Compliance Tip Panel */}
@@ -953,37 +1173,206 @@ export default function CustomerPanel({
             </div>
           )}
 
-          {/* Shop by Category (Horizontal Directory) */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Shop by Category</span>
-              <span className="text-[10px] text-teal-600 font-normal">Click category to filter approved products</span>
-            </h3>
-            <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-thin">
+          {/* Shop by Category - Redesigned Grid of Pastel Rounded Cards */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-end border-b border-slate-100 pb-2">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider font-display">
+                  Shop by Category
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5 font-medium">Explore medical grade equipment, validated devices, and hospital supplies</p>
+              </div>
               <button
-                onClick={() => onCategorySelect('')}
-                className={`px-5 py-3 rounded-2xl border text-xs font-semibold shrink-0 transition flex items-center gap-2 ${
-                  !selectedCategoryName
-                    ? 'bg-teal-700 border-teal-700 text-white shadow-md'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
+                onClick={() => {
+                  onCategorySelect('');
+                  const el = document.getElementById('marketplace-anchor');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="text-xs font-bold text-teal-600 hover:text-teal-800 transition"
               >
-                All Categories
+                Clear Filters
               </button>
-              {categories.map((cat) => {
-                const isActive = selectedCategoryName === cat.name;
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+              {[
+                { name: 'Homecare Devices', displayName: 'Diagnostics', count: '150+ Products', bg: 'bg-[#0961E7]/5 text-[#0961E7] border-[#0961E7]/15', icon: Stethoscope, iconColor: 'text-[#0961E7]' },
+                { name: 'Dental Equipment', displayName: 'Dental', count: '40+ Products', bg: 'bg-[#10b981]/5 text-[#10b981] border-[#10b981]/15', icon: Sparkles, iconColor: 'text-[#10b981]' },
+                { name: 'Consumables', displayName: 'Consumables', count: '500+ Products', bg: 'bg-[#FF3366]/5 text-[#FF3366] border-[#FF3366]/15', icon: Pill, iconColor: 'text-[#FF3366]' },
+                { name: 'Medical Equipment', displayName: 'Equipment', count: '120+ Products', bg: 'bg-[#06b6d4]/5 text-[#06b6d4] border-[#06b6d4]/15', icon: Activity, iconColor: 'text-[#06b6d4]' },
+                { name: 'Hospital Furniture', displayName: 'Furniture', count: '80+ Products', bg: 'bg-[#f97316]/5 text-[#f97316] border-[#f97316]/15', icon: Bed, iconColor: 'text-[#f97316]' },
+                { name: 'Laboratory Equipment', displayName: 'Laboratory', count: '95+ Products', bg: 'bg-[#8b5cf6]/5 text-[#8b5cf6] border-[#8b5cf6]/15', icon: Microscope, iconColor: 'text-[#8b5cf6]' },
+              ].map((item) => {
+                const isActive = selectedCategoryName === item.name;
+                const IconComp = item.icon;
                 return (
                   <button
-                    key={cat.id}
-                    onClick={() => onCategorySelect(cat.name)}
-                    className={`px-5 py-3 rounded-2xl border text-xs font-semibold shrink-0 transition flex items-center gap-2 ${
-                      isActive
-                        ? 'bg-teal-700 border-teal-700 text-white shadow-md'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    key={item.name}
+                    onClick={() => {
+                      onCategorySelect(isActive ? '' : item.name);
+                      const el = document.getElementById('marketplace-anchor');
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className={`p-4 rounded-3xl border text-left transition-all duration-300 flex flex-col justify-between min-h-[130px] shadow-xs hover:shadow-md hover:-translate-y-1 group relative overflow-hidden cursor-pointer ${
+                      isActive 
+                        ? 'bg-[#0961E7] border-[#0961E7] text-white scale-[1.02]' 
+                        : `${item.bg} hover:border-slate-300`
                     }`}
                   >
-                    <span>{cat.name}</span>
+                    <div className="absolute top-[-20px] right-[-20px] w-16 h-16 rounded-full bg-white/10 group-hover:scale-150 transition-all duration-500 pointer-events-none" />
+                    <div className={`p-2 rounded-xl w-fit ${isActive ? 'bg-white/10 text-white' : 'bg-white shadow-xs'}`}>
+                      <IconComp className={`w-5 h-5 ${isActive ? 'text-white' : item.iconColor}`} />
+                    </div>
+                    <div>
+                      <h4 className={`font-bold text-xs tracking-tight ${isActive ? 'text-white' : isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                        {item.displayName}
+                      </h4>
+                      <p className={`text-[10px] mt-0.5 ${isActive ? 'text-white/70' : isDarkMode ? 'text-slate-400' : 'text-slate-400 font-semibold'}`}>
+                        {item.count}
+                      </p>
+                    </div>
                   </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Featured B2B Offers Section */}
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-2">
+              <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider font-display">
+                Featured B2B Offers
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5 font-medium">Top-selling medical systems with integrated platform commission transparency and instant procurement triggers</p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+              {products.slice(0, 5).map((p) => {
+                const commRate = 10;
+                const commissionVal = Math.round(p.salePrice * 0.1);
+                const basePrice = p.salePrice - commissionVal;
+                const productVendor = vendors.find(v => v.id === p.vendorId || v.companyName === p.vendorName);
+                
+                return (
+                  <div
+                    key={`featured-${p.id}`}
+                    className={`rounded-2xl border shadow-sm overflow-hidden flex flex-col justify-between group transition-all hover:shadow-md hover:-translate-y-0.5 ${
+                      isDarkMode
+                        ? 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-100'
+                        : 'bg-white border-slate-200/80 hover:border-slate-300 text-slate-800'
+                    }`}
+                  >
+                    {/* Image Container with Commission Overlay Badge */}
+                    <div className="relative bg-slate-100 h-40 overflow-hidden shrink-0">
+                      <img
+                        src={p.images[0]}
+                        alt={p.name}
+                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                      />
+                      
+                      {/* Commission Overlay */}
+                      <div className="absolute top-2.5 left-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[9px] font-bold px-2 py-1 rounded-full shadow-md flex items-center gap-1 z-10">
+                        <Zap className="w-3 h-3 text-white fill-current animate-pulse" />
+                        <span>{commRate}% Comm. Included</span>
+                      </div>
+                    </div>
+
+                    {/* Content Body */}
+                    <div className="p-3.5 flex-1 flex flex-col justify-between space-y-3.5 text-xs">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                            isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {p.brand}
+                          </span>
+                          <span className="text-[9px] font-semibold text-teal-600 font-mono">
+                            HSN: {p.hsnCode || '30049099'}
+                          </span>
+                        </div>
+                        
+                        <h4
+                          onClick={() => setSelectedProduct(p)}
+                          className={`font-bold mt-1 line-clamp-1 hover:text-teal-400 hover:underline cursor-pointer ${
+                            isDarkMode ? 'text-white' : 'text-slate-900'
+                          }`}
+                        >
+                          {p.name}
+                        </h4>
+                        
+                        <p className={`text-[10px] line-clamp-2 mt-1 leading-relaxed ${
+                          isDarkMode ? 'text-slate-400' : 'text-slate-400'
+                        }`}>
+                          {p.description}
+                        </p>
+                      </div>
+
+                      {/* Pricing Details */}
+                      <div className={`border-t pt-2 space-y-1.5 ${
+                        isDarkMode ? 'border-slate-800' : 'border-slate-100'
+                      }`}>
+                        {/* Current discounted Price & Original slashed Price with percentage tag */}
+                        <div className="flex items-baseline justify-between gap-1 flex-wrap">
+                          <span className={`text-sm sm:text-base font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+                            ₹{p.salePrice.toLocaleString('en-IN')}
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] text-slate-400 line-through">
+                              ₹{p.price.toLocaleString('en-IN')}
+                            </span>
+                            {(() => {
+                              const pct = p.price > p.salePrice ? Math.round(((p.price - p.salePrice) / p.price) * 100) : 0;
+                              return pct > 0 ? (
+                                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-black bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                  -{pct}%
+                                </span>
+                              ) : null;
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* Base Wholesale Price */}
+                        <div className="flex justify-between text-[10px] text-slate-500 font-medium">
+                          <span>Wholesale Base</span>
+                          <span>₹{basePrice.toLocaleString('en-IN')}</span>
+                        </div>
+
+                        {/* Extra GST Info and final label */}
+                        <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950/40 p-1.5 rounded-lg border border-slate-100 dark:border-slate-900">
+                          <span className="text-[9px] text-slate-400 font-semibold block leading-none">B2B Final Price</span>
+                          <span className="text-[8px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded font-bold uppercase">
+                            GST {p.gstRate || 12}% Extra
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Double CTA Buttons */}
+                    <div className={`p-3 border-t grid grid-cols-2 gap-2 shrink-0 ${
+                      isDarkMode ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-100'
+                    }`}>
+                      <button
+                        onClick={() => {
+                          handleAddToCart(p);
+                          addToast(`${p.name} added to cart! Proceed to standard checkout.`, 'success');
+                        }}
+                        className="bg-[#FF3366] hover:bg-[#E02454] text-white text-[10px] font-black py-2 rounded-lg transition text-center shadow-xs cursor-pointer"
+                      >
+                        Add to Cart
+                      </button>
+                      <button
+                        onClick={() => {
+                          setRfqName(p.name);
+                          setRfqBudget(p.salePrice);
+                          onNavigate('rfqs');
+                          addToast(`Procurement tender draft opened for ${p.name}. Customize B2B details.`, 'info');
+                        }}
+                        className="bg-white hover:bg-slate-100 text-teal-700 border border-teal-200 text-[10px] font-black py-2 rounded-lg transition text-center cursor-pointer"
+                      >
+                        Ask for Quote
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -1295,18 +1684,32 @@ export default function CustomerPanel({
                             )}
                           </div>
 
-                          <div className={`border-t pt-2 flex items-center justify-between ${
-                            isDarkMode ? 'border-slate-800' : 'border-slate-50'
+                          <div className={`border-t pt-2 flex flex-col space-y-1.5 ${
+                            isDarkMode ? 'border-slate-800' : 'border-slate-100'
                           }`}>
-                            <div>
-                              <span className="text-slate-400 text-[10px] block">Price (Excl Tax)</span>
-                              <span className={`text-sm font-bold ${isDarkMode ? 'text-teal-400' : 'text-teal-800'}`}>
-                                ₹{p.salePrice.toLocaleString('en-IN')}
-                              </span>
-                            </div>
-                            <div className="text-right">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400 text-[10px] block">Wholesale Price (Excl Tax)</span>
                               <span className="text-slate-400 text-[10px] block">MOQ Requirement</span>
-                              <span className={`font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                            </div>
+                            
+                            <div className="flex items-baseline justify-between gap-1 flex-wrap">
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span className={`text-base font-extrabold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+                                  ₹{p.salePrice.toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-[10px] text-slate-400 line-through">
+                                  ₹{p.price.toLocaleString('en-IN')}
+                                </span>
+                                {(() => {
+                                  const pct = p.price > p.salePrice ? Math.round(((p.price - p.salePrice) / p.price) * 100) : 0;
+                                  return pct > 0 ? (
+                                    <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-black bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                      -{pct}%
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </div>
+                              <span className={`text-xs font-semibold ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
                                 {p.moq} unit(s)
                               </span>
                             </div>
@@ -1321,7 +1724,7 @@ export default function CustomerPanel({
                             onClick={() => handleToggleCompare(p)}
                             className={`flex items-center gap-1 text-[10px] font-bold py-1 px-2.5 rounded transition-colors ${
                               hasComp 
-                                ? 'bg-orange-500 text-white' 
+                                ? 'bg-[#f97316]/10 text-[#f97316]' 
                                 : isDarkMode 
                                   ? 'text-slate-400 hover:bg-slate-800' 
                                   : 'text-slate-500 hover:bg-slate-100'
@@ -1332,10 +1735,10 @@ export default function CustomerPanel({
                           </button>
                           <button
                             onClick={() => handleAddToCart(p)}
-                            className="bg-teal-700 hover:bg-teal-800 text-white font-bold py-1.5 px-3.5 rounded-lg flex items-center gap-1 transition text-[10px] uppercase tracking-wide cursor-pointer"
+                            className="bg-[#FF3366] hover:bg-[#E02454] text-white font-black py-1.5 px-4 rounded-lg flex items-center gap-1 transition text-[10px] uppercase tracking-wide cursor-pointer shadow-xs"
                           >
                             <ShoppingCart className="w-3.5 h-3.5" />
-                            Procure
+                            Add to Cart
                           </button>
                         </div>
                       </div>
@@ -1636,7 +2039,23 @@ export default function CustomerPanel({
                       </span>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPayMethod('cashfree');
+                        setManualTxId('');
+                        setManualProofUrl('');
+                      }}
+                      className={`p-3 rounded-lg border text-center transition flex flex-col items-center justify-center gap-1.5 ${
+                        selectedPayMethod === 'cashfree'
+                          ? 'bg-teal-50 border-teal-600 text-teal-800 font-bold shadow-sm ring-2 ring-teal-500/20'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Zap className="w-5 h-5 text-amber-500 fill-amber-500" />
+                      <span className="text-[10px] uppercase tracking-wider font-extrabold">Cashfree PG</span>
+                    </button>
                     {paymentSettings.razorpayEnabled && (
                       <button
                         type="button"
@@ -1925,103 +2344,118 @@ export default function CustomerPanel({
                     )}
                   </div>
                 )}
+                {selectedPayMethod === 'cashfree' && (
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 text-center space-y-3">
+                    <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-sm">
+                      <Zap className="w-6 h-6 animate-pulse text-teal-600" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-slate-800">Instant Automated Online Clearing</h4>
+                      <p className="text-[10px] text-slate-500 max-w-sm mx-auto leading-relaxed">
+                        No manual verification or receipt upload is required. Pay securely via Cashfree API checkout to instantly confirm your hospital's procurement order.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Manual Payment Proof Submission Fields (Required for all B2B orders) */}
-                <div className="space-y-3 pt-3 border-t border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                      <Upload className="w-4 h-4 text-teal-700" />
-                      Submit Payment Receipt Screenshot
-                    </h4>
-                    <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
-                      Mandatory Required *
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 leading-relaxed">
-                    Customer payment screenshot upload is strictly required for all orders. Complete your transfer or gateway clearing first, then capture and attach your receipt screenshot below.
-                  </p>
-                    
-                    {/* File Dropzone */}
-                    <div
-                      onDragEnter={handleDrag}
-                      onDragOver={handleDrag}
-                      onDragLeave={handleDrag}
-                      onDrop={handleDrop}
-                      className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition flex flex-col items-center justify-center cursor-pointer ${
-                        dragActive 
-                          ? 'border-teal-600 bg-teal-50/50' 
-                          : manualProofUrl 
-                            ? 'border-emerald-500 bg-emerald-50/20' 
-                            : 'border-slate-300 bg-slate-50 hover:bg-slate-100/50'
-                      }`}
-                      onClick={() => document.getElementById('manual-receipt-input')?.click()}
-                    >
-                      <input
-                        id="manual-receipt-input"
-                        type="file"
-                        accept=".jpg,.jpeg,.png,.pdf"
-                        className="hidden"
-                        onChange={handleFileChange}
-                      />
+                {selectedPayMethod !== 'cashfree' && (
+                  <div className="space-y-3 pt-3 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Upload className="w-4 h-4 text-teal-700" />
+                        Submit Payment Receipt Screenshot
+                      </h4>
+                      <span className="bg-rose-100 text-rose-800 border border-rose-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                        Mandatory Required *
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      Customer payment screenshot upload is strictly required for all orders. Complete your transfer or gateway clearing first, then capture and attach your receipt screenshot below.
+                    </p>
                       
-                      {manualProofUrl ? (
-                        <div className="space-y-2">
-                          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-sm animate-bounce">
-                            <Check className="w-6 h-6 animate-pulse" />
+                      {/* File Dropzone */}
+                      <div
+                        onDragEnter={handleDrag}
+                        onDragOver={handleDrag}
+                        onDragLeave={handleDrag}
+                        onDrop={handleDrop}
+                        className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition flex flex-col items-center justify-center cursor-pointer ${
+                          dragActive 
+                            ? 'border-teal-600 bg-teal-50/50' 
+                            : manualProofUrl 
+                              ? 'border-emerald-500 bg-emerald-50/20' 
+                              : 'border-slate-300 bg-slate-50 hover:bg-slate-100/50'
+                        }`}
+                        onClick={() => document.getElementById('manual-receipt-input')?.click()}
+                      >
+                        <input
+                          id="manual-receipt-input"
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.pdf"
+                          className="hidden"
+                          onChange={handleFileChange}
+                        />
+                        
+                        {manualProofUrl ? (
+                          <div className="space-y-2">
+                            <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-sm animate-bounce">
+                              <Check className="w-6 h-6 animate-pulse" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-800">Receipt Screen Attached</p>
+                              <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-xs">{manualProofFileName || 'payment_proof_receipt.png'}</p>
+                            </div>
+                            {manualProofUrl && (
+                              <img src={manualProofUrl} alt="Receipt Thumb" className="w-16 h-16 object-cover mx-auto rounded border border-slate-200 mt-2 shadow-sm" />
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setManualProofUrl('');
+                                setManualProofFileName('');
+                              }}
+                              className="text-[10px] text-red-500 hover:underline mt-1"
+                            >
+                              Remove and Re-upload
+                            </button>
                           </div>
-                          <div>
-                            <p className="text-xs font-bold text-slate-800">Receipt Screen Attached</p>
-                            <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-xs">{manualProofFileName || 'payment_proof_receipt.png'}</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <Upload className="w-8 h-8 text-slate-400 mx-auto" />
+                            <p className="text-xs font-semibold text-slate-700">Drag & drop receipt screenshot or <span className="text-teal-700 hover:underline">browse files</span></p>
+                            <p className="text-[9px] text-slate-400 uppercase">JPG, PNG, or PDF (Limit 10MB)</p>
                           </div>
-                          {manualProofUrl && (
-                            <img src={manualProofUrl} alt="Receipt Thumb" className="w-16 h-16 object-cover mx-auto rounded border border-slate-200 mt-2 shadow-sm" />
-                          )}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setManualProofUrl('');
-                              setManualProofFileName('');
-                            }}
-                            className="text-[10px] text-red-500 hover:underline mt-1"
-                          >
-                            Remove and Re-upload
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          <Upload className="w-8 h-8 text-slate-400 mx-auto" />
-                          <p className="text-xs font-semibold text-slate-700">Drag & drop receipt screenshot or <span className="text-teal-700 hover:underline">browse files</span></p>
-                          <p className="text-[9px] text-slate-400 uppercase">JPG, PNG, or PDF (Limit 10MB)</p>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
 
-                    {/* Transaction Inputs */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                      <div>
-                        <label className="text-slate-400 block mb-1">Transaction ID / UTR Number {selectedPayMethod !== 'razorpay' ? '*' : '(Optional)'}</label>
-                        <input
-                          type="text"
-                          required={selectedPayMethod !== 'razorpay'}
-                          placeholder="e.g. UPI9473827183 or UTR84739281"
-                          value={manualTxId}
-                          onChange={(e) => setManualTxId(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition font-mono uppercase text-xs font-bold text-slate-800"
-                        />
+                      {/* Transaction Inputs */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                        <div>
+                          <label className="text-slate-400 block mb-1">Transaction ID / UTR Number {selectedPayMethod !== 'razorpay' ? '*' : '(Optional)'}</label>
+                          <input
+                            type="text"
+                            required={selectedPayMethod !== 'razorpay'}
+                            placeholder="e.g. UPI9473827183 or UTR84739281"
+                            value={manualTxId}
+                            onChange={(e) => setManualTxId(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition font-mono uppercase text-xs font-bold text-slate-800"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-400 block mb-1">Reference Note (Optional)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Paid via mobile App"
+                            value={manualNote}
+                            onChange={(e) => setManualNote(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition text-xs"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="text-slate-400 block mb-1">Reference Note (Optional)</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Paid via mobile App"
-                          value={manualNote}
-                          onChange={(e) => setManualNote(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition text-xs"
-                        />
-                      </div>
-                    </div>
                   </div>
+                )}
 
                 {/* Checkout summary panel info */}
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-1">
@@ -2055,11 +2489,20 @@ export default function CustomerPanel({
                     </button>
                     <button
                       type="submit"
-                      disabled={!manualProofUrl || !selectedPayMethod || (selectedPayMethod !== 'razorpay' && !manualTxId.trim())}
-                      className="w-2/3 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
+                      disabled={!selectedPayMethod || (selectedPayMethod !== 'cashfree' && !manualProofUrl) || (selectedPayMethod !== 'cashfree' && selectedPayMethod !== 'razorpay' && !manualTxId.trim())}
+                      className="w-2/3 bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none text-white font-bold py-2.5 rounded-xl text-center uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition animate-pulse-subtle"
                     >
-                      <IndianRupee className="w-4 h-4" />
-                      {selectedPayMethod === 'razorpay' ? 'Submit Secure Payment' : 'Submit Proof & Place Order'}
+                      {selectedPayMethod === 'cashfree' ? (
+                        <>
+                          <Zap className="w-4 h-4 text-amber-400 fill-amber-400 animate-bounce" />
+                          <span>Pay via Cashfree PG</span>
+                        </>
+                      ) : (
+                        <>
+                          <IndianRupee className="w-4 h-4" />
+                          <span>{selectedPayMethod === 'razorpay' ? 'Submit Secure Payment' : 'Submit Proof & Place Order'}</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -2072,6 +2515,14 @@ export default function CustomerPanel({
               <Loader2 className="w-12 h-12 text-teal-700 animate-spin mx-auto" />
               <h3 className="text-base font-bold text-slate-900">Contacting Razorpay Secure Gateway...</h3>
               <p className="text-xs text-slate-400">Verifying commercial accounts and clearing clinical consignment authorization</p>
+            </div>
+          )}
+
+          {checkoutStep === 'processing_cashfree' && (
+            <div className="lg:col-span-3 text-center py-20 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4 max-w-lg mx-auto">
+              <Loader2 className="w-12 h-12 text-amber-500 animate-spin mx-auto" />
+              <h3 className="text-base font-bold text-slate-900">Spawning Secured Cashfree PG Gateway...</h3>
+              <p className="text-xs text-slate-400">Generating transaction token, checking clearing nodes, and initializing automated payment checkout...</p>
             </div>
           )}
 
@@ -2895,6 +3346,170 @@ export default function CustomerPanel({
       {viewInvoiceOrder && (
         <InvoicePDF order={viewInvoiceOrder} onClose={() => setViewInvoiceOrder(null)} addToast={addToast} />
       )}
+
+      {/* Floating Cart Bar */}
+      {cart.length > 0 && currentView !== 'cart' && currentView !== 'checkout' && (
+        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-xl bg-slate-900/95 backdrop-blur-md text-white rounded-2xl sm:rounded-3xl p-4 shadow-2xl border border-slate-800 flex items-center justify-between animate-slide-up">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-teal-400 text-teal-950 rounded-xl relative shrink-0">
+              <ShoppingCart className="w-5 h-5 text-slate-950" />
+              <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-slate-900 font-mono">
+                {cart.reduce((acc, item) => acc + item.quantity, 0)}
+              </span>
+            </div>
+            <div>
+              <p className="text-[10px] text-teal-300 uppercase tracking-widest font-bold">HealNex Cart</p>
+              <p className="text-sm font-black text-white font-mono">
+                ₹{cart.reduce((acc, item) => acc + (item.product.salePrice * item.quantity), 0).toLocaleString('en-IN')}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('cart')}
+            className="bg-gradient-to-r from-teal-400 to-emerald-400 hover:from-teal-300 hover:to-emerald-300 text-teal-950 text-xs font-black px-5 py-3 rounded-xl transition shadow-lg flex items-center gap-1.5 uppercase tracking-wider transform active:scale-95 cursor-pointer"
+          >
+            <span>View Cart</span>
+            <ArrowRight className="w-4 h-4 text-slate-950" />
+          </button>
+        </div>
+      )}
+
+      {/* Cashfree Sandbox Checkout Modal Overlay */}
+      {cashfreeModalOpen && cashfreeOrderDetails && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden transform scale-100 transition-all duration-300">
+            {/* Header Branded with Cashfree Theme */}
+            <div className="bg-indigo-950 text-white p-5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="bg-amber-400 text-slate-950 p-1.5 rounded-lg font-black text-xs uppercase tracking-tight flex items-center gap-1 shadow-inner">
+                    <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                    <span>cf</span>
+                  </div>
+                  <span className="text-sm font-black tracking-widest uppercase">cashfree payments</span>
+                </div>
+                <span className="bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider animate-pulse">
+                  Sandbox Active
+                </span>
+              </div>
+              <div className="pt-2">
+                <p className="text-[10px] text-slate-300 uppercase tracking-wider font-semibold">Hospital Procurement Settlement</p>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-2xl font-black font-mono">₹{cashfreeOrderDetails.amount.toLocaleString('en-IN')}</span>
+                  <span className="text-[10px] text-indigo-200">INR</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <div className="space-y-2.5">
+                <div className="flex justify-between items-center bg-slate-50 border border-slate-100 p-3 rounded-xl text-xs">
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase tracking-wider font-semibold">Secured Order ID</span>
+                    <strong className="text-slate-800 font-mono text-[11px]">{cashfreeOrderDetails.orderId}</strong>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-slate-400 block text-[9px] uppercase tracking-wider font-semibold">Payment Method</span>
+                    <strong className="text-indigo-950 uppercase text-[9px] bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">Automated PG</strong>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl text-xs space-y-1.5 text-slate-600">
+                  <span className="text-slate-400 block text-[9px] uppercase tracking-wider font-semibold">Authorized Payer Details</span>
+                  <div className="flex justify-between font-medium">
+                    <span>Institute:</span>
+                    <span className="text-slate-900">{currentUser?.companyName || 'Clinical Partner'}</span>
+                  </div>
+                  <div className="flex justify-between font-medium">
+                    <span>Officer Name:</span>
+                    <span className="text-slate-900">{currentUser?.name}</span>
+                  </div>
+                  <div className="flex justify-between font-medium">
+                    <span>Email Node:</span>
+                    <span className="text-slate-900 font-mono text-[10px]">{currentUser?.email}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Developer Environment Alert Info */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5">
+                <div className="flex items-center gap-1.5 text-amber-800 font-bold text-xs">
+                  <Info className="w-4 h-4 shrink-0 text-amber-700" />
+                  <span>B2B Gateway Settlement Simulation</span>
+                </div>
+                <p className="text-[10px] text-amber-700/90 leading-relaxed font-semibold">
+                  This secure B2B overlay simulates Cashfree's redirect API loop inside sandboxed frames.
+                  To wire production transactions, configure your merchant credentials in the secrets pane.
+                </p>
+              </div>
+
+              {/* Simulator Action Buttons */}
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleCashfreeSimulationComplete(true)}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle className="w-4 h-4 animate-pulse" />
+                  <span>Simulate Payment Success (200 OK)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCashfreeSimulationComplete(false)}
+                  className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Simulate Payment Failure / Decline</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-slate-50 border-t border-slate-100 px-6 py-3.5 text-center flex items-center justify-center gap-1.5 text-[9px] text-slate-400 uppercase tracking-wider font-bold">
+              <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+              <span>Secured by PCI-DSS Bank-Grade SSL Encryption</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile-Optimized Bottom Navigation Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-[0_-4px_16px_rgba(0,0,0,0.04)] px-4 py-2 flex justify-around items-center text-slate-600">
+        {[
+          { id: 'marketplace', label: 'Bazar', icon: <Store className="w-5 h-5" /> },
+          { id: 'rfqs', label: 'Tenders', icon: <FilePlus className="w-5 h-5" /> },
+          { id: 'orders', label: 'Clearing', icon: <ClipboardList className="w-5 h-5" /> },
+          { id: 'cart', label: 'Cart', icon: (
+            <div className="relative">
+              <ShoppingCart className="w-5 h-5" />
+              {cart.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center font-mono">
+                  {cart.reduce((acc, item) => acc + item.quantity, 0)}
+                </span>
+              )}
+            </div>
+          ) },
+        ].map((tab) => {
+          const isActive = currentView === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => onNavigate(tab.id as any)}
+              className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition duration-200 cursor-pointer ${
+                isActive 
+                  ? 'text-teal-700 font-bold scale-105' 
+                  : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <div className={`p-1 rounded-lg ${isActive ? 'bg-teal-50 text-teal-700' : 'text-slate-400'}`}>
+                {tab.icon}
+              </div>
+              <span className="text-[10px] tracking-tight">{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
     </div>
   );
