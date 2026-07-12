@@ -106,6 +106,13 @@ export interface Product {
   rejectedAt?: string | null;
   rejectReason?: string;
   updatedAt?: string | null;
+
+  // Platform Commission System Fields
+  vendor_price?: number;
+  commission_rate?: number;
+  commission_amount?: number;
+  final_price?: number;
+  vendor_payout?: number;
   
   shortDescription?: string;
   fullDescription?: string;
@@ -204,12 +211,17 @@ export interface OrderItem {
   productId: string;
   productName: string;
   productImage: string;
-  price: number;
+  price: number; // customer price
   quantity: number;
   gstRate: number;
   hsnCode: string;
   vendorId: string;
   vendorName: string;
+  vendor_price?: number;
+  commission_rate?: number;
+  commission_amount?: number;
+  final_price?: number;
+  vendor_payout?: number;
 }
 
 export interface OrderTimelineEvent {
