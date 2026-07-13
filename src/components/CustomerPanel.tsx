@@ -47,6 +47,7 @@ import {
 import InvoicePDF from './InvoicePDF';
 import HomepageTrustSection from './HomepageTrustSection';
 import { PolicyType } from './PolicyModal';
+import { getSliceUpiQrDataUrl } from '../utils/sliceQrSvg';
 
 interface CustomerPanelProps {
   currentUser: User | null;
@@ -2545,35 +2546,73 @@ export default function CustomerPanel({
                 </div>
 
                 {/* Secure Notice */}
-                <div className="flex gap-2 p-3 bg-blue-50 text-blue-700 rounded-xl text-[10px] font-semibold leading-normal border border-blue-100">
+                <div className="flex gap-2 p-3 bg-blue-50/80 text-blue-800 rounded-xl text-[10px] font-semibold leading-normal border border-blue-100">
                   <ShieldCheck className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
                   <p>Escrow Guarantee: Funds are deposited into a secure non-custodial clearing account. The payment is verified by Healnex Admin, and released to the supplier only upon order generation &amp; shipment tracking initiation.</p>
                 </div>
 
-                {/* Simulated Payment Trigger */}
-                <div className="space-y-2.5">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Transfer Protocol</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {/* Secure UPI QR Payment Box */}
+                <div className="bg-slate-50 rounded-2xl border border-slate-200 p-5 space-y-4 text-center">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Escrow Payment Gateway</p>
+                    <h4 className="text-xs font-bold text-slate-800">Scan QR Code via any UPI App to Pay</h4>
+                    <p className="text-[10px] text-slate-500">Google Pay, PhonePe, Paytm, BHIM, or slice app supported</p>
+                  </div>
+
+                  {/* QR Image */}
+                  <div className="relative inline-block bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm mx-auto">
+                    <img 
+                      src={paymentSettings.upiQrCodeUrl || getSliceUpiQrDataUrl(paymentSettings.upiId || '9149758743@slc', paymentSettings.upiHolderName || 'Warisul Islam')} 
+                      alt="UPI QR Code" 
+                      className="w-44 h-44 mx-auto object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute top-2 right-2 bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded text-[8px] font-black uppercase">
+                      slice
+                    </div>
+                  </div>
+
+                  {/* UPI Details Card */}
+                  <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-100 max-w-sm mx-auto flex items-center justify-between gap-3 text-left">
+                    <div>
+                      <span className="text-[8px] text-slate-400 font-bold block uppercase tracking-wider">Official UPI Escrow Handle</span>
+                      <span className="font-mono text-xs font-black text-slate-900">{paymentSettings.upiId || '9149758743@slc'}</span>
+                      <span className="text-[9px] text-slate-500 block">Holder: {paymentSettings.upiHolderName || 'Warisul Islam'}</span>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        const vpa = paymentSettings.upiId || '9149758743@slc';
+                        navigator.clipboard.writeText(vpa);
+                        addToast('UPI ID copied to clipboard!', 'info');
+                      }}
+                      className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg border border-slate-200 transition cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy</span>
+                    </button>
+                  </div>
+
+                  {/* Action Triggers */}
+                  <div className="pt-2 space-y-2">
                     <button 
                       onClick={() => handleConfirmEscrowPayment('UPI QR Instant')}
-                      className="p-3 border border-slate-200 hover:border-teal-500 hover:bg-slate-50/50 rounded-xl text-left font-bold text-xs flex flex-col justify-between transition cursor-pointer"
+                      className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-md cursor-pointer"
                     >
-                      <span className="text-slate-700 text-[10px] font-bold">UPI SmartTransfer</span>
-                      <span className="text-[9px] text-slate-400 font-normal mt-0.5">Instant ledger trigger</span>
+                      <QrCode className="w-4 h-4 text-emerald-400" />
+                      <span>I Have Transferred ₹{totalPayable.toLocaleString('en-IN')} (Submit for Verification)</span>
                     </button>
-                    <button 
-                      onClick={() => handleConfirmEscrowPayment('Direct RTGS/Bank Transfer')}
-                      className="p-3 border border-slate-200 hover:border-teal-500 hover:bg-slate-50/50 rounded-xl text-left font-bold text-xs flex flex-col justify-between transition cursor-pointer"
-                    >
-                      <span className="text-slate-700 text-[10px] font-bold">Bank Escrow RTGS</span>
-                      <span className="text-[9px] text-slate-400 font-normal mt-0.5">Awaiting manual clearance</span>
-                    </button>
+
+                    <div className="flex items-center justify-center gap-2 py-1">
+                      <div className="h-px bg-slate-200 flex-1"></div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Demo / Sandbox Sandbox Tool</span>
+                      <div className="h-px bg-slate-200 flex-1"></div>
+                    </div>
+
                     <button 
                       onClick={() => handleConfirmEscrowPayment('Admin Direct Clearance (Sandbox Bypass)')}
-                      className="p-3 border-2 border-dashed border-teal-300 bg-teal-50/40 hover:border-teal-500 hover:bg-teal-50 rounded-xl text-left font-bold text-xs flex flex-col justify-between transition cursor-pointer animate-pulse"
+                      className="w-full py-2.5 px-4 border border-dashed border-teal-300 bg-teal-50 text-teal-900 hover:bg-teal-100/80 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer animate-pulse"
                     >
-                      <span className="text-teal-900 text-[10px] font-black flex items-center gap-1">⚡ Admin Bypass</span>
-                      <span className="text-[9px] text-teal-600 font-normal mt-0.5">Instant escrow clearance</span>
+                      <span>⚡ Admin Direct Bypass (Instant Order Clearance)</span>
                     </button>
                   </div>
                 </div>

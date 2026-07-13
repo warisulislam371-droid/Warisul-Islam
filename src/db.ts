@@ -846,23 +846,35 @@ export const dbLocal = {
     const settings = this.get(STORAGE_KEYS.PAYMENT_SETTINGS, [DEFAULT_PAYMENT_SETTINGS]) as PaymentSettings[];
     let current = settings[0] || DEFAULT_PAYMENT_SETTINGS;
     current = { ...DEFAULT_PAYMENT_SETTINGS, ...current };
-    const latestSliceQr = getSliceUpiQrDataUrl();
+    
+    // Generate dynamic Slice QR based on current customized or default details
+    const upiId = current.upiId || SLICE_UPI_ID;
+    const upiHolderName = current.upiHolderName || SLICE_HOLDER_NAME;
+    const dynamicSliceQr = getSliceUpiQrDataUrl(upiId, upiHolderName);
+    
     if (
       current.upiId === 'payments@hdfcbank' ||
       current.upiQrCodeUrl?.includes('unsplash') ||
       !current.upiQrCodeUrl ||
-      ((current.upiHolderName?.toLowerCase().includes('warisul') || current.upiId === SLICE_UPI_ID) && current.upiQrCodeUrl !== latestSliceQr)
+      (current.upiQrCodeUrl.startsWith('data:image/svg+xml') && current.upiQrCodeUrl !== dynamicSliceQr)
     ) {
-      current.upiId = SLICE_UPI_ID;
-      current.upiHolderName = SLICE_HOLDER_NAME;
-      current.upiQrCodeUrl = latestSliceQr;
-      current.upiInstructions = 'Scan the Slice UPI QR code using any UPI app (GPay, PhonePe, Paytm, Slice) to pay directly to Warisul Islam.';
+      current.upiQrCodeUrl = dynamicSliceQr;
       this.set(STORAGE_KEYS.PAYMENT_SETTINGS, [current]);
     }
     return current;
   },
   savePaymentSettings(settings: PaymentSettings) {
     const old = this.get(STORAGE_KEYS.PAYMENT_SETTINGS, [DEFAULT_PAYMENT_SETTINGS]) as PaymentSettings[];
+    
+    // Regenerate QR if it is still using the generated Slice QR format
+    const upiId = settings.upiId || SLICE_UPI_ID;
+    const upiHolderName = settings.upiHolderName || SLICE_HOLDER_NAME;
+    const dynamicSliceQr = getSliceUpiQrDataUrl(upiId, upiHolderName);
+    
+    if (!settings.upiQrCodeUrl || settings.upiQrCodeUrl.startsWith('data:image/svg+xml')) {
+      settings.upiQrCodeUrl = dynamicSliceQr;
+    }
+    
     this.set(STORAGE_KEYS.PAYMENT_SETTINGS, [settings]);
     syncListToFirestoreWithDeletions('payment_settings', [settings], old);
   },

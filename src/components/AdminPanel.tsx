@@ -4094,12 +4094,15 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             {/* UPI Settings Card */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-xs">
               <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <QrCode className="w-4 h-4 text-teal-700" />
-                  UPI Payment Channel Settings
-                </h3>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <QrCode className="w-4 h-4 text-teal-700" />
+                    B2B Escrow UPI Payment Gateway (Slice UPI)
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-normal mt-0.5">Configure the destination UPI account and real-time generated QR code for B2B escrow deposits.</p>
+                </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-semibold text-slate-500">Enable UPI</span>
+                  <span className="text-[10px] font-semibold text-slate-500">Enable Escrow UPI</span>
                   <input
                     type="checkbox"
                     checked={paymentSettings.upiEnabled}
