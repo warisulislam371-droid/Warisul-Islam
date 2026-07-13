@@ -868,109 +868,281 @@ export default function CustomerPanel({
       {currentView === 'marketplace' && (
         <div className="space-y-8 animate-fade-in">
           
-          {/* Colorful Premium Hero Banner */}
-          <div className="relative bg-gradient-to-r from-medical-blue to-cyan-blue text-white rounded-3xl overflow-hidden py-14 sm:py-24 px-6 sm:px-12 shadow-2xl border border-white/10 min-h-[400px] sm:min-h-[460px] flex items-center transition-all duration-700">
-            {/* Ambient background decoration */}
-            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-teal-300 via-transparent to-transparent pointer-events-none" />
-            <div className="absolute top-0 right-0 w-80 h-80 bg-teal-400 rounded-full blur-[120px] opacity-25 pointer-events-none" />
-            <div className="absolute bottom-0 left-10 w-60 h-60 bg-blue-400 rounded-full blur-[100px] opacity-20 pointer-events-none" />
-            
-            <div className="w-full relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10">
-              <div className="max-w-2xl space-y-6">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="inline-block bg-white/20 text-white backdrop-blur-md border border-white/30 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
-                    ⚡ MEGA BAZAR IS LIVE • DISCOUNTS APPLIED
-                  </span>
-                  <span className="inline-block bg-highlight-green text-slate-950 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-md">
-                    🆕 Newly Launched
-                  </span>
-                </div>
-                <h1 className="text-3xl sm:text-[38px] font-bold text-white tracking-tight leading-tight font-sans drop-shadow-sm">
-                  Premium Healthcare Supplies, <br className="hidden sm:inline" />
-                  Better Prices!
-                </h1>
-                <p className="text-sm sm:text-lg text-white/90 leading-relaxed max-w-lg font-medium drop-shadow-sm">
-                  Up to <span className="font-extrabold text-teal-200 text-lg sm:text-xl underline decoration-teal-300">40% OFF</span> on 10,000+ certified medical products.
-                </p>
-                <div className="flex flex-wrap gap-3.5 pt-3">
-                  <button
-                    onClick={() => {
-                      const el = document.getElementById('marketplace-anchor');
-                      el?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className="bg-white hover:bg-slate-50 text-slate-900 text-xs sm:text-sm font-extrabold px-7 py-4 rounded-xl transition duration-300 shadow-xl flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
-                  >
-                    <span>Shop Now</span>
-                    <ArrowRight className="w-4.5 h-4.5 text-slate-800" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (onBecomeSeller) {
-                        onBecomeSeller();
-                      } else {
-                        const el = document.getElementById('marketplace-anchor');
-                        el?.scrollIntoView({ behavior: 'smooth' });
-                      }
-                    }}
-                    className="bg-transparent border-2 border-white/65 hover:border-white hover:bg-white/10 text-white text-xs sm:text-sm font-bold px-7 py-3.5 rounded-xl transition duration-300 shadow-md cursor-pointer"
-                  >
-                    Become a Seller
-                  </button>
+          {/* Dynamic Promo Banner Carousel */}
+          {promoBanners && promoBanners.length > 0 ? (
+            <div className="relative w-full rounded-3xl overflow-hidden shadow-2xl border border-slate-200/50 min-h-[400px] sm:min-h-[460px] flex items-center transition-all duration-700 group/carousel">
+              {/* Active Banner Background Image */}
+              <div className="absolute inset-0 z-0">
+                <img
+                  src={promoBanners[activeBannerIdx].imageUrl}
+                  alt={promoBanners[activeBannerIdx].title}
+                  className="w-full h-full object-cover transition-all duration-1000 ease-in-out transform scale-100"
+                  referrerPolicy="no-referrer"
+                />
+                {/* Modern Dark/Teal Gradient Overlay to guarantee high contrast */}
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-900/80 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 via-transparent to-transparent" />
+              </div>
+
+              {/* Banner Content */}
+              <div className="w-full relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10 py-14 sm:py-24 px-6 sm:px-12 text-white">
+                <div className="max-w-2xl space-y-6">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {promoBanners[activeBannerIdx].badgeText && (
+                      <span className="inline-block bg-teal-500/20 text-teal-300 backdrop-blur-md border border-teal-500/40 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
+                        ⚡ {promoBanners[activeBannerIdx].badgeText}
+                      </span>
+                    )}
+                    <span className="inline-block bg-emerald-500 text-slate-950 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-md">
+                      Verified Supplier
+                    </span>
+                  </div>
+                  <h1 className="text-3xl sm:text-[38px] font-bold text-white tracking-tight leading-tight font-sans drop-shadow-sm">
+                    {promoBanners[activeBannerIdx].title}
+                  </h1>
+                  {promoBanners[activeBannerIdx].subtitle && (
+                    <p className="text-sm sm:text-lg text-slate-200 leading-relaxed max-w-lg font-medium drop-shadow-sm">
+                      {promoBanners[activeBannerIdx].subtitle}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-3.5 pt-3">
+                    <button
+                      onClick={() => {
+                        const link = promoBanners[activeBannerIdx].linkUrl;
+                        if (link && link.startsWith('#')) {
+                          const el = document.getElementById(link.substring(1));
+                          if (el) {
+                            el.scrollIntoView({ behavior: 'smooth' });
+                          } else {
+                            document.getElementById('marketplace-anchor')?.scrollIntoView({ behavior: 'smooth' });
+                          }
+                        } else if (link) {
+                          if (link.includes('rfq')) {
+                            onNavigate('rfqs');
+                          } else {
+                            document.getElementById('marketplace-anchor')?.scrollIntoView({ behavior: 'smooth' });
+                          }
+                        } else {
+                          document.getElementById('marketplace-anchor')?.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                      className="bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-extrabold px-7 py-4 rounded-xl transition duration-300 shadow-xl flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0 border border-teal-500/30"
+                    >
+                      <span>{promoBanners[activeBannerIdx].buttonText || 'Explore Catalog'}</span>
+                      <ArrowRight className="w-4.5 h-4.5 text-white" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        onNavigate('rfqs');
+                      }}
+                      className="bg-white/10 border border-white/20 hover:bg-white/20 text-white text-xs sm:text-sm font-bold px-7 py-3.5 rounded-xl transition duration-300 shadow-md cursor-pointer backdrop-blur-sm"
+                    >
+                      B2B Tenders
+                    </button>
+                  </div>
+
+                  {/* Integrated Trust Badges inside Carousel */}
+                  <div className="flex flex-wrap gap-5 pt-6 border-t border-white/10 text-white/90 text-xs font-semibold">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-full bg-white/10 border border-white/20">
+                        <Check className="w-3.5 h-3.5 text-teal-300" />
+                      </div>
+                      <span>100% Secure Procurement</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-full bg-white/10 border border-white/20">
+                        <Truck className="w-3.5 h-3.5 text-teal-300" />
+                      </div>
+                      <span>Escrow Safeguard</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-full bg-white/10 border border-white/20">
+                        <ShieldCheck className="w-3.5 h-3.5 text-teal-300" />
+                      </div>
+                      <span>ISO Certified Supplies</span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Integrated Trust Badges */}
-                <div className="flex flex-wrap gap-5 pt-6 border-t border-white/10 text-white/90 text-xs font-semibold">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1 rounded-full bg-white/10 border border-white/20">
-                      <Check className="w-3.5 h-3.5 text-teal-200" />
+                {/* Right Side Immersive Card */}
+                <div className="relative shrink-0 hidden lg:block w-80">
+                  <div className="bg-slate-950/40 backdrop-blur-xl p-6 rounded-3xl border border-white/15 shadow-2xl space-y-4 transform hover:scale-[1.02] transition-transform duration-500">
+                    <div className="h-44 rounded-2xl overflow-hidden relative border border-white/10 shadow-inner">
+                      <img
+                        src={promoBanners[activeBannerIdx].imageUrl}
+                        alt="Current Offer"
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <span className="absolute top-2.5 right-2.5 bg-teal-500 text-slate-950 text-[9px] font-black px-2.5 py-0.5 rounded-full shadow-md uppercase tracking-wider">
+                        Active Promo
+                      </span>
                     </div>
-                    <span>100% Genuine</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="p-1 rounded-full bg-white/10 border border-white/20">
-                      <Truck className="w-3.5 h-3.5 text-teal-200" />
+                    <div className="space-y-1 text-white">
+                      <h4 className="font-bold text-sm tracking-tight truncate">{promoBanners[activeBannerIdx].title}</h4>
+                      <p className="text-[11px] text-teal-300 font-bold uppercase tracking-wider">{promoBanners[activeBannerIdx].badgeText || 'Exclusive Deal'}</p>
+                      <div className="flex items-center justify-between pt-2 border-t border-white/10 mt-2">
+                        <div>
+                          <span className="text-[9px] text-slate-400 block uppercase leading-none">B2B Platform</span>
+                          <span className="font-extrabold text-xs text-white">Al Salam Escrow Verified</span>
+                        </div>
+                        <span className="text-[9px] bg-teal-400/25 text-teal-200 font-bold px-2 py-1 rounded border border-teal-400/30">
+                          Active
+                        </span>
+                      </div>
                     </div>
-                    <span>Fast Delivery</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="p-1 rounded-full bg-white/10 border border-white/20">
-                      <ShieldCheck className="w-3.5 h-3.5 text-teal-200" />
-                    </div>
-                    <span>Trusted Vendors</span>
                   </div>
                 </div>
               </div>
 
-              {/* Right Side Immersive Card */}
-              <div className="relative shrink-0 hidden lg:block w-80">
-                <div className="bg-white/10 backdrop-blur-xl p-6 rounded-3xl border border-white/20 shadow-2xl space-y-4 transform hover:scale-[1.02] transition-transform duration-500">
-                  <div className="h-44 rounded-2xl overflow-hidden relative border border-white/10 shadow-inner">
-                    <img
-                      src="https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=400"
-                      alt="Premium Medical Equipment"
-                      className="w-full h-full object-cover"
+              {/* Slider Manual Navigation Chevrons */}
+              {promoBanners.length > 1 && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveBannerIdx((prev) => (prev - 1 + promoBanners.length) % promoBanners.length);
+                    }}
+                    className="absolute left-4 z-20 p-2.5 bg-slate-950/50 hover:bg-slate-950/80 border border-white/10 text-white rounded-full transition opacity-0 group-hover/carousel:opacity-100 cursor-pointer hidden sm:block"
+                    title="Previous Slide"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveBannerIdx((prev) => (prev + 1) % promoBanners.length);
+                    }}
+                    className="absolute right-4 z-20 p-2.5 bg-slate-950/50 hover:bg-slate-950/80 border border-white/10 text-white rounded-full transition opacity-0 group-hover/carousel:opacity-100 cursor-pointer hidden sm:block"
+                    title="Next Slide"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </>
+              )}
+
+              {/* Bottom Dot Indicators */}
+              {promoBanners.length > 1 && (
+                <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 z-20 flex gap-2">
+                  {promoBanners.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveBannerIdx(idx)}
+                      className={`w-2.5 h-2.5 rounded-full transition-all duration-300 cursor-pointer ${
+                        idx === activeBannerIdx 
+                          ? 'bg-teal-400 w-6 shadow-md shadow-teal-400/40' 
+                          : 'bg-white/40 hover:bg-white/60'
+                      }`}
+                      title={`Go to slide ${idx + 1}`}
                     />
-                    <span className="absolute top-2.5 right-2.5 bg-rose-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-md">
-                      Featured Offer
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="relative bg-gradient-to-r from-medical-blue to-cyan-blue text-white rounded-3xl overflow-hidden py-14 sm:py-24 px-6 sm:px-12 shadow-2xl border border-white/10 min-h-[400px] sm:min-h-[460px] flex items-center transition-all duration-700">
+              {/* Ambient background decoration */}
+              <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-teal-300 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute top-0 right-0 w-80 h-80 bg-teal-400 rounded-full blur-[120px] opacity-25 pointer-events-none" />
+              <div className="absolute bottom-0 left-10 w-60 h-60 bg-blue-400 rounded-full blur-[100px] opacity-20 pointer-events-none" />
+              
+              <div className="w-full relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10">
+                <div className="max-w-2xl space-y-6">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="inline-block bg-white/20 text-white backdrop-blur-md border border-white/30 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
+                      ⚡ MEGA BAZAR IS LIVE • DISCOUNTS APPLIED
+                    </span>
+                    <span className="inline-block bg-highlight-green text-slate-950 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-md">
+                      🆕 Newly Launched
                     </span>
                   </div>
-                  <div className="space-y-1 text-white">
-                    <h4 className="font-bold text-sm tracking-tight truncate">Enterprise High-Flow ICU Ventilator</h4>
-                    <p className="text-[11px] text-white/70">Certified RespiCare ICU system</p>
-                    <div className="flex items-center justify-between pt-1 border-t border-white/10 mt-2">
-                      <div>
-                        <span className="text-[9px] text-white/60 block uppercase leading-none">Starting at</span>
-                        <span className="font-extrabold text-sm text-teal-200 font-mono">₹3,10,000</span>
+                  <h1 className="text-3xl sm:text-[38px] font-bold text-white tracking-tight leading-tight font-sans drop-shadow-sm">
+                    Premium Healthcare Supplies, <br className="hidden sm:inline" />
+                    Better Prices!
+                  </h1>
+                  <p className="text-sm sm:text-lg text-white/90 leading-relaxed max-w-lg font-medium drop-shadow-sm">
+                    Up to <span className="font-extrabold text-teal-200 text-lg sm:text-xl underline decoration-teal-300">40% OFF</span> on 10,000+ certified medical products.
+                  </p>
+                  <div className="flex flex-wrap gap-3.5 pt-3">
+                    <button
+                      onClick={() => {
+                        const el = document.getElementById('marketplace-anchor');
+                        el?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="bg-white hover:bg-slate-50 text-slate-900 text-xs sm:text-sm font-extrabold px-7 py-4 rounded-xl transition duration-300 shadow-xl flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                    >
+                      <span>Shop Now</span>
+                      <ArrowRight className="w-4.5 h-4.5 text-slate-800" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (onBecomeSeller) {
+                          onBecomeSeller();
+                        } else {
+                          const el = document.getElementById('marketplace-anchor');
+                          el?.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                      className="bg-transparent border-2 border-white/65 hover:border-white hover:bg-white/10 text-white text-xs sm:text-sm font-bold px-7 py-3.5 rounded-xl transition duration-300 shadow-md cursor-pointer"
+                    >
+                      Become a Seller
+                    </button>
+                  </div>
+
+                  {/* Integrated Trust Badges */}
+                  <div className="flex flex-wrap gap-5 pt-6 border-t border-white/10 text-white/90 text-xs font-semibold">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-full bg-white/10 border border-white/20">
+                        <Check className="w-3.5 h-3.5 text-teal-200" />
                       </div>
-                      <span className="text-[10px] bg-teal-400 text-teal-950 font-bold px-2 py-0.5 rounded font-mono">
-                        Save 11%
+                      <span>100% Genuine</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-full bg-white/10 border border-white/20">
+                        <Truck className="w-3.5 h-3.5 text-teal-200" />
+                      </div>
+                      <span>Fast Delivery</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-full bg-white/10 border border-white/20">
+                        <ShieldCheck className="w-3.5 h-3.5 text-teal-200" />
+                      </div>
+                      <span>Trusted Vendors</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Side Immersive Card */}
+                <div className="relative shrink-0 hidden lg:block w-80">
+                  <div className="bg-white/10 backdrop-blur-xl p-6 rounded-3xl border border-white/20 shadow-2xl space-y-4 transform hover:scale-[1.02] transition-transform duration-500">
+                    <div className="h-44 rounded-2xl overflow-hidden relative border border-white/10 shadow-inner">
+                      <img
+                        src="https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=400"
+                        alt="Premium Medical Equipment"
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute top-2.5 right-2.5 bg-rose-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-md">
+                        Featured Offer
                       </span>
+                    </div>
+                    <div className="space-y-1 text-white">
+                      <h4 className="font-bold text-sm tracking-tight truncate">Enterprise High-Flow ICU Ventilator</h4>
+                      <p className="text-[11px] text-white/70">Certified RespiCare ICU system</p>
+                      <div className="flex items-center justify-between pt-1 border-t border-white/10 mt-2">
+                        <div>
+                          <span className="text-[9px] text-white/60 block uppercase leading-none">Starting at</span>
+                          <span className="font-extrabold text-sm text-teal-200 font-mono">₹3,10,000</span>
+                        </div>
+                        <span className="text-[10px] bg-teal-400 text-teal-950 font-bold px-2 py-0.5 rounded font-mono">
+                          Save 11%
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Trust & Service Section - Horizontal Strip */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 rounded-2xl bg-white border border-slate-100 shadow-sm transition-all hover:shadow-md">

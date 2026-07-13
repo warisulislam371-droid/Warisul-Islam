@@ -23,7 +23,8 @@ import {
   Palette,
   ShieldCheck,
   Star,
-  MapPin
+  MapPin,
+  ClipboardList
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -310,6 +311,18 @@ export default function Navbar({
             >
               <Sparkles className="w-5 h-5 text-teal-600 shrink-0" />
               <span className="hidden lg:inline">RFQs</span>
+            </button>
+
+            {/* My Orders Page Trigger */}
+            <button
+              onClick={() => onNavigate('orders')}
+              className={`p-2 rounded-xl transition flex items-center gap-1 text-xs font-semibold ${
+                currentView === 'orders' ? 'bg-teal-50 text-teal-700 font-bold' : 'text-slate-500 hover:bg-slate-100 hover:text-teal-700'
+              }`}
+              title="My Orders"
+            >
+              <ClipboardList className="w-5 h-5 text-teal-600 shrink-0" />
+              <span className="hidden lg:inline">My Orders</span>
             </button>
 
             {/* Cart Button */}
