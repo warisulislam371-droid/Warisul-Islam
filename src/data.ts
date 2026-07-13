@@ -318,7 +318,7 @@ export const DEFAULT_SUPER_ADMIN: User = {
   name: 'Super Admin',
   email: 'warisulislam371@gmail.com',
   role: 'super_admin',
-  phone: '+91 98765 43210',
+  phone: '+91 9103500592',
   isVerified: true,
   forcePasswordChange: false,
   createdAt: '2026-01-01T00:00:00Z'

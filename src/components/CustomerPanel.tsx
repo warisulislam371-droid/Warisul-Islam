@@ -65,6 +65,7 @@ interface CustomerPanelProps {
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   isDarkMode?: boolean;
   onOpenPolicy?: (policy: PolicyType) => void;
+  onBecomeSeller?: () => void;
 }
 
 export default function CustomerPanel({
@@ -83,7 +84,8 @@ export default function CustomerPanel({
   onCategorySelect,
   addToast,
   isDarkMode = false,
-  onOpenPolicy
+  onOpenPolicy,
+  onBecomeSeller
 }: CustomerPanelProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -581,17 +583,32 @@ export default function CustomerPanel({
         customerEmail: currentUser.email,
         vendorId: firstItem.vendorId,
         vendorName: firstItem.vendorName,
-        items: cart.map(item => ({
-          productId: item.product.id,
-          productName: item.product.name,
-          productImage: item.product.images[0],
-          price: item.product.salePrice,
-          quantity: item.quantity,
-          gstRate: item.product.gstRate,
-          hsnCode: item.product.hsnCode,
-          vendorId: item.product.vendorId,
-          vendorName: item.product.vendorName
-        })),
+        items: cart.map(item => {
+          const vPrice = item.product.vendorPrice !== undefined ? item.product.vendorPrice : item.product.salePrice;
+          const commRate = item.product.commissionRate !== undefined ? item.product.commissionRate : 0;
+          const commAmt = item.product.commissionAmount !== undefined ? item.product.commissionAmount : 0;
+          const fPrice = item.product.salePrice;
+          const vPayout = item.product.vendorPayout !== undefined ? item.product.vendorPayout : vPrice;
+          
+          return {
+            productId: item.product.id,
+            productName: item.product.name,
+            productImage: item.product.images[0],
+            price: fPrice,
+            quantity: item.quantity,
+            gstRate: item.product.gstRate,
+            hsnCode: item.product.hsnCode,
+            vendorId: item.product.vendorId,
+            vendorName: item.product.vendorName,
+            
+            // Commission system snapshots
+            vendorPrice: vPrice,
+            commissionRate: commRate,
+            commissionAmount: commAmt,
+            finalPrice: fPrice,
+            vendorPayout: vPayout
+          };
+        }),
         totalAmount: sub,
         gstAmount: gst,
         discountAmount: 0,
@@ -736,7 +753,14 @@ export default function CustomerPanel({
           gstRate: 12,
           hsnCode: '90181100',
           vendorId: quo.vendorId,
-          vendorName: quo.companyName
+          vendorName: quo.companyName,
+          
+          // Custom RFQ snapshots
+          vendorPrice: quo.pricePerUnit,
+          commissionRate: 0,
+          commissionAmount: 0,
+          finalPrice: quo.pricePerUnit,
+          vendorPayout: quo.pricePerUnit
         }],
         totalAmount: sub,
         gstAmount: gst,
@@ -795,7 +819,7 @@ export default function CustomerPanel({
         <div className="space-y-8 animate-fade-in">
           
           {/* Colorful Premium Hero Banner */}
-          <div className="relative bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 text-white rounded-3xl overflow-hidden py-14 sm:py-24 px-6 sm:px-12 shadow-2xl border border-white/10 min-h-[400px] sm:min-h-[460px] flex items-center transition-all duration-700">
+          <div className="relative bg-gradient-to-r from-medical-blue to-cyan-blue text-white rounded-3xl overflow-hidden py-14 sm:py-24 px-6 sm:px-12 shadow-2xl border border-white/10 min-h-[400px] sm:min-h-[460px] flex items-center transition-all duration-700">
             {/* Ambient background decoration */}
             <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-teal-300 via-transparent to-transparent pointer-events-none" />
             <div className="absolute top-0 right-0 w-80 h-80 bg-teal-400 rounded-full blur-[120px] opacity-25 pointer-events-none" />
@@ -803,12 +827,17 @@ export default function CustomerPanel({
             
             <div className="w-full relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10">
               <div className="max-w-2xl space-y-6">
-                <span className="inline-block bg-white/20 text-white backdrop-blur-md border border-white/30 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
-                  ⚡ MEGA BAZAR IS LIVE • DISCOUNTS APPLIED
-                </span>
-                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight font-display leading-tight drop-shadow-sm">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="inline-block bg-white/20 text-white backdrop-blur-md border border-white/30 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
+                    ⚡ MEGA BAZAR IS LIVE • DISCOUNTS APPLIED
+                  </span>
+                  <span className="inline-block bg-highlight-green text-slate-950 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-md">
+                    🆕 Newly Launched
+                  </span>
+                </div>
+                <h1 className="text-3xl sm:text-[38px] font-bold text-white tracking-tight leading-tight font-sans drop-shadow-sm">
                   Premium Healthcare Supplies, <br className="hidden sm:inline" />
-                  <span className="text-teal-200">Better Prices!</span>
+                  Better Prices!
                 </h1>
                 <p className="text-sm sm:text-lg text-white/90 leading-relaxed max-w-lg font-medium drop-shadow-sm">
                   Up to <span className="font-extrabold text-teal-200 text-lg sm:text-xl underline decoration-teal-300">40% OFF</span> on 10,000+ certified medical products.
@@ -819,19 +848,23 @@ export default function CustomerPanel({
                       const el = document.getElementById('marketplace-anchor');
                       el?.scrollIntoView({ behavior: 'smooth' });
                     }}
-                    className="bg-white hover:bg-slate-50 text-teal-900 text-xs sm:text-sm font-extrabold px-7 py-4 rounded-xl transition duration-300 shadow-xl flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                    className="bg-white hover:bg-slate-50 text-slate-900 text-xs sm:text-sm font-extrabold px-7 py-4 rounded-xl transition duration-300 shadow-xl flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
                   >
                     <span>Shop Now</span>
-                    <ArrowRight className="w-4.5 h-4.5 text-teal-800" />
+                    <ArrowRight className="w-4.5 h-4.5 text-slate-800" />
                   </button>
                   <button
                     onClick={() => {
-                      const el = document.getElementById('marketplace-anchor');
-                      el?.scrollIntoView({ behavior: 'smooth' });
+                      if (onBecomeSeller) {
+                        onBecomeSeller();
+                      } else {
+                        const el = document.getElementById('marketplace-anchor');
+                        el?.scrollIntoView({ behavior: 'smooth' });
+                      }
                     }}
                     className="bg-transparent border-2 border-white/65 hover:border-white hover:bg-white/10 text-white text-xs sm:text-sm font-bold px-7 py-3.5 rounded-xl transition duration-300 shadow-md cursor-pointer"
                   >
-                    Explore Now
+                    Become a Seller
                   </button>
                 </div>
 
@@ -972,13 +1005,13 @@ export default function CustomerPanel({
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
               {[
-                { name: 'Homecare Devices', displayName: 'Diagnostics', count: '150+ Products', bg: 'bg-blue-50 text-blue-600 border-blue-100', icon: <Activity className="w-5 h-5 text-blue-500" /> },
-                { name: 'Dental Equipment', displayName: 'Dental', count: '40+ Products', bg: 'bg-purple-50 text-purple-600 border-purple-100', icon: <Sparkles className="w-5 h-5 text-purple-500" /> },
-                { name: 'Consumables', displayName: 'Consumables', count: '500+ Products', bg: 'bg-pink-50 text-pink-600 border-pink-100', icon: <ShoppingCart className="w-5 h-5 text-pink-500" /> },
-                { name: 'Medical Equipment', displayName: 'Equipment', count: '120+ Products', bg: 'bg-teal-50 text-teal-600 border-teal-100', icon: <Layers className="w-5 h-5 text-teal-500" /> },
-                { name: 'Hospital Furniture', displayName: 'Furniture', count: '80+ Products', bg: 'bg-orange-50 text-orange-600 border-orange-100', icon: <Info className="w-5 h-5 text-orange-500" /> },
-                { name: 'Laboratory Equipment', displayName: 'Laboratory', count: '95+ Products', bg: 'bg-green-50 text-green-600 border-green-100', icon: <CheckCircle className="w-5 h-5 text-green-500" /> },
-                { name: 'Surgical Instruments', displayName: 'Surgical', count: '250+ Products', bg: 'bg-rose-50 text-rose-600 border-rose-100', icon: <Scale className="w-5 h-5 text-rose-500" /> },
+                { name: 'Homecare Devices', displayName: 'Diagnostics', count: '150+ Products', icon: <Activity className="w-5 h-5 text-brand-blue" /> },
+                { name: 'Dental Equipment', displayName: 'Dental', count: '40+ Products', icon: <Sparkles className="w-5 h-5 text-brand-orange" /> },
+                { name: 'Consumables', displayName: 'Consumables', count: '500+ Products', icon: <ShoppingCart className="w-5 h-5 text-offer-red" /> },
+                { name: 'Medical Equipment', displayName: 'Equipment', count: '120+ Products', icon: <Layers className="w-5 h-5 text-medical-blue" /> },
+                { name: 'Hospital Furniture', displayName: 'Furniture', count: '80+ Products', icon: <Info className="w-5 h-5 text-brand-orange" /> },
+                { name: 'Laboratory Equipment', displayName: 'Laboratory', count: '95+ Products', icon: <CheckCircle className="w-5 h-5 text-highlight-green" /> },
+                { name: 'Surgical Instruments', displayName: 'Surgical', count: '250+ Products', icon: <Scale className="w-5 h-5 text-[#be123c]" /> },
               ].map((item) => {
                 const isActive = selectedCategoryName === item.name;
                 return (
@@ -989,21 +1022,21 @@ export default function CustomerPanel({
                       const el = document.getElementById('marketplace-anchor');
                       el?.scrollIntoView({ behavior: 'smooth' });
                     }}
-                    className={`p-4 rounded-3xl border text-left transition-all duration-300 flex flex-col justify-between min-h-[130px] shadow-xs hover:shadow-md hover:-translate-y-1 group relative overflow-hidden cursor-pointer ${
+                    className={`p-4 rounded-[8px] border text-left transition-all duration-300 flex flex-col justify-between min-h-[135px] group relative overflow-hidden cursor-pointer ${
                       isActive 
-                        ? 'bg-slate-900 border-slate-900 text-white scale-[1.02]' 
-                        : `${item.bg} hover:border-slate-300`
+                        ? 'bg-slate-900 border-slate-900 scale-[1.02] shadow-md' 
+                        : 'bg-white border-card-border hover:border-slate-400 hover:-translate-y-[3px] hover:shadow-md'
                     }`}
                   >
-                    <div className="absolute top-[-20px] right-[-20px] w-16 h-16 rounded-full bg-white/10 group-hover:scale-150 transition-all duration-500 pointer-events-none" />
-                    <div className={`p-2 rounded-xl w-fit ${isActive ? 'bg-white/10 text-white' : 'bg-white shadow-xs'}`}>
+                    <div className="absolute top-[-20px] right-[-20px] w-16 h-16 rounded-full bg-slate-500/5 group-hover:scale-150 transition-all duration-500 pointer-events-none" />
+                    <div className={`p-2 rounded-xl w-fit ${isActive ? 'bg-white/10 text-white' : 'bg-slate-50'}`}>
                       {item.icon}
                     </div>
                     <div>
-                      <h4 className={`font-bold text-xs tracking-tight ${isActive ? 'text-white' : 'text-slate-800'}`}>
+                      <h4 className={`text-[15px] font-semibold tracking-tight leading-snug ${isActive ? 'text-white' : 'text-medical-blue'}`}>
                         {item.displayName}
                       </h4>
-                      <p className={`text-[10px] mt-0.5 ${isActive ? 'text-white/70' : 'text-slate-400 font-semibold'}`}>
+                      <p className={`text-[12px] mt-1 leading-none ${isActive ? 'text-white/70' : 'text-[#777777]'}`}>
                         {item.count}
                       </p>
                     </div>
@@ -1240,10 +1273,10 @@ export default function CustomerPanel({
                     return (
                       <div
                         key={p.id}
-                        className={`rounded-2xl border shadow-sm overflow-hidden flex flex-col justify-between group transition-all hover:shadow-md ${
+                        className={`rounded-[8px] border overflow-hidden flex flex-col justify-between group transition-all duration-300 hover:-translate-y-[3px] hover:shadow-md ${
                           isDarkMode
                             ? 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-100'
-                            : 'bg-white border-slate-200/80 hover:border-slate-300 text-slate-800'
+                            : 'bg-white border-card-border text-slate-800'
                         }`}
                       >
                         {/* Image banner */}
@@ -1259,6 +1292,9 @@ export default function CustomerPanel({
                               {aiMatch.relevanceScore}% Clinical Match
                             </span>
                           )}
+                          <span className="absolute bottom-2.5 left-2.5 bg-offer-red text-white text-[10px] font-black px-2.5 py-1 rounded-[4px] shadow-md z-10 uppercase tracking-wider">
+                            EXTRA {p.discountPercentage || 5}% OFF
+                          </span>
                           <button
                             onClick={() => handleToggleWishlist(p.id)}
                             className={`p-1.5 rounded-full absolute top-2.5 right-2.5 transition ${

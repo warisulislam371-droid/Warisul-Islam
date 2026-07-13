@@ -96,6 +96,13 @@ export interface Product {
   brochureUrl?: string;
   status: ProductStatus;
   createdAt: string;
+
+  // New Commission Fields
+  vendorPrice?: number;       // Base price entered by vendor
+  commissionRate?: number;    // Stored at the time of product creation/edit
+  commissionAmount?: number;  // Calculated: vendorPrice * (commissionRate / 100)
+  finalPrice?: number;        // Calculated: vendorPrice + commissionAmount
+  vendorPayout?: number;      // Calculated: equals vendorPrice
   
   // Extended Vendor Product Fields
   published?: boolean;
@@ -210,6 +217,13 @@ export interface OrderItem {
   hsnCode: string;
   vendorId: string;
   vendorName: string;
+  
+  // Snapshotted pricing at time of checkout
+  vendorPrice?: number;
+  commissionRate?: number;
+  commissionAmount?: number;
+  finalPrice?: number;
+  vendorPayout?: number;
 }
 
 export interface OrderTimelineEvent {
@@ -470,5 +484,3 @@ export interface PromoBanner {
   isActive: boolean;
   createdAt: string;
 }
-
-

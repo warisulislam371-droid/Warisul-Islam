@@ -168,74 +168,7 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Delivery Location Selector */}
-          <div className="relative shrink-0 hidden sm:block">
-            <button
-              onClick={() => setShowLocationDropdown(!showLocationDropdown)}
-              className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 px-2.5 py-1 rounded-xl border border-slate-200 text-xs font-semibold tracking-wide transition"
-            >
-              <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-              <div className="text-left max-w-[105px] leading-none">
-                <span className="block text-[8px] text-slate-400 font-bold uppercase">Deliver to</span>
-                <span className="font-semibold text-slate-700 text-[10px] truncate block">{deliveryLocation}</span>
-              </div>
-              <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
-            </button>
-            {showLocationDropdown && (
-              <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 py-1 text-slate-800 z-50 animate-fade-in">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5 border-b border-slate-50">
-                  Select Pincode
-                </p>
-                {locations.map((loc) => (
-                  <button
-                    key={loc.pin}
-                    type="button"
-                    onClick={() => {
-                      setDeliveryLocation(`${loc.city} ${loc.pin}`);
-                      setShowLocationDropdown(false);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-teal-50 hover:text-teal-800 transition block"
-                  >
-                    {loc.city} ({loc.pin})
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Categories Button */}
-          <div className="relative shrink-0 hidden md:block">
-            <button
-              onClick={() => setShowCatMenu(!showCatMenu)}
-              className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold tracking-wide transition"
-            >
-              <SlidersHorizontal className="w-4 h-4 text-slate-400" />
-              Categories
-              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showCatMenu ? 'rotate-180' : ''}`} />
-            </button>
-
-            {showCatMenu && (
-              <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2.5 text-slate-800 z-50">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 pb-2 border-b border-slate-50 mb-1.5">
-                  Clinical Specialities
-                </p>
-                {categories.filter(c => c.isActive !== false).map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => {
-                      onCategorySelect(cat.name);
-                      setShowCatMenu(false);
-                      onNavigate('marketplace');
-                    }}
-                    className="w-full text-left px-4 py-2 text-xs font-medium hover:bg-teal-50 hover:text-teal-800 flex items-center justify-between group transition"
-                  >
-                    <span>{cat.name}</span>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-teal-600 transition-transform group-hover:translate-x-1" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Delivery Location Selector and Categories Button removed per user request */}
 
           {/* Search Box Form */}
           <form onSubmit={handleSearchSubmit} className="flex-1 max-w-md relative">

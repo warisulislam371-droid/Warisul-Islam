@@ -677,9 +677,150 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
 
   const isApproved = vendorProfile?.status === 'Approved';
 
+  if (vendorProfile && !isApproved) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 font-sans text-left">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-teal-800 to-cyan-900 p-8 text-white relative">
+            <div className="absolute top-6 right-6 opacity-10">
+              <Store className="w-24 h-24" />
+            </div>
+            <span className={`px-3.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-sm ${
+              vendorProfile.status === 'Pending' ? 'bg-amber-500 text-slate-950' :
+              vendorProfile.status === 'MoreInfoRequired' ? 'bg-orange-500 text-white' :
+              vendorProfile.status === 'Suspended' ? 'bg-red-600 text-white' :
+              'bg-rose-500 text-white'
+            }`}>
+              Account Status: {vendorProfile.status}
+            </span>
+            <h1 className="text-2xl font-black mt-4 font-display">{vendorProfile.companyName}</h1>
+            <p className="text-xs text-slate-200 mt-1 opacity-90">
+              HealNex Clinical B2B Supplier Workspace Activation
+            </p>
+          </div>
+
+          <div className="p-6 sm:p-8 space-y-8">
+            {/* Warning Info */}
+            <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 flex items-start gap-4">
+              <div className="bg-amber-100 p-3 rounded-xl shrink-0">
+                <AlertTriangle className="w-6 h-6 text-amber-700" />
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <h3 className="font-extrabold text-slate-900 text-sm">Administrative Onboarding Audit in Progress</h3>
+                <p className="text-slate-600 leading-relaxed">
+                  Before accessing the B2B catalog, receiving clinical orders, or bidding on hospital RFQs, your business credentials (GST, drug licenses, and bank info) must be fully authorized by our compliance administrators.
+                </p>
+                {vendorProfile.statusReason && (
+                  <div className="bg-rose-50/70 border border-rose-200 text-rose-950 rounded-xl p-4 mt-3 space-y-1">
+                    <span className="font-black text-[10px] uppercase tracking-wider text-rose-800 block">Message from Compliance Audit Team:</span>
+                    <p className="font-medium text-xs italic">{vendorProfile.statusReason}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Stepper progress */}
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Onboarding Journey Status</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="border border-emerald-200 bg-emerald-50/40 rounded-xl p-4 flex items-center gap-3">
+                  <div className="bg-emerald-500 text-white rounded-full p-1.5 shrink-0">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">1. KYC Submission</p>
+                    <p className="text-[10px] text-slate-500 font-medium">8 Security Documents Loaded</p>
+                  </div>
+                </div>
+
+                <div className={`border rounded-xl p-4 flex items-center gap-3 ${
+                  vendorProfile.status === 'Pending' ? 'border-amber-200 bg-amber-50/40 animate-pulse' :
+                  vendorProfile.status === 'MoreInfoRequired' ? 'border-orange-200 bg-orange-50/30' :
+                  'border-rose-200 bg-rose-50/30'
+                }`}>
+                  <div className={`rounded-full p-1.5 shrink-0 ${
+                    vendorProfile.status === 'Pending' ? 'bg-amber-500 text-slate-950' :
+                    'bg-orange-500 text-white'
+                  }`}>
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">2. Document Auditing</p>
+                    <p className="text-[10px] text-slate-500 font-medium">Under active review</p>
+                  </div>
+                </div>
+
+                <div className="border border-slate-100 bg-slate-50/50 rounded-xl p-4 flex items-center gap-3 opacity-60">
+                  <div className="bg-slate-200 text-slate-500 rounded-full p-1.5 shrink-0">
+                    <Plus className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">3. Workspace Active</p>
+                    <p className="text-[10px] text-slate-500 font-medium">Awaiting live approval</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Read-Only KYC Document Status Panel */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <FileCheck className="w-4.5 h-4.5 text-teal-700" />
+                Submitted Regulatory Vault Status
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                All uploaded documents are locked securely and visible only to authorized admin auditors.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {[
+                  { key: 'gstCertificate', label: 'GST Certificate (REG-06)' },
+                  { key: 'tradeLicense', label: 'Municipal Trade License' },
+                  { key: 'companyRegCertificate', label: 'Company Registration (CoI)' },
+                  { key: 'cancelledCheque', label: 'Cancelled Clearing Cheque' },
+                  { key: 'panCard', label: 'Corporate PAN Card' },
+                  { key: 'aadhaarCard', label: 'Promoter Aadhaar Card' },
+                  { key: 'drugLicense', label: 'State Drug Control License' },
+                  { key: 'fssaiLicense', label: 'FSSAI Food Safety License' },
+                ].map(docItem => {
+                  const docs = vendorProfile.documents || {};
+                  const docUrl = (docs as any)[`${docItem.key}Url`];
+                  const docName = (docs as any)[`${docItem.key}Name`] || `${docItem.key}.pdf`;
+
+                  return (
+                    <div key={docItem.key} className="border border-slate-100 rounded-xl p-3.5 bg-slate-50 flex items-center justify-between gap-4">
+                      <div className="min-w-0 text-left">
+                        <p className="text-xs font-extrabold text-slate-800 truncate" title={docItem.label}>{docItem.label}</p>
+                        <p className="text-[10px] text-slate-400 truncate mt-0.5" title={docName}>{docName}</p>
+                      </div>
+                      <span className="bg-teal-50 border border-teal-200 text-teal-800 text-[10px] font-extrabold px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3 text-teal-600" /> Loaded
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Contact / Help Footer */}
+            <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs">
+              <span className="text-slate-500 font-medium">Need express activation support or uploaded wrong files?</span>
+              <button
+                onClick={() => addToast('Verification support alert sent to administrators.', 'info')}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-4 rounded-xl transition cursor-pointer"
+              >
+                Contact Super Admin
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 font-sans">
-      
       {/* Pending status banner block */}
       {vendorProfile && !isApproved && (
         <div className="bg-amber-50 border-l-4 border-amber-600 rounded-xl p-4 mb-8 flex items-start gap-3 text-xs leading-relaxed text-amber-900 shadow-sm animate-pulse">

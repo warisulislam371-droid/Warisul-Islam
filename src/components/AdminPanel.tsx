@@ -211,7 +211,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [pushTarget, setPushTarget] = useState('admin');
   const [pushType, setPushType] = useState('clinical_broadcast');
   
-  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners'>('kpis');
+  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings'>('kpis');
 
   // Promo Banners State
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>(dbLocal.getPromoBanners());
@@ -1289,6 +1289,19 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'audit' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
           >
             Audit &amp; Reports
+          </button>
+          <button
+            onClick={() => setActiveTab('commission-ledger')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'commission-ledger' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Percent className="w-4 h-4 text-sky-600" />
+            Commission Ledger
+          </button>
+          <button
+            onClick={() => setActiveTab('commission-settings')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'commission-settings' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            ⚙️ Commission Settings
           </button>
         </div>
       </div>
@@ -2515,7 +2528,11 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                             
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 font-medium pt-1">
                               <span>Vendor: <strong className="text-teal-700 font-bold">{p.vendorName || 'Unknown Vendor'}</strong></span>
-                              <span>Price: <strong className="text-emerald-700 font-mono font-bold">₹{p.price.toLocaleString('en-IN')}</strong> {p.mrp ? <span className="line-through text-slate-400 text-[11px]">₹{p.mrp.toLocaleString('en-IN')}</span> : null}</span>
+                              <span>MRP: <strong className="text-slate-800 font-mono font-bold">₹{(p.mrp || p.price * 1.2).toLocaleString('en-IN')}</strong></span>
+                              <span>Vendor Price: <strong className="text-amber-800 font-mono font-bold">₹{(p.vendorPrice !== undefined ? p.vendorPrice : p.salePrice).toLocaleString('en-IN')}</strong></span>
+                              <span>Commission: <strong className="text-rose-700 font-mono font-bold">{p.commissionRate !== undefined ? p.commissionRate : 10}% (+₹{(p.commissionAmount !== undefined ? p.commissionAmount : 0).toLocaleString('en-IN')})</strong></span>
+                              <span>Customer Price: <strong className="text-emerald-700 font-mono font-bold">₹{p.price.toLocaleString('en-IN')}</strong></span>
+                              <span>Est. Payout: <strong className="text-indigo-800 font-mono font-bold">₹{(p.vendorPayout !== undefined ? p.vendorPayout : (p.vendorPrice !== undefined ? p.vendorPrice : p.salePrice)).toLocaleString('en-IN')}</strong></span>
                               <span>Stock: <strong className="text-slate-800 font-mono font-bold">{p.stockQuantity} {p.unit || 'Piece(s)'}</strong></span>
                               <span>MOQ: <strong className="text-slate-700">{p.moq}</strong></span>
                               <span>Upload Date: <strong className="text-indigo-700">{uploadDate}</strong></span>
@@ -5878,9 +5895,9 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                   <div className="space-y-2">
                     {[
                       { key: 'gstCertificate', label: 'GST Certificate (REG-06)', required: true },
-                      { key: 'tradeLicense', label: 'Active Trade License', required: true },
+                      { key: 'tradeLicense', label: 'Active Trade License', required: false },
                       { key: 'companyRegCertificate', label: 'Company Registration (CoI)', required: true },
-                      { key: 'cancelledCheque', label: 'Cancelled Cheque leaf', required: true },
+                      { key: 'cancelledCheque', label: 'Cancelled Cheque leaf', required: false },
                       { key: 'panCard', label: 'Corporate PAN Card', required: false },
                       { key: 'aadhaarCard', label: 'Promoter Aadhaar Card', required: false },
                       { key: 'drugLicense', label: 'State Drug Control License', required: false },
@@ -6692,6 +6709,224 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             <div className="border border-slate-300 px-4 py-2 rounded bg-white text-center text-slate-500 font-mono font-extrabold border-dashed">
               LEDGER TRUSTED SEAL
             </div>
+          </div>
+        </div>
+      );
+    })()}
+
+    {activeTab === 'commission-settings' && (
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-md mx-auto space-y-6 animate-fade-in font-sans">
+        <div className="border-b border-slate-100 pb-4 text-left">
+          <h2 className="text-base font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+            <Percent className="w-5 h-5 text-teal-700" />
+            Platform Fee Management
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Configure the default platform commission percentage. Changes apply immediately to newly added or edited vendor products. Past order histories remain unaffected.
+          </p>
+        </div>
+        <form onSubmit={handleSaveCommissionConfig} className="space-y-4 text-xs font-medium text-slate-600 text-left">
+          <div>
+            <label className="block text-slate-700 font-bold mb-1.5">Default Commission Rate (%) *</label>
+            <div className="relative rounded-md shadow-xs max-w-[200px]">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                required
+                value={globalCommRate}
+                onChange={(e) => setGlobalCommRate(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition pr-8 font-mono font-bold"
+              />
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-500 font-bold">
+                %
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="block text-slate-700 font-bold mb-1.5">Minimum Vendor Payout Limit (₹) *</label>
+            <input
+              type="number"
+              min="0"
+              required
+              value={minWithdrawalLimit}
+              onChange={(e) => setMinWithdrawalLimit(parseFloat(e.target.value) || 0)}
+              className="w-full max-w-[200px] bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition font-mono font-bold"
+            />
+          </div>
+          <div className="pt-3 border-t border-slate-100">
+            <button
+              type="submit"
+              className="bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 px-6 rounded-xl transition shadow-sm cursor-pointer"
+            >
+              Update Base Settings
+            </button>
+          </div>
+        </form>
+      </div>
+    )}
+
+    {activeTab === 'commission-ledger' && (() => {
+      const ledgerItems: Array<{
+        orderId: string;
+        status: string;
+        createdAt: string;
+        productId: string;
+        productName: string;
+        vendorName: string;
+        vendorPrice: number;
+        commissionRate: number;
+        commissionAmount: number;
+        finalPrice: number;
+        vendorPayout: number;
+        quantity: number;
+      }> = [];
+
+      orders.forEach(order => {
+        (order.items || []).forEach(item => {
+          const vPrice = item.vendorPrice !== undefined ? item.vendorPrice : item.price;
+          const commRate = item.commissionRate !== undefined ? item.commissionRate : 0;
+          const commAmt = item.commissionAmount !== undefined ? item.commissionAmount : 0;
+          const fPrice = item.finalPrice !== undefined ? item.finalPrice : item.price;
+          const vPayout = item.vendorPayout !== undefined ? item.vendorPayout : vPrice;
+
+          ledgerItems.push({
+            orderId: order.id,
+            status: order.status,
+            createdAt: order.createdAt,
+            productId: item.productId,
+            productName: item.productName,
+            vendorName: item.vendorName,
+            vendorPrice: vPrice,
+            commissionRate: commRate,
+            commissionAmount: commAmt,
+            finalPrice: fPrice,
+            vendorPayout: vPayout,
+            quantity: item.quantity
+          });
+        });
+      });
+
+      const totalEarnings = ledgerItems.reduce((acc, curr) => {
+        const isSettledOrPaid = ['Completed', 'Paid', 'Shipped', 'Delivered'].includes(curr.status);
+        const qty = curr.quantity;
+        return {
+          grossSales: acc.grossSales + (curr.finalPrice * qty),
+          platformRevenue: acc.platformRevenue + (curr.commissionAmount * qty),
+          payoutsOwed: acc.payoutsOwed + (curr.vendorPayout * qty),
+          settledRevenue: acc.settledRevenue + (isSettledOrPaid ? (curr.commissionAmount * qty) : 0),
+          settledPayouts: acc.settledPayouts + (isSettledOrPaid ? (curr.vendorPayout * qty) : 0)
+        };
+      }, { grossSales: 0, platformRevenue: 0, payoutsOwed: 0, settledRevenue: 0, settledPayouts: 0 });
+
+      return (
+        <div className="space-y-6 animate-fade-in font-sans pb-12 text-left">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <Percent className="w-5 h-5 text-teal-700" />
+                Commission Ledger &amp; Earnings Reports
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Comprehensive audit ledger tracking base pricing, commission rates, gross platform revenue, and vendor disbursements.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gross Transaction Volume</p>
+              <p className="text-2xl font-black font-mono text-slate-950 mt-1">₹{totalEarnings.grossSales.toLocaleString('en-IN')}</p>
+              <p className="text-[10px] text-slate-500 mt-1">Sum of final customer prices</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-sm bg-emerald-50/20">
+              <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Platform Net Revenue</p>
+              <p className="text-2xl font-black font-mono text-emerald-700 mt-1">₹{totalEarnings.platformRevenue.toLocaleString('en-IN')}</p>
+              <p className="text-[10px] text-emerald-600 mt-1">₹{totalEarnings.settledRevenue.toLocaleString('en-IN')} cleared &bull; ₹{(totalEarnings.platformRevenue - totalEarnings.settledRevenue).toLocaleString('en-IN')} pending</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm bg-blue-50/20">
+              <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Total Disbursable Payouts</p>
+              <p className="text-2xl font-black font-mono text-blue-700 mt-1">₹{totalEarnings.payoutsOwed.toLocaleString('en-IN')}</p>
+              <p className="text-[10px] text-blue-600 mt-1">₹{totalEarnings.settledPayouts.toLocaleString('en-IN')} cleared &bull; ₹{(totalEarnings.payoutsOwed - totalEarnings.settledPayouts).toLocaleString('en-IN')} pending</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-xs">
+            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+              <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">Real-time Reconciliation Ledger</span>
+              <span className="bg-teal-50 border border-teal-200 text-teal-800 text-[10px] px-2 py-0.5 rounded font-bold font-mono">
+                {ledgerItems.length} transactions
+              </span>
+            </div>
+
+            {ledgerItems.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 bg-slate-50/50">
+                <p className="text-xs font-bold text-slate-600">No transaction records logged in the system ledger yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100/80 text-slate-500 font-bold border-b border-slate-200 uppercase text-[10px] tracking-wider">
+                      <th className="p-3">Order / Date</th>
+                      <th className="p-3">Product Name</th>
+                      <th className="p-3">Vendor</th>
+                      <th className="p-3 text-right">Vendor Price</th>
+                      <th className="p-3 text-center">Comm. %</th>
+                      <th className="p-3 text-right">Comm. Amount</th>
+                      <th className="p-3 text-right">Customer Price</th>
+                      <th className="p-3 text-right">Vendor Payout</th>
+                      <th className="p-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {ledgerItems.map((item, index) => (
+                      <tr key={index} className="hover:bg-slate-50/50 transition">
+                        <td className="p-3 whitespace-nowrap">
+                          <span className="font-bold text-teal-800 font-mono block">#{item.orderId}</span>
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">{new Date(item.createdAt).toLocaleDateString()}</span>
+                        </td>
+                        <td className="p-3 font-semibold text-slate-900 max-w-xs truncate" title={item.productName}>
+                          {item.productName}
+                        </td>
+                        <td className="p-3 text-slate-600 font-medium whitespace-nowrap">
+                          {item.vendorName}
+                        </td>
+                        <td className="p-3 text-right font-mono text-slate-600">
+                          ₹{item.vendorPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-center font-mono font-bold text-slate-500">
+                          {item.commissionRate}%
+                        </td>
+                        <td className="p-3 text-right font-mono text-emerald-600 font-semibold whitespace-nowrap">
+                          +₹{(item.commissionAmount * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-right font-mono text-slate-900 font-extrabold whitespace-nowrap">
+                          ₹{(item.finalPrice * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-right font-mono text-slate-900 font-semibold whitespace-nowrap">
+                          ₹{(item.vendorPayout * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-center whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                            ['Completed', 'Paid', 'Delivered'].includes(item.status)
+                              ? 'bg-emerald-100 border border-emerald-200 text-emerald-800'
+                              : ['Refunded', 'Cancelled'].includes(item.status)
+                                ? 'bg-rose-100 border border-rose-200 text-rose-800'
+                                : 'bg-amber-100 border border-amber-200 text-amber-800'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       );

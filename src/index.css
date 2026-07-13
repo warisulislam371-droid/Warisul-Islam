@@ -85,6 +85,15 @@
   --color-teal-700: var(--theme-700);
   --color-teal-800: var(--theme-800);
   --color-teal-900: var(--theme-900);
+  
+  --color-brand-blue: #2B5BC4;
+  --color-medical-blue: #073A6E;
+  --color-cyan-blue: #0C5FA6;
+  --color-brand-orange: #E65C00;
+  --color-highlight-green: #8EC641;
+  --color-offer-red: #D32F2F;
+  --color-bg-gray: #F7F9FA;
+  --color-card-border: #E0E0E0;
 }
 
 /* Custom scrollbars and styling */

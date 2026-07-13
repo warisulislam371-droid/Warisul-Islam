@@ -178,8 +178,8 @@ export default function VendorProductManager({
     setFormShortDesc(p.shortDescription || p.description || '');
     setFormFullDesc(p.fullDescription || p.description || '');
     setFormMrp(p.mrp || p.price * 1.2 || 0);
-    setFormSalePrice(p.salePrice || p.price || 0);
-    setFormWholesalePrice(p.wholesalePrice || p.salePrice * 0.9 || 0);
+    setFormSalePrice(p.vendorPrice || p.salePrice || p.price || 0);
+    setFormWholesalePrice(p.wholesalePrice || (p.vendorPrice || p.salePrice) * 0.9 || 0);
     setFormStock(p.stockQuantity !== undefined ? p.stockQuantity : 10);
     setFormMoq(p.moq || 1);
     setFormHsn(p.hsnCode || '9018');
@@ -232,6 +232,11 @@ export default function VendorProductManager({
       }
     }
 
+    const globalCommissionRate = dbLocal.getPaymentSettings().platformCommissionRate || 10;
+    const commissionAmount = Math.round((formSalePrice * globalCommissionRate) / 100 * 100) / 100;
+    const finalPrice = formSalePrice + commissionAmount;
+    const vendorPayout = formSalePrice;
+
     const now = new Date().toISOString();
     const updatedProd: Product = {
       id: editingProduct ? editingProduct.id : `prod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -246,9 +251,9 @@ export default function VendorProductManager({
       description: formShortDesc.trim() || formName.trim(),
       shortDescription: formShortDesc.trim(),
       fullDescription: formFullDesc.trim() || formShortDesc.trim(),
-      price: formMrp || formSalePrice * 1.2,
-      mrp: formMrp || formSalePrice * 1.2,
-      salePrice: formSalePrice,
+      price: finalPrice,
+      mrp: formMrp || finalPrice * 1.2,
+      salePrice: finalPrice,
       wholesalePrice: formWholesalePrice || formSalePrice,
       moq: formMoq || 1,
       stockQuantity: formStock,
@@ -262,6 +267,13 @@ export default function VendorProductManager({
       videoUrl: formVideo.trim(),
       certifications: formCertifications,
       specifications: formSpecs.filter(s => s.key.trim() && s.value.trim()),
+      
+      // Commission System fields
+      vendorPrice: formSalePrice,
+      commissionRate: globalCommissionRate,
+      commissionAmount: commissionAmount,
+      finalPrice: finalPrice,
+      vendorPayout: vendorPayout,
       
       // Default / secure workflow values
       status: targetStatus === 'Draft' ? 'Draft' : 'Pending',
@@ -389,7 +401,7 @@ export default function VendorProductManager({
   };
 
   const handleExportCsv = () => {
-    const headers = ['ID', 'Name', 'SKU', 'Model Number', 'Category', 'Brand', 'MSRP', 'Sale Price', 'Stock Quantity', 'MOQ', 'Status', 'Views', 'Inquiries'];
+    const headers = ['ID', 'Name', 'SKU', 'Model Number', 'Category', 'Brand', 'MSRP', 'Vendor Price', 'Est. Payout', 'Stock Quantity', 'MOQ', 'Status', 'Views', 'Inquiries'];
     const rows = filteredProducts.map(p => [
       p.id,
       `"${p.name.replace(/"/g, '""')}"`,
@@ -398,7 +410,8 @@ export default function VendorProductManager({
       p.category,
       p.brand,
       p.mrp || p.price,
-      p.salePrice,
+      p.vendorPrice || p.salePrice,
+      p.vendorPayout || p.vendorPrice || p.salePrice,
       p.stockQuantity,
       p.moq,
       p.status,
@@ -672,8 +685,12 @@ export default function VendorProductManager({
 
                       <div className="mt-2.5 flex items-center justify-between text-xs">
                         <div>
-                          <span className="text-[10px] text-slate-400 block">Trade Sale Price</span>
-                          <span className="font-extrabold text-slate-900 text-sm">₹{p.salePrice.toLocaleString()}</span>
+                          <span className="text-[10px] text-slate-400 block">Vendor Price</span>
+                          <span className="font-extrabold text-slate-900 text-sm">₹{(p.vendorPrice !== undefined ? p.vendorPrice : p.salePrice).toLocaleString('en-IN')}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Est. Payout</span>
+                          <span className="font-extrabold text-emerald-700 text-sm">₹{(p.vendorPayout !== undefined ? p.vendorPayout : (p.vendorPrice !== undefined ? p.vendorPrice : p.salePrice)).toLocaleString('en-IN')}</span>
                         </div>
                         <div className="text-right">
                           <span className="text-[10px] text-slate-400 block">Stock / MOQ</span>
@@ -1012,7 +1029,7 @@ export default function VendorProductManager({
                     />
                   </div>
                   <div>
-                    <label className="block mb-1.5 text-teal-800 font-extrabold">Trade Sale Price (₹) *</label>
+                    <label className="block mb-1.5 text-teal-800 font-extrabold">Vendor Price (₹) *</label>
                     <input
                       type="number"
                       required

@@ -450,16 +450,8 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
       addToast('GST Certificate is required for clinical vendor onboarding. Please upload or scan.', 'error');
       return;
     }
-    if (!uploadedDocs.tradeLicense.url) {
-      addToast('Trade License is required for clinical vendor onboarding. Please upload or scan.', 'error');
-      return;
-    }
     if (!uploadedDocs.companyRegCertificate.url) {
       addToast('Company Registration Certificate is required for clinical vendor onboarding. Please upload or scan.', 'error');
-      return;
-    }
-    if (!uploadedDocs.cancelledCheque.url) {
-      addToast('Cancelled Cheque is required for clinical vendor onboarding. Please upload or scan.', 'error');
       return;
     }
 
@@ -773,7 +765,7 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
 
                 <button
                   type="submit"
-                  className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-3 rounded-xl uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                  className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white font-bold py-3 rounded-xl uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
                 >
                   Authorize Connection
                   <ArrowRight className="w-4 h-4" />
@@ -871,7 +863,7 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
 
                 <button
                   type="submit"
-                  className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-3 rounded-xl uppercase tracking-wider transition-colors cursor-pointer shadow-md"
+                  className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white font-bold py-3 rounded-xl uppercase tracking-wider transition-colors cursor-pointer shadow-md"
                 >
                   Create Purchaser Account
                 </button>
@@ -930,7 +922,7 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
 
                 <button
                   type="submit"
-                  className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-3 rounded-xl uppercase tracking-wider transition-colors cursor-pointer shadow-md"
+                  className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white font-bold py-3 rounded-xl uppercase tracking-wider transition-colors cursor-pointer shadow-md"
                 >
                   Confirm Upgraded Token
                 </button>
@@ -1263,9 +1255,9 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-3">
                     {[
                       { key: 'gstCertificate', label: 'GST Certificate (Form REG-06)', required: true },
-                      { key: 'tradeLicense', label: 'Active Municipal Trade License', required: true },
+                      { key: 'tradeLicense', label: 'Active Municipal Trade License', required: false },
                       { key: 'companyRegCertificate', label: 'Company Registration (CoI)', required: true },
-                      { key: 'cancelledCheque', label: 'Cancelled Cheque Leaf', required: true },
+                      { key: 'cancelledCheque', label: 'Cancelled Cheque Leaf', required: false },
                       { key: 'panCard', label: 'Corporate PAN Card', required: false },
                       { key: 'aadhaarCard', label: 'Promoter Aadhaar Card', required: false },
                       { key: 'drugLicense', label: 'State Drug Control License', required: false },
@@ -1412,7 +1404,7 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
 
                 <button
                   type="submit"
-                  className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-3 rounded-xl uppercase tracking-wider transition-colors cursor-pointer shadow-md"
+                  className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white font-bold py-3 rounded-xl uppercase tracking-wider transition-colors cursor-pointer shadow-md"
                 >
                   Submit Clinical Supplying Profile
                 </button>
@@ -1442,7 +1434,7 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
 
                 <button
                   type="submit"
-                  className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-3 rounded-xl uppercase tracking-wider transition-colors cursor-pointer shadow-md"
+                  className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white font-bold py-3 rounded-xl uppercase tracking-wider transition-colors cursor-pointer shadow-md"
                 >
                   Send Verification Key
                 </button>
