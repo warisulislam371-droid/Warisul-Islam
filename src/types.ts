@@ -338,9 +338,10 @@ export interface RFQ {
   description: string;
   attachmentName?: string;
   attachmentUrl?: string;
-  status: 'Open' | 'Closed';
+  status: 'Open' | 'Closed' | 'PENDING_ADMIN_REVIEW' | 'OPEN_TO_VENDORS' | 'QUOTED' | 'PENDING_PAYMENT_VERIFICATION' | 'PAYMENT_VERIFIED_ORDER_PLACED';
   createdAt: string;
   quotationsCount: number;
+  winningQuotationId?: string;
 }
 
 export interface Quotation {
@@ -354,8 +355,12 @@ export interface Quotation {
   validUntil: string;
   deliveryDays: number;
   specifications: string;
-  status: 'Pending' | 'Accepted' | 'Rejected';
+  status: 'Pending' | 'Accepted' | 'Rejected' | 'QUOTED';
   createdAt: string;
+  vendor_base_price?: number;
+  final_customer_price?: number;
+  platform_fee?: number;
+  commissionRateApplied?: number;
 }
 
 export interface TicketReply {

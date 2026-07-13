@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
-import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner } from '../types';
+import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
 import {
   TrendingUp,
@@ -204,6 +204,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [rfqs, setRfqs] = useState<RFQ[]>([]);
+  const [quotations, setQuotations] = useState<Quotation[]>([]);
   
   // Custom push trigger form state
   const [pushTitle, setPushTitle] = useState('');
@@ -211,7 +213,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [pushTarget, setPushTarget] = useState('admin');
   const [pushType, setPushType] = useState('clinical_broadcast');
   
-  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings'>('kpis');
+  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders'>('kpis');
 
   // Promo Banners State
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>(dbLocal.getPromoBanners());
@@ -422,6 +424,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     setWhatsappLogs(dbLocal.getWhatsAppClickLogs());
     setClearanceRequests(dbLocal.getClearanceRequests());
     setPromoBanners(dbLocal.getPromoBanners());
+    setRfqs(dbLocal.getRfqs());
+    setQuotations(dbLocal.getQuotations());
   };
 
   const handleApproveClearance = (reqId: string) => {
@@ -1254,6 +1258,17 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             )}
           </button>
           <button
+            onClick={() => setActiveTab('rfq-tenders')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'rfq-tenders' ? 'bg-white text-slate-900 shadow-sm font-bold border border-teal-200' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            📝 RFQ Tenders &amp; Escrow
+            {rfqs.filter(r => r.status === 'PENDING_ADMIN_REVIEW' || r.status === 'PENDING_PAYMENT_VERIFICATION').length > 0 && (
+              <span className="bg-teal-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
+                {rfqs.filter(r => r.status === 'PENDING_ADMIN_REVIEW' || r.status === 'PENDING_PAYMENT_VERIFICATION').length}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setActiveTab('vendor-payouts')}
             className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'vendor-payouts' ? 'bg-white text-slate-900 shadow-sm font-bold text-teal-800' : 'text-slate-600 hover:bg-slate-50'}`}
           >
@@ -1468,6 +1483,285 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
           </div>
         </div>
       )}
+
+      {/* RFQ Tender Vetting & Escrow Control Center */}
+      {activeTab === 'rfq-tenders' && (() => {
+        const handleApproveRfq = (rfqId: string) => {
+          const list = dbLocal.getRfqs();
+          const rfq = list.find(r => r.id === rfqId);
+          if (!rfq) return;
+
+          const updated = list.map(r => {
+            if (r.id === rfqId) return { ...r, status: 'OPEN_TO_VENDORS' as const };
+            return r;
+          });
+          dbLocal.saveRfqs(updated);
+
+          // Notify vendors
+          const allVendors = dbLocal.getVendors().filter(v => v.status === 'Approved');
+          allVendors.forEach(v => {
+            dbLocal.addNotification(
+              v.id,
+              'New Vetted B2B RFQ Tender Open',
+              `An approved clinical client has posted RFQ #${rfq.id} for "${rfq.productName}". Submit your quotation now!`,
+              'rfq_received'
+            );
+          });
+
+          addToast(`RFQ Tender #${rfqId} vetted and broadcasted successfully to ${allVendors.length} qualified suppliers!`, 'success');
+          loadData();
+        };
+
+        const handleConfirmRfqPayment = (rfqId: string) => {
+          const rfqList = dbLocal.getRfqs();
+          const rfq = rfqList.find(r => r.id === rfqId);
+          if (!rfq || !rfq.winningQuotationId) return;
+
+          const quotesList = dbLocal.getQuotations();
+          const quo = quotesList.find(q => q.id === rfq.winningQuotationId);
+          if (!quo) return;
+
+          // 1. Transition RFQ status to PAYMENT_VERIFIED_ORDER_PLACED
+          const updatedRfqs = rfqList.map(r => {
+            if (r.id === rfqId) return { ...r, status: 'PAYMENT_VERIFIED_ORDER_PLACED' as const };
+            return r;
+          });
+          dbLocal.saveRfqs(updatedRfqs);
+
+          // 2. Alert the winning Vendor that funds are secured and prompt dispatch
+          dbLocal.addNotification(
+            quo.vendorId,
+            'B2B Escrow Funds Secured - START DISPATCH!',
+            `Payment for RFQ #${rfq.id} has been verified and held in escrow. Delivery address: ${rfq.deliveryLocation}. Please dispatch fulfillment immediately.`,
+            'order_placed'
+          );
+
+          // 3. Create a real Order in the database so that it represents a fully active order!
+          const sub = quo.totalPrice;
+          const gst = sub * 0.12;
+          const final = sub + gst;
+
+          const newOrder: Order = {
+            id: `ORD-${Math.floor(10000 + Math.random() * 90000)}`,
+            customerId: rfq.customerId,
+            customerName: rfq.customerName,
+            customerEmail: rfq.customerEmail,
+            vendorId: quo.vendorId,
+            vendorName: quo.companyName,
+            items: [{
+              productId: rfq.id,
+              productName: `${rfq.productName} (RFQ Custom Specification)`,
+              productImage: 'https://images.unsplash.com/photo-1579684389782-64d84b5e901a',
+              price: quo.pricePerUnit,
+              quantity: rfq.quantity,
+              gstRate: 12,
+              hsnCode: '90181100',
+              vendorId: quo.vendorId,
+              vendorName: quo.companyName,
+              vendorPrice: quo.pricePerUnit,
+              commissionRate: quo.commissionRateApplied || 10,
+              commissionAmount: quo.platform_fee || 0,
+              finalPrice: quo.pricePerUnit,
+              vendorPayout: (quo.vendor_base_price || (quo.pricePerUnit * 0.9)) * rfq.quantity
+            }],
+            totalAmount: sub,
+            gstAmount: gst,
+            discountAmount: 0,
+            finalAmount: final,
+            status: 'Processing', // Initiates as active processing order
+            paymentMethod: 'UPI',
+            paymentId: `pay_HN_${Date.now().toString().slice(-9)}`,
+            shippingAddress: {
+              address: rfq.deliveryLocation,
+              city: 'Clinical Hub',
+              state: 'Delhi',
+              pincode: '110001'
+            },
+            createdAt: new Date().toISOString(),
+            timeline: [
+              { status: 'Pending', time: new Date().toISOString(), note: 'Escrow payment verified. Order automatically placed & routed.' },
+              { status: 'Confirmed', time: new Date().toISOString(), note: 'Vendor routed with secured clearance guarantee.' }
+            ]
+          };
+
+          const allOrders = dbLocal.getOrders();
+          allOrders.unshift(newOrder);
+          dbLocal.saveOrders(allOrders);
+
+          addToast(`Escrow ledger matched! Order #${newOrder.id} generated & winning supplier (${quo.companyName}) alerted for dispatch.`, 'success');
+          loadData();
+        };
+
+        const vettingQueue = rfqs.filter(r => r.status === 'PENDING_ADMIN_REVIEW');
+        const escrowQueue = rfqs.filter(r => r.status === 'PENDING_PAYMENT_VERIFICATION');
+        const otherRfqs = rfqs.filter(r => r.status !== 'PENDING_ADMIN_REVIEW' && r.status !== 'PENDING_PAYMENT_VERIFICATION');
+
+        return (
+          <div className="space-y-6 animate-fade-in pb-12">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-teal-700" />
+                  B2B RFQ Tender Vetting &amp; Escrow Gateway Control
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Approve clinical tenders, view vendor commercial bids with automated platform commissions, and verify secure escrow clearance settlements.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* Vetting Queue Column */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  RFQ Vetting Queue ({vettingQueue.length})
+                </h3>
+                {vettingQueue.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    No clinical procurement tenders currently awaiting vetting.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {vettingQueue.map(r => (
+                      <div key={r.id} className="p-4 rounded-xl border border-slate-100 space-y-3 bg-slate-50/50">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[9px] bg-amber-50 text-amber-800 border border-amber-100 px-2 py-0.5 rounded font-bold font-mono">
+                              Awaiting Approval
+                            </span>
+                            <h4 className="font-bold text-slate-900 text-xs mt-1.5">{r.productName}</h4>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono font-bold">#{r.id}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-normal">{r.description}</p>
+                        <div className="flex justify-between text-[10px] text-slate-500 font-semibold pt-1 border-t border-slate-100">
+                          <span>Qty: <strong className="text-slate-800">{r.quantity}</strong></span>
+                          <span>Budget: <strong className="text-teal-700">₹{r.budget.toLocaleString()}</strong></span>
+                        </div>
+                        <button
+                          onClick={() => handleApproveRfq(r.id)}
+                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition"
+                        >
+                          Approve &amp; Open to Vendors
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Escrow Clearance Queue */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+                  <Shield className="w-4 h-4 text-blue-500" />
+                  B2B Escrow Clearing Console ({escrowQueue.length})
+                </h3>
+                {escrowQueue.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    No escrow clearing deposits currently awaiting verification.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {escrowQueue.map(r => {
+                      const quo = quotations.find(q => q.id === r.winningQuotationId);
+                      if (!quo) return null;
+                      const subtotal = quo.totalPrice;
+                      const gstAmount = subtotal * 0.12;
+                      const totalEscrow = subtotal + gstAmount;
+
+                      return (
+                        <div key={r.id} className="p-4 rounded-xl border border-slate-100 space-y-3 bg-slate-50/50">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="text-[9px] bg-blue-50 text-blue-800 border border-blue-100 px-2 py-0.5 rounded font-bold font-mono">
+                                Escrow Deposited
+                              </span>
+                              <h4 className="font-bold text-slate-900 text-xs mt-1.5">{r.productName}</h4>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-mono font-bold">#{r.id}</span>
+                          </div>
+                          
+                          {/* Financial Details */}
+                          <div className="p-2.5 bg-white border border-slate-100 rounded-lg text-[10px] font-semibold text-slate-600 space-y-1">
+                            <div className="flex justify-between">
+                              <span>Winner Bidder:</span>
+                              <span className="text-slate-800">{quo.companyName}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Escrow Held Amount:</span>
+                              <span className="text-teal-700 font-mono font-bold">₹{totalEscrow.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-[9px] text-slate-400">
+                              <span>(Base unit price includes {quo.commissionRateApplied}% platform fee)</span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleConfirmRfqPayment(r.id)}
+                            className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition"
+                          >
+                            Verify Ledger &amp; Confirm Payment
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Other RFQs Registry */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-3">
+                Commercial Tenders Master Registry
+              </h3>
+              <div className="overflow-x-auto text-[11px] font-semibold">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 uppercase text-[9px] border-b border-slate-200">
+                      <th className="py-2.5 px-3">Tender ID</th>
+                      <th className="py-2.5 px-3">Equipment Required</th>
+                      <th className="py-2.5 px-3">Hospital Customer</th>
+                      <th className="py-2.5 px-3 text-right">Budget (INR)</th>
+                      <th className="py-2.5 px-3 text-center">Bids Count</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-150 text-slate-700">
+                    {otherRfqs.map(r => (
+                      <tr key={r.id} className="hover:bg-slate-50/50">
+                        <td className="py-3 px-3 text-teal-800 font-bold">#{r.id}</td>
+                        <td className="py-3 px-3 font-bold text-slate-900">{r.productName}</td>
+                        <td className="py-3 px-3">{r.customerName}</td>
+                        <td className="py-3 px-3 text-right">₹{r.budget.toLocaleString()}</td>
+                        <td className="py-3 px-3 text-center">{r.quotationsCount || 0} quotes</td>
+                        <td className="py-3 px-3 text-center">
+                          {(() => {
+                            switch (r.status) {
+                              case 'OPEN_TO_VENDORS':
+                                return <span className="bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded font-bold text-[9px]">Open</span>;
+                              case 'QUOTED':
+                                return <span className="bg-sky-50 text-sky-800 border border-sky-100 px-2 py-0.5 rounded font-bold text-[9px]">Quoted</span>;
+                              case 'PAYMENT_VERIFIED_ORDER_PLACED':
+                                return <span className="bg-indigo-50 text-indigo-800 border border-indigo-100 px-2 py-0.5 rounded font-bold text-[9px]">Completed &amp; Routed</span>;
+                              default:
+                                return <span className="bg-slate-50 text-slate-500 border border-slate-100 px-2 py-0.5 rounded font-bold text-[9px]">{r.status}</span>;
+                            }
+                          })()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        );
+      })()}
 
       {/* Orders & Dispatch Management Desk */}
       {activeTab === 'orders' && (

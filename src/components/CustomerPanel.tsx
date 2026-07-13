@@ -155,6 +155,7 @@ export default function CustomerPanel({
 
   // RFQ review comparator state
   const [activeRfqReview, setActiveRfqReview] = useState<RFQ | null>(null);
+  const [escrowPaymentSession, setEscrowPaymentSession] = useState<{ quo: Quotation; rfq: RFQ } | null>(null);
 
   // References to keep track of previous API request payloads to avoid infinite quota-draining requests
   const lastSearchKeyRef = useRef<string>('');
@@ -686,7 +687,7 @@ export default function CustomerPanel({
       deliveryLocation: rfqLocation,
       description: rfqDesc,
       attachmentName: rfqAttachmentName || undefined,
-      status: 'Open',
+      status: 'PENDING_ADMIN_REVIEW',
       createdAt: new Date().toISOString(),
       quotationsCount: 0
     };
@@ -695,26 +696,15 @@ export default function CustomerPanel({
     currentRfqs.unshift(newRfq);
     dbLocal.saveRfqs(currentRfqs);
 
-    // Notify all approved vendors
-    const allVendors = dbLocal.getVendors().filter(v => v.status === 'Approved');
-    allVendors.forEach(v => {
-      dbLocal.addNotification(
-        v.id,
-        'Matching B2B RFQ Posted',
-        `A clinical client posted a tender for "${newRfq.productName}". Bid a quota now.`,
-        'rfq_received'
-      );
-    });
-
-    // Notify admin
+    // Notify admin for vetting triage
     dbLocal.addNotification(
       'admin',
-      'New Procurement RFQ Open',
-      `Client ${currentUser.name} posted tender #${newRfq.id} for "${newRfq.productName}".`,
+      'New Procurement RFQ Submitted (Awaiting Vetting)',
+      `Client ${currentUser.name} posted tender #${newRfq.id} for "${newRfq.productName}". Please review and vet it in the Admin Console.`,
       'rfq_created'
     );
 
-    addToast('Your clinical procurement RFQ Tender has been opened to supplier matches.', 'success');
+    addToast('Your clinical procurement RFQ Tender has been submitted and is pending administrative vetting.', 'success');
     setRfqName('');
     setRfqQty(1);
     setRfqBudget(0);
@@ -724,91 +714,52 @@ export default function CustomerPanel({
     loadData();
   };
 
-  // Accept vendor quotation and convert into paid order
+  // Accept vendor quotation and open payment gateway session
   const handleAcceptQuotation = (quo: Quotation, rfq: RFQ) => {
-    if (!currentUser) return;
-    
-    // Simulate Instant payment checkout step
-    setCheckoutStep('processing');
-    onNavigate('cart');
+    if (!currentUser) {
+      addToast('Please authenticate to accept quotations and proceed to checkout.', 'error');
+      return;
+    }
+    setEscrowPaymentSession({ quo, rfq });
+  };
 
-    setTimeout(() => {
-      const sub = quo.totalPrice;
-      const gst = sub * 0.12; // Flat 12% for diagnostic equipment
-      const final = sub + gst;
+  const handleConfirmEscrowPayment = (method: string) => {
+    if (!escrowPaymentSession || !currentUser) return;
+    const { quo, rfq } = escrowPaymentSession;
 
-      const newOrder: Order = {
-        id: `ORD-${Math.floor(10000 + Math.random() * 90000)}`,
-        customerId: currentUser.id,
-        customerName: currentUser.name,
-        customerEmail: currentUser.email,
-        vendorId: quo.vendorId,
-        vendorName: quo.companyName,
-        items: [{
-          productId: rfq.id,
-          productName: `${rfq.productName} (RFQ Custom Specification)`,
-          productImage: 'https://images.unsplash.com/photo-1579684389782-64d84b5e901a',
-          price: quo.pricePerUnit,
-          quantity: rfq.quantity,
-          gstRate: 12,
-          hsnCode: '90181100',
-          vendorId: quo.vendorId,
-          vendorName: quo.companyName,
-          
-          // Custom RFQ snapshots
-          vendorPrice: quo.pricePerUnit,
-          commissionRate: 0,
-          commissionAmount: 0,
-          finalPrice: quo.pricePerUnit,
-          vendorPayout: quo.pricePerUnit
-        }],
-        totalAmount: sub,
-        gstAmount: gst,
-        discountAmount: 0,
-        finalAmount: final,
-        status: 'Pending',
-        paymentMethod: 'UPI',
-        paymentId: `pay_HN_${Date.now().toString().slice(-9)}`,
-        shippingAddress: shippingAddress,
-        createdAt: new Date().toISOString(),
-        timeline: [
-          { status: 'Pending', time: new Date().toISOString(), note: 'Procurement Bid accepted. Order initialized.' }
-        ]
-      };
+    // Transition the RFQ status to PENDING_PAYMENT_VERIFICATION
+    const updatedRfqs = dbLocal.getRfqs().map(r => {
+      if (r.id === rfq.id) {
+        return { 
+          ...r, 
+          status: 'PENDING_PAYMENT_VERIFICATION' as const,
+          winningQuotationId: quo.id
+        };
+      }
+      return r;
+    });
+    dbLocal.saveRfqs(updatedRfqs);
 
-      // Add to database
-      const allOrders = dbLocal.getOrders();
-      allOrders.unshift(newOrder);
-      dbLocal.saveOrders(allOrders);
+    // Update Quotations
+    const updatedQuotes = dbLocal.getQuotations().map(q => {
+      if (q.id === quo.id) return { ...q, status: 'Accepted' as const };
+      if (q.rfqId === rfq.id) return { ...q, status: 'Rejected' as const };
+      return q;
+    });
+    dbLocal.saveQuotations(updatedQuotes);
 
-      // Mark other quotes as rejected
-      const updatedQuotes = dbLocal.getQuotations().map(q => {
-        if (q.id === quo.id) return { ...q, status: 'Accepted' as const };
-        if (q.rfqId === rfq.id) return { ...q, status: 'Rejected' as const };
-        return q;
-      });
-      dbLocal.saveQuotations(updatedQuotes);
+    // Notify Admin about the escrow deposit matching
+    dbLocal.addNotification(
+      'admin',
+      'B2B Escrow Deposit Pending Verification',
+      `Client ${currentUser.name} has accepted Quote #${quo.id} for RFQ #${rfq.id}. A escrow deposit of ₹${((quo.totalPrice || 0) * 1.12).toLocaleString()} via ${method} is awaiting your manual ledger/webhook verification.`,
+      'payment_received'
+    );
 
-      // Close RFQ
-      const updatedRfqs = dbLocal.getRfqs().map(r => {
-        if (r.id === rfq.id) return { ...r, status: 'Closed' as const };
-        return r;
-      });
-      dbLocal.saveRfqs(updatedRfqs);
-
-      // Notify vendor
-      dbLocal.addNotification(
-        quo.vendorId,
-        'RFQ Bid Accepted & Paid!',
-        `Your quotation for ${rfq.productName} was accepted. Process custom packing.`,
-        'order_placed'
-      );
-
-      setCreatedOrder(newOrder);
-      setCheckoutStep('success');
-      setActiveRfqReview(null);
-      loadData();
-    }, 2000);
+    addToast(`Escrow payment gateway session authorized via ${method}. Status is now PENDING_PAYMENT_VERIFICATION.`, 'success');
+    setEscrowPaymentSession(null);
+    setActiveRfqReview(null);
+    loadData();
   };
 
   return (
@@ -2300,20 +2251,39 @@ export default function CustomerPanel({
                     <div key={rfq.id} className="p-5 rounded-2xl border border-slate-100 space-y-4 hover:border-slate-200 transition">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <span className="text-[10px] bg-sky-50 text-sky-700 border border-sky-100 px-2 py-0.5 rounded font-bold font-mono">
-                            ID: {rfq.id}
-                          </span>
-                          <h4 className="font-bold text-slate-900 mt-1.5 text-sm sm:text-base">{rfq.productName}</h4>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] bg-sky-50 text-sky-700 border border-sky-100 px-2 py-0.5 rounded font-bold font-mono">
+                              ID: {rfq.id}
+                            </span>
+                            {(() => {
+                              switch (rfq.status) {
+                                case 'PENDING_ADMIN_REVIEW':
+                                  return <span className="bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-bold">Pending Administrative Vetting</span>;
+                                case 'OPEN_TO_VENDORS':
+                                  return <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded text-[10px] font-bold animate-pulse">Open to Qualified Suppliers</span>;
+                                case 'QUOTED':
+                                  return <span className="bg-sky-50 text-sky-700 border border-sky-100 px-2 py-0.5 rounded text-[10px] font-bold">Bids Received ({relatedQuotes.length})</span>;
+                                case 'PENDING_PAYMENT_VERIFICATION':
+                                  return <span className="bg-orange-50 text-orange-700 border border-orange-100 px-2 py-0.5 rounded text-[10px] font-bold animate-pulse">Awaiting Escrow Payment Verification</span>;
+                                case 'PAYMENT_VERIFIED_ORDER_PLACED':
+                                  return <span className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded text-[10px] font-bold">✓ Payment Verified & Order Dispatched</span>;
+                                case 'Closed':
+                                  return <span className="bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-bold">Closed</span>;
+                                default:
+                                  return <span className="bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-bold">{rfq.status || 'Open'}</span>;
+                              }
+                            })()}
+                          </div>
+                          <h4 className="font-bold text-slate-900 mt-2.5 text-sm sm:text-base">{rfq.productName}</h4>
                           <p className="text-[11px] text-slate-500 mt-1 leading-normal">{rfq.description}</p>
                           <div className="flex flex-wrap gap-4 mt-3 text-[10px] text-slate-400 font-semibold">
                             <span>Quantity: <strong className="text-slate-700">{rfq.quantity} units</strong></span>
                             <span>Budget: <strong className="text-emerald-700">₹{rfq.budget.toLocaleString()}</strong></span>
                             <span>Destination: <strong className="text-slate-700">{rfq.deliveryLocation}</strong></span>
-                            <span>Status: <strong className={rfq.status === 'Open' ? 'text-teal-700' : 'text-slate-400'}>{rfq.status}</strong></span>
                           </div>
                         </div>
 
-                        {rfq.status === 'Open' && relatedQuotes.length > 0 && (
+                        {(rfq.status === 'Open' || rfq.status === 'OPEN_TO_VENDORS' || rfq.status === 'QUOTED') && relatedQuotes.length > 0 && (
                           <button
                             onClick={() => setActiveRfqReview(rfq)}
                             className="bg-teal-700 hover:bg-teal-800 text-white text-[10px] font-bold px-3.5 py-2 rounded-xl shrink-0 uppercase tracking-wide flex items-center gap-1"
@@ -2379,6 +2349,132 @@ export default function CustomerPanel({
           </div>
         </div>
       )}
+
+      {/* Secure B2B Escrow Payment Gateway Session Modal */}
+      {escrowPaymentSession && (() => {
+        const { quo, rfq } = escrowPaymentSession;
+        const subtotal = quo.totalPrice;
+        const commissionRate = quo.commissionRateApplied || 10;
+        const basePrice = quo.vendor_base_price || Math.round(quo.pricePerUnit / (1 + commissionRate / 100));
+        const commissionFee = quo.platform_fee || Math.round(quo.pricePerUnit - basePrice);
+        const gstAmount = subtotal * 0.12;
+        const totalPayable = subtotal + gstAmount;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex justify-center items-center p-4">
+            <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 animate-scale-up">
+              
+              {/* Header */}
+              <div className="bg-slate-900 text-white px-6 py-5 border-b border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">HealNex Escrow</h3>
+                    <h2 className="text-sm font-bold text-white">Secure B2B Payment Gateway</h2>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setEscrowPaymentSession(null)}
+                  className="text-slate-400 hover:text-white font-bold text-xl leading-none"
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* Progress Tracker */}
+              <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between text-[9px] uppercase font-black text-slate-400 tracking-wider">
+                <span className="text-emerald-600 flex items-center gap-1">● 1. Accept Bid</span>
+                <span className="text-blue-600 flex items-center gap-1">● 2. Escrow Deposit</span>
+                <span className="flex items-center gap-1">○ 3. Admin Release</span>
+                <span className="flex items-center gap-1">○ 4. Dispatch</span>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-6">
+                
+                {/* Product Summary */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selected Procurement</p>
+                  <h4 className="font-bold text-slate-900 text-sm">{rfq.productName}</h4>
+                  <p className="text-[11px] text-slate-500 leading-normal">{rfq.description.slice(0, 120)}...</p>
+                  <div className="flex justify-between items-center text-[10px] text-slate-500 font-semibold pt-1 border-t border-slate-200">
+                    <span>Quantity: <strong className="text-slate-800">{rfq.quantity} units</strong></span>
+                    <span>Supplier: <strong className="text-teal-700">{quo.companyName}</strong></span>
+                  </div>
+                </div>
+
+                {/* Ledger Financial breakdown */}
+                <div className="space-y-2.5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inter-Ledger Commercial Breakdown</p>
+                  
+                  <div className="space-y-1.5 text-xs font-semibold text-slate-600">
+                    <div className="flex justify-between">
+                      <span className="font-normal text-slate-500">Negotiated Vendor Base Price (per unit)</span>
+                      <span className="font-mono text-slate-700">₹{basePrice.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-normal text-slate-500">Platform Escrow Commission ({commissionRate}%)</span>
+                      <span className="font-mono text-teal-700">+₹{commissionFee.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-slate-100">
+                      <span className="font-bold text-slate-900">Final Certified Price (per unit)</span>
+                      <span className="font-mono font-bold text-slate-900">₹{quo.pricePerUnit.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between pt-1.5">
+                      <span className="font-normal text-slate-500">Subtotal ({rfq.quantity} units)</span>
+                      <span className="font-mono text-slate-700">₹{subtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-normal text-slate-500">Diagnostic Equipment GST (12%)</span>
+                      <span className="font-mono text-slate-700">₹{gstAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    
+                    {/* Grand Total */}
+                    <div className="flex justify-between items-center pt-2.5 border-t border-slate-200 bg-emerald-50/40 p-3 rounded-xl border border-emerald-100/50">
+                      <div>
+                        <span className="font-black text-[10px] text-emerald-800 uppercase tracking-wider block">Escrow Amount Due</span>
+                        <span className="text-[9px] text-slate-400 font-normal">Held securely until verification</span>
+                      </div>
+                      <span className="font-mono font-black text-base text-emerald-700">₹{totalPayable.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Secure Notice */}
+                <div className="flex gap-2 p-3 bg-blue-50 text-blue-700 rounded-xl text-[10px] font-semibold leading-normal border border-blue-100">
+                  <ShieldCheck className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
+                  <p>Escrow Guarantee: Funds are deposited into a secure non-custodial clearing account. The payment is verified by Healnex Admin, and released to the supplier only upon order generation & shipment tracking initiation.</p>
+                </div>
+
+                {/* Simulated Payment Trigger */}
+                <div className="space-y-2.5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Transfer Protocol</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => handleConfirmEscrowPayment('UPI QR Instant')}
+                      className="p-3 border border-slate-200 hover:border-teal-500 hover:bg-slate-50/50 rounded-xl text-left font-bold text-xs flex flex-col justify-between transition cursor-pointer"
+                    >
+                      <span className="text-slate-700 text-[10px]">UPI SmartTransfer</span>
+                      <span className="text-[9px] text-slate-400 font-normal mt-0.5">Instant ledger trigger</span>
+                    </button>
+                    <button 
+                      onClick={() => handleConfirmEscrowPayment('Direct RTGS/Bank Transfer')}
+                      className="p-3 border border-slate-200 hover:border-teal-500 hover:bg-slate-50/50 rounded-xl text-left font-bold text-xs flex flex-col justify-between transition cursor-pointer"
+                    >
+                      <span className="text-slate-700 text-[10px]">Bank Escrow RTGS</span>
+                      <span className="text-[9px] text-slate-400 font-normal mt-0.5">Awaiting manual clearance</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Customer Procurement History & Verifications */}
       {currentView === 'orders' && (

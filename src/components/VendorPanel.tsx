@@ -176,8 +176,8 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     );
     setOrders(ords);
 
-    // RFQs are public
-    const openRfqs = dbLocal.getRfqs().filter(r => r.status === 'Open');
+    // RFQs are public if approved or already quoted
+    const openRfqs = dbLocal.getRfqs().filter(r => r.status === 'OPEN_TO_VENDORS' || r.status === 'QUOTED');
     setRfqs(openRfqs);
 
     const quotes = dbLocal.getQuotations().filter(q => q.vendorId === currentUser.id);
@@ -582,29 +582,47 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     e.preventDefault();
     if (!currentUser || !vendorProfile || !activeRfqBid) return;
 
+    // Get commission rate applied for this vendor
+    const commRate = vendorProfile.customCommissionRate !== undefined 
+      ? vendorProfile.customCommissionRate 
+      : (dbLocal.getPaymentSettings().platformCommissionRate || 10);
+
+    const basePrice = Number(bidPrice);
+    const platformFee = basePrice * (commRate / 100);
+    const finalCustomerPrice = basePrice + platformFee;
+    const finalTotalPrice = finalCustomerPrice * activeRfqBid.quantity;
+
     const newQuotation: Quotation = {
       id: `QUO-${Date.now()}`,
       rfqId: activeRfqBid.id,
       vendorId: currentUser.id,
       vendorName: vendorProfile.ownerName,
       companyName: vendorProfile.companyName,
-      pricePerUnit: Number(bidPrice),
-      totalPrice: Number(bidPrice) * activeRfqBid.quantity,
+      pricePerUnit: finalCustomerPrice, // sets final_customer_price as per-unit price for legacy compatibility
+      totalPrice: finalTotalPrice,
       validUntil: bidValidDate,
       deliveryDays: Number(bidDeliveryDays),
       specifications: bidSpecs,
       status: 'Pending',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      vendor_base_price: basePrice,
+      final_customer_price: finalCustomerPrice,
+      platform_fee: platformFee,
+      commissionRateApplied: commRate,
     };
 
     const quotes = dbLocal.getQuotations();
     quotes.push(newQuotation);
     dbLocal.saveQuotations(quotes);
 
-    // Update quote count on RFQ
+    // Update quote count and status on RFQ to QUOTED
     const allRfqs = dbLocal.getRfqs().map(r => {
       if (r.id === activeRfqBid.id) {
-        return { ...r, quotationsCount: (r.quotationsCount || 0) + 1 };
+        return { 
+          ...r, 
+          status: 'QUOTED' as const,
+          quotationsCount: (r.quotationsCount || 0) + 1 
+        };
       }
       return r;
     });
@@ -614,11 +632,11 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     dbLocal.addNotification(
       activeRfqBid.customerId,
       `New Quotation Received: ${vendorProfile.companyName}`,
-      `Vendor ${vendorProfile.companyName} submitted a bid of ₹${newQuotation.totalPrice.toLocaleString('en-IN')} for your RFQ "${activeRfqBid.productName}".`,
+      `Vendor ${vendorProfile.companyName} submitted a bid with certified unit price of ₹${finalCustomerPrice.toLocaleString('en-IN')} (total ₹${finalTotalPrice.toLocaleString('en-IN')}) for your RFQ "${activeRfqBid.productName}".`,
       'quote_received'
     );
 
-    addToast('Your commercial bid proposal has been submitted successfully to the clinical client.', 'success');
+    addToast(`Your bid proposal has been submitted with commission injection (${commRate}% platform fee included).`, 'success');
     setActiveRfqBid(null);
     setBidPrice(0);
     setBidSpecs('');
@@ -1620,7 +1638,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                           <div className="flex flex-wrap gap-4 mt-3 text-[10px] text-slate-400 font-semibold">
                             <span>Quantity: <strong className="text-slate-700">{r.quantity} units</strong></span>
                             <span>Est. Budget: <strong className="text-emerald-700">₹{r.budget.toLocaleString('en-IN')}</strong></span>
-                            <span>Destination: <strong className="text-slate-700">{r.deliveryLocation}</strong></span>
+                            <span>Destination: <strong className="text-slate-700">{['PAYMENT_VERIFIED_ORDER_PLACED', 'Closed'].includes(r.status) ? r.deliveryLocation : '🔒 Locked (Revealed upon escrow payment verification)'}</strong></span>
                           </div>
                         </div>
 
