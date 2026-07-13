@@ -105,6 +105,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
   const [bidDeliveryDays, setBidDeliveryDays] = useState<number>(5);
   const [bidValidDate, setBidValidDate] = useState('2026-07-30');
   const [bidSpecs, setBidSpecs] = useState('');
+  const [bidGstRate, setBidGstRate] = useState<number>(12);
 
   // Bulk Upload state
   const [bulkMode, setBulkMode] = useState<'csv' | 'manual'>('csv');
@@ -591,6 +592,8 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     const platformFee = basePrice * (commRate / 100);
     const finalCustomerPrice = basePrice + platformFee;
     const finalTotalPrice = finalCustomerPrice * activeRfqBid.quantity;
+    const gstRate = Number(bidGstRate);
+    const gstAmount = finalTotalPrice * (gstRate / 100);
 
     const newQuotation: Quotation = {
       id: `QUO-${Date.now()}`,
@@ -609,6 +612,8 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
       final_customer_price: finalCustomerPrice,
       platform_fee: platformFee,
       commissionRateApplied: commRate,
+      gstRate: gstRate,
+      gstAmount: gstAmount,
     };
 
     const quotes = dbLocal.getQuotations();
@@ -632,14 +637,15 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     dbLocal.addNotification(
       activeRfqBid.customerId,
       `New Quotation Received: ${vendorProfile.companyName}`,
-      `Vendor ${vendorProfile.companyName} submitted a bid with certified unit price of ₹${finalCustomerPrice.toLocaleString('en-IN')} (total ₹${finalTotalPrice.toLocaleString('en-IN')}) for your RFQ "${activeRfqBid.productName}".`,
+      `Vendor ${vendorProfile.companyName} submitted a bid with certified unit price of ₹${finalCustomerPrice.toLocaleString('en-IN')} (total ₹${finalTotalPrice.toLocaleString('en-IN')}) plus ${gstRate}% GST for your RFQ "${activeRfqBid.productName}".`,
       'quote_received'
     );
 
-    addToast(`Your bid proposal has been submitted with commission injection (${commRate}% platform fee included).`, 'success');
+    addToast(`Your bid proposal has been submitted with commission injection (${commRate}% platform fee & ${gstRate}% GST included).`, 'success');
     setActiveRfqBid(null);
     setBidPrice(0);
     setBidSpecs('');
+    setBidGstRate(12);
     loadData();
   };
 
@@ -1687,17 +1693,74 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                   <p className="text-[10px] text-slate-500 mt-0.5">Need: {activeRfqBid.quantity} units | Budget limit: ₹{activeRfqBid.budget.toLocaleString()}</p>
                 </div>
 
-                <div>
-                  <label className="text-slate-500 block mb-1">Commercial Price (Per Unit) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={bidPrice || ''}
-                    onChange={(e) => setBidPrice(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-mono text-xs font-bold"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Total Bid Value: <strong className="text-emerald-700 font-mono">₹{(bidPrice * activeRfqBid.quantity).toLocaleString()}</strong></p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-slate-500 block mb-1">Commercial Price (Per Unit) *</label>
+                    <input
+                      type="number"
+                      required
+                      value={bidPrice || ''}
+                      onChange={(e) => setBidPrice(Number(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-mono text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-500 block mb-1">Applicable GST Rate (%) *</label>
+                    <select
+                      value={bidGstRate}
+                      onChange={(e) => setBidGstRate(Number(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-mono text-xs font-bold"
+                    >
+                      <option value={0}>0% GST (Exempt)</option>
+                      <option value={5}>5% GST</option>
+                      <option value={12}>12% GST (Diagnostic)</option>
+                      <option value={18}>18% GST (Standard Equipment)</option>
+                      <option value={28}>28% GST (High-end Medical)</option>
+                    </select>
+                  </div>
                 </div>
+
+                {bidPrice > 0 && (() => {
+                  const commRate = vendorProfile?.customCommissionRate !== undefined 
+                    ? vendorProfile.customCommissionRate 
+                    : (dbLocal.getPaymentSettings().platformCommissionRate || 10);
+                  const basePrice = Number(bidPrice);
+                  const platformFee = basePrice * (commRate / 100);
+                  const finalCustomerPrice = basePrice + platformFee;
+                  const finalTotalPrice = finalCustomerPrice * activeRfqBid.quantity;
+                  const gstAmount = finalTotalPrice * (bidGstRate / 100);
+                  const grandTotal = finalTotalPrice + gstAmount;
+
+                  return (
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5 text-[10px] text-slate-600 font-semibold">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Commercial Quote Preview</p>
+                      <div className="flex justify-between">
+                        <span>Negotiated Base (Unit):</span>
+                        <span className="font-mono text-slate-700">₹{basePrice.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between text-teal-700">
+                        <span>Platform Commission ({commRate}%):</span>
+                        <span className="font-mono">+₹{platformFee.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-900 font-bold border-t border-slate-200 pt-1">
+                        <span>Certified Customer Price (Unit):</span>
+                        <span className="font-mono">₹{finalCustomerPrice.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between pt-1">
+                        <span>Subtotal ({activeRfqBid.quantity} units):</span>
+                        <span className="font-mono text-slate-700">₹{finalTotalPrice.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Selected GST ({bidGstRate}%):</span>
+                        <span className="font-mono text-slate-700">₹{gstAmount.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-dashed border-slate-300 pt-1.5 text-[11px] text-emerald-800 font-black">
+                        <span>Grand Total (Payable):</span>
+                        <span className="font-mono text-emerald-700">₹{grandTotal.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>

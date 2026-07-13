@@ -1538,7 +1538,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
           // 3. Create a real Order in the database so that it represents a fully active order!
           const sub = quo.totalPrice;
-          const gst = sub * 0.12;
+          const qGstRate = quo.gstRate !== undefined ? quo.gstRate : 12;
+          const gst = sub * (qGstRate / 100);
           const final = sub + gst;
 
           const newOrder: Order = {
@@ -1554,7 +1555,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
               productImage: 'https://images.unsplash.com/photo-1579684389782-64d84b5e901a',
               price: quo.pricePerUnit,
               quantity: rfq.quantity,
-              gstRate: 12,
+              gstRate: qGstRate,
               hsnCode: '90181100',
               vendorId: quo.vendorId,
               vendorName: quo.companyName,

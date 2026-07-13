@@ -727,36 +727,134 @@ export default function CustomerPanel({
     if (!escrowPaymentSession || !currentUser) return;
     const { quo, rfq } = escrowPaymentSession;
 
-    // Transition the RFQ status to PENDING_PAYMENT_VERIFICATION
-    const updatedRfqs = dbLocal.getRfqs().map(r => {
-      if (r.id === rfq.id) {
-        return { 
-          ...r, 
-          status: 'PENDING_PAYMENT_VERIFICATION' as const,
-          winningQuotationId: quo.id
-        };
-      }
-      return r;
-    });
-    dbLocal.saveRfqs(updatedRfqs);
+    if (method === 'Admin Direct Clearance (Sandbox Bypass)') {
+      // 1. Direct verified order transition
+      const updatedRfqs = dbLocal.getRfqs().map(r => {
+        if (r.id === rfq.id) {
+          return { 
+            ...r, 
+            status: 'PAYMENT_VERIFIED_ORDER_PLACED' as const,
+            winningQuotationId: quo.id
+          };
+        }
+        return r;
+      });
+      dbLocal.saveRfqs(updatedRfqs);
 
-    // Update Quotations
-    const updatedQuotes = dbLocal.getQuotations().map(q => {
-      if (q.id === quo.id) return { ...q, status: 'Accepted' as const };
-      if (q.rfqId === rfq.id) return { ...q, status: 'Rejected' as const };
-      return q;
-    });
-    dbLocal.saveQuotations(updatedQuotes);
+      // 2. Accept and reject bids
+      const updatedQuotes = dbLocal.getQuotations().map(q => {
+        if (q.id === quo.id) return { ...q, status: 'Accepted' as const };
+        if (q.rfqId === rfq.id) return { ...q, status: 'Rejected' as const };
+        return q;
+      });
+      dbLocal.saveQuotations(updatedQuotes);
 
-    // Notify Admin about the escrow deposit matching
-    dbLocal.addNotification(
-      'admin',
-      'B2B Escrow Deposit Pending Verification',
-      `Client ${currentUser.name} has accepted Quote #${quo.id} for RFQ #${rfq.id}. A escrow deposit of ₹${((quo.totalPrice || 0) * 1.12).toLocaleString()} via ${method} is awaiting your manual ledger/webhook verification.`,
-      'payment_received'
-    );
+      // 3. Create active Order
+      const sub = quo.totalPrice;
+      const qGstRate = quo.gstRate !== undefined ? quo.gstRate : 12;
+      const gst = sub * (qGstRate / 100);
+      const final = sub + gst;
 
-    addToast(`Escrow payment gateway session authorized via ${method}. Status is now PENDING_PAYMENT_VERIFICATION.`, 'success');
+      const newOrder: Order = {
+        id: `ORD-${Math.floor(10000 + Math.random() * 90000)}`,
+        customerId: currentUser.id,
+        customerName: currentUser.name,
+        customerEmail: currentUser.email,
+        vendorId: quo.vendorId,
+        vendorName: quo.companyName,
+        items: [{
+          productId: rfq.id,
+          productName: `${rfq.productName} (RFQ Custom Specification)`,
+          productImage: 'https://images.unsplash.com/photo-1579684389782-64d84b5e901a',
+          price: quo.pricePerUnit,
+          quantity: rfq.quantity,
+          gstRate: qGstRate,
+          hsnCode: '90181100',
+          vendorId: quo.vendorId,
+          vendorName: quo.companyName,
+          vendorPrice: quo.pricePerUnit,
+          commissionRate: quo.commissionRateApplied || 10,
+          commissionAmount: quo.platform_fee || 0,
+          finalPrice: quo.pricePerUnit,
+          vendorPayout: (quo.vendor_base_price || (quo.pricePerUnit * 0.9)) * rfq.quantity
+        }],
+        totalAmount: sub,
+        gstAmount: gst,
+        discountAmount: 0,
+        finalAmount: final,
+        status: 'Processing',
+        paymentMethod: 'UPI',
+        paymentId: `pay_HN_${Date.now().toString().slice(-9)}`,
+        shippingAddress: {
+          address: rfq.deliveryLocation,
+          city: 'Clinical Hub',
+          state: 'Delhi',
+          pincode: '110001'
+        },
+        createdAt: new Date().toISOString(),
+        timeline: [
+          { status: 'Pending', time: new Date().toISOString(), note: 'Escrow payment bypass verified. Order automatically placed & routed.' },
+          { status: 'Confirmed', time: new Date().toISOString(), note: 'Vendor routed with secured clearance guarantee.' }
+        ]
+      };
+
+      const allOrders = dbLocal.getOrders();
+      allOrders.unshift(newOrder);
+      dbLocal.saveOrders(allOrders);
+
+      // Notify Vendor about secured funds
+      dbLocal.addNotification(
+        quo.vendorId,
+        'B2B Escrow Funds Secured - START DISPATCH!',
+        `Payment for RFQ #${rfq.id} has been pre-cleared via Admin Sandbox Bypass. Delivery address: ${rfq.deliveryLocation}. Please dispatch immediately.`,
+        'order_placed'
+      );
+
+      // Notify Admin
+      dbLocal.addNotification(
+        'admin',
+        'B2B Escrow Pre-Cleared Order Placed',
+        `Client ${currentUser.name} accepted Quote #${quo.id} via Direct Pre-Cleared Sandbox Bypass. Order #${newOrder.id} has been automatically routed to supplier ${quo.companyName}.`,
+        'payment_received'
+      );
+
+      addToast(`Direct Sandbox Bypass Approved! Order #${newOrder.id} has been successfully created and routed.`, 'success');
+    } else {
+      // Transition the RFQ status to PENDING_PAYMENT_VERIFICATION
+      const updatedRfqs = dbLocal.getRfqs().map(r => {
+        if (r.id === rfq.id) {
+          return { 
+            ...r, 
+            status: 'PENDING_PAYMENT_VERIFICATION' as const,
+            winningQuotationId: quo.id
+          };
+        }
+        return r;
+      });
+      dbLocal.saveRfqs(updatedRfqs);
+
+      // Update Quotations
+      const updatedQuotes = dbLocal.getQuotations().map(q => {
+        if (q.id === quo.id) return { ...q, status: 'Accepted' as const };
+        if (q.rfqId === rfq.id) return { ...q, status: 'Rejected' as const };
+        return q;
+      });
+      dbLocal.saveQuotations(updatedQuotes);
+
+      // Notify Admin about the escrow deposit matching
+      const qGstRate = quo.gstRate !== undefined ? quo.gstRate : 12;
+      const totalPlusGst = (quo.totalPrice || 0) * (1 + qGstRate / 100);
+
+      dbLocal.addNotification(
+        'admin',
+        'B2B Escrow Deposit Pending Verification',
+        `Client ${currentUser.name} has accepted Quote #${quo.id} for RFQ #${rfq.id}. A escrow deposit of ₹${totalPlusGst.toLocaleString()} (including ${qGstRate}% GST) via ${method} is awaiting your manual ledger/webhook verification.`,
+        'payment_received'
+      );
+
+      addToast(`Escrow payment gateway session authorized via ${method}. Status is now PENDING_PAYMENT_VERIFICATION.`, 'success');
+    }
+
     setEscrowPaymentSession(null);
     setActiveRfqReview(null);
     loadData();
@@ -2330,7 +2428,10 @@ export default function CustomerPanel({
                     <tr key={quo.id} className="hover:bg-slate-50/40">
                       <td className="py-4 px-4 font-bold text-slate-900">{quo.companyName}</td>
                       <td className="py-4 px-3 text-right font-mono text-slate-800">₹{quo.pricePerUnit.toLocaleString('en-IN')}</td>
-                      <td className="py-4 px-3 text-right font-mono text-teal-800 font-bold">₹{quo.totalPrice.toLocaleString('en-IN')}</td>
+                      <td className="py-4 px-3 text-right font-mono text-teal-800 font-bold">
+                        ₹{quo.totalPrice.toLocaleString('en-IN')}
+                        <span className="block text-[9px] text-slate-400 font-normal">+{quo.gstRate !== undefined ? quo.gstRate : 12}% GST</span>
+                      </td>
                       <td className="py-4 px-3 text-center text-slate-800">{quo.deliveryDays} Days</td>
                       <td className="py-4 px-4 text-slate-500 leading-normal font-normal">{quo.specifications}</td>
                       <td className="py-4 px-4 text-right">
@@ -2357,12 +2458,13 @@ export default function CustomerPanel({
         const commissionRate = quo.commissionRateApplied || 10;
         const basePrice = quo.vendor_base_price || Math.round(quo.pricePerUnit / (1 + commissionRate / 100));
         const commissionFee = quo.platform_fee || Math.round(quo.pricePerUnit - basePrice);
-        const gstAmount = subtotal * 0.12;
+        const qGstRate = quo.gstRate !== undefined ? quo.gstRate : 12;
+        const gstAmount = subtotal * (qGstRate / 100);
         const totalPayable = subtotal + gstAmount;
 
         return (
           <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex justify-center items-center p-4">
-            <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 animate-scale-up">
+            <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-100 animate-scale-up">
               
               {/* Header */}
               <div className="bg-slate-900 text-white px-6 py-5 border-b border-slate-800 flex items-center justify-between">
@@ -2427,7 +2529,7 @@ export default function CustomerPanel({
                       <span className="font-mono text-slate-700">₹{subtotal.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="font-normal text-slate-500">Diagnostic Equipment GST (12%)</span>
+                      <span className="font-normal text-slate-500">Vendor Specified GST ({qGstRate}%)</span>
                       <span className="font-mono text-slate-700">₹{gstAmount.toLocaleString('en-IN')}</span>
                     </div>
                     
@@ -2445,26 +2547,33 @@ export default function CustomerPanel({
                 {/* Secure Notice */}
                 <div className="flex gap-2 p-3 bg-blue-50 text-blue-700 rounded-xl text-[10px] font-semibold leading-normal border border-blue-100">
                   <ShieldCheck className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
-                  <p>Escrow Guarantee: Funds are deposited into a secure non-custodial clearing account. The payment is verified by Healnex Admin, and released to the supplier only upon order generation & shipment tracking initiation.</p>
+                  <p>Escrow Guarantee: Funds are deposited into a secure non-custodial clearing account. The payment is verified by Healnex Admin, and released to the supplier only upon order generation &amp; shipment tracking initiation.</p>
                 </div>
 
                 {/* Simulated Payment Trigger */}
                 <div className="space-y-2.5">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Transfer Protocol</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <button 
                       onClick={() => handleConfirmEscrowPayment('UPI QR Instant')}
                       className="p-3 border border-slate-200 hover:border-teal-500 hover:bg-slate-50/50 rounded-xl text-left font-bold text-xs flex flex-col justify-between transition cursor-pointer"
                     >
-                      <span className="text-slate-700 text-[10px]">UPI SmartTransfer</span>
+                      <span className="text-slate-700 text-[10px] font-bold">UPI SmartTransfer</span>
                       <span className="text-[9px] text-slate-400 font-normal mt-0.5">Instant ledger trigger</span>
                     </button>
                     <button 
                       onClick={() => handleConfirmEscrowPayment('Direct RTGS/Bank Transfer')}
                       className="p-3 border border-slate-200 hover:border-teal-500 hover:bg-slate-50/50 rounded-xl text-left font-bold text-xs flex flex-col justify-between transition cursor-pointer"
                     >
-                      <span className="text-slate-700 text-[10px]">Bank Escrow RTGS</span>
+                      <span className="text-slate-700 text-[10px] font-bold">Bank Escrow RTGS</span>
                       <span className="text-[9px] text-slate-400 font-normal mt-0.5">Awaiting manual clearance</span>
+                    </button>
+                    <button 
+                      onClick={() => handleConfirmEscrowPayment('Admin Direct Clearance (Sandbox Bypass)')}
+                      className="p-3 border-2 border-dashed border-teal-300 bg-teal-50/40 hover:border-teal-500 hover:bg-teal-50 rounded-xl text-left font-bold text-xs flex flex-col justify-between transition cursor-pointer animate-pulse"
+                    >
+                      <span className="text-teal-900 text-[10px] font-black flex items-center gap-1">⚡ Admin Bypass</span>
+                      <span className="text-[9px] text-teal-600 font-normal mt-0.5">Instant escrow clearance</span>
                     </button>
                   </div>
                 </div>

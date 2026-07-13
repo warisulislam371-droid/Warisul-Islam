@@ -361,6 +361,8 @@ export interface Quotation {
   final_customer_price?: number;
   platform_fee?: number;
   commissionRateApplied?: number;
+  gstRate?: number;
+  gstAmount?: number;
 }
 
 export interface TicketReply {
