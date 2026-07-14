@@ -952,6 +952,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
             quotations={quotations}
             vendorProfile={vendorProfile}
             commissionRate={commRate}
+            addToast={addToast}
           />
         );
       })()}

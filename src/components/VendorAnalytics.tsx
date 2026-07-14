@@ -28,9 +28,11 @@ import {
   Info,
   CheckCircle,
   Truck,
-  AlertCircle
+  AlertCircle,
+  FileText
 } from 'lucide-react';
 import { Order, Product, Quotation, Vendor } from '../types';
+import VendorReportPDF from './VendorReportPDF';
 
 interface VendorAnalyticsProps {
   currentUser: { id: string; name: string };
@@ -39,6 +41,7 @@ interface VendorAnalyticsProps {
   quotations: Quotation[];
   vendorProfile: Vendor | null;
   commissionRate: number;
+  addToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export default function VendorAnalytics({
@@ -47,9 +50,11 @@ export default function VendorAnalytics({
   products,
   quotations,
   vendorProfile,
-  commissionRate
+  commissionRate,
+  addToast
 }: VendorAnalyticsProps) {
   const [timeRange, setTimeRange] = useState<'30days' | '3months' | '6months' | 'all'>('6months');
+  const [showPdfReport, setShowPdfReport] = useState(false);
 
   // Parse dates safely
   const parseOrderDate = (dateStr: string) => {
@@ -320,6 +325,15 @@ export default function VendorAnalytics({
           >
             <Download className="w-4 h-4 text-slate-800" />
             <span className="hidden sm:inline">Export CSV</span>
+          </button>
+
+          <button
+            onClick={() => setShowPdfReport(true)}
+            className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black transition shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0 border border-teal-700"
+            title="Export PDF Report"
+          >
+            <FileText className="w-4 h-4 text-white" />
+            <span className="hidden sm:inline">Export PDF Report</span>
           </button>
         </div>
       </div>
@@ -608,6 +622,20 @@ export default function VendorAnalytics({
         </div>
 
       </div>
+
+      {showPdfReport && (
+        <VendorReportPDF
+          currentUser={currentUser}
+          orders={orders}
+          products={products}
+          quotations={quotations}
+          vendorProfile={vendorProfile}
+          commissionRate={commissionRate}
+          timeRange={timeRange}
+          onClose={() => setShowPdfReport(false)}
+          addToast={addToast}
+        />
+      )}
 
     </div>
   );
