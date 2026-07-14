@@ -583,6 +583,9 @@ export default function VendorProductManager({
               const isChangesRequested = p.status === 'ChangesRequested';
               const isInactive = p.status === 'Inactive';
 
+              const stock = p.stockQuantity !== undefined ? p.stockQuantity : 10;
+              const isLowStock = stock < 5;
+
               let badgeBg = 'bg-slate-100 border-slate-200 text-slate-700';
               let badgeLabel: string = p.status || 'Draft';
               let BadgeIcon = Clock;
@@ -614,8 +617,23 @@ export default function VendorProductManager({
               }
 
               return (
-                <div key={p.id} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition flex flex-col overflow-hidden">
+                <div 
+                  key={p.id} 
+                  className={`rounded-2xl border transition flex flex-col overflow-hidden ${
+                    isLowStock 
+                      ? 'border-red-300 bg-red-50/20 shadow-sm hover:shadow-red-100/50' 
+                      : 'bg-white border-slate-200/80 shadow-sm hover:shadow-md'
+                  }`}
+                >
                   
+                  {/* Low Stock Warning Banner */}
+                  {isLowStock && (
+                    <div className="bg-red-500 text-white p-2 text-center text-[10px] font-bold flex items-center justify-center gap-1.5 uppercase tracking-wider shrink-0">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 animate-bounce" />
+                      <span>Low Stock Alert: Only {stock} units left!</span>
+                    </div>
+                  )}
+
                   {/* Rejection Alert Banner */}
                   {isRejected && (
                     <div className="bg-rose-50 border-b border-rose-100 p-3 flex items-start justify-between gap-2 text-rose-800 text-xs">
@@ -694,7 +712,9 @@ export default function VendorProductManager({
                         </div>
                         <div className="text-right">
                           <span className="text-[10px] text-slate-400 block">Stock / MOQ</span>
-                          <span className="font-bold text-slate-700">{p.stockQuantity !== undefined ? p.stockQuantity : 10} qty • MOQ: {p.moq}</span>
+                          <span className={`font-extrabold ${isLowStock ? 'text-red-600 animate-pulse' : 'text-slate-700'}`}>
+                            {stock} qty {isLowStock && '(CRITICAL)'} • MOQ: {p.moq}
+                          </span>
                         </div>
                       </div>
                     </div>
