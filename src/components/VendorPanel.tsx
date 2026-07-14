@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { Vendor, Product, Order, RFQ, Quotation, User, PaymentClearanceRequest } from '../types';
 import VendorProductManager from './VendorProductManager';
+import VendorAnalytics from './VendorAnalytics';
 import {
   Store,
   Upload,
@@ -40,7 +41,8 @@ import {
   Wallet,
   Percent,
   ShieldCheck,
-  FileCheck
+  FileCheck,
+  BarChart3
 } from 'lucide-react';
 
 export interface BulkProductRow {
@@ -73,7 +75,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [clearanceRequests, setClearanceRequests] = useState<PaymentClearanceRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<'profile' | 'products' | 'bulk' | 'orders' | 'rfqs' | 'payouts'>('products');
+  const [activeTab, setActiveTab] = useState<'profile' | 'products' | 'bulk' | 'orders' | 'rfqs' | 'payouts' | 'analytics'>('analytics');
 
   // Payout Clearance Request State
   const [reqAmount, setReqAmount] = useState<number>(0);
@@ -447,11 +449,10 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     document.body.removeChild(link);
   };
 
-  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files ? e.target.files[0] : null;
-    setBulkFile(file);
-    if (!file) return;
+  const [isDragging, setIsDragging] = useState(false);
 
+  const processFile = (file: File) => {
+    setBulkFile(file);
     setBulkStatus('Parsing spreadsheet rows...');
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -498,6 +499,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files ? e.target.files[0] : null;
+    if (!file) return;
+    processFile(file);
   };
 
   const handleSaveBulkProducts = (rows: BulkProductRow[], asDraft: boolean = false) => {
@@ -883,6 +890,13 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
         {/* Tab triggers */}
         <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
           <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'analytics' ? 'bg-white text-slate-950 shadow-sm font-bold text-teal-800' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <BarChart3 className="w-3.5 h-3.5 text-teal-600" />
+            Performance Analytics
+          </button>
+          <button
             onClick={() => setActiveTab('profile')}
             className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'profile' ? 'bg-white text-slate-950 shadow-sm font-bold text-teal-800' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -925,6 +939,22 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
           </button>
         </div>
       </div>
+
+      {/* Analytics Tab */}
+      {activeTab === 'analytics' && (() => {
+        const paymentSettings = dbLocal.getPaymentSettings();
+        const commRate = vendorProfile?.customCommissionRate !== undefined ? vendorProfile.customCommissionRate : (paymentSettings.platformCommissionRate || 10);
+        return (
+          <VendorAnalytics
+            currentUser={currentUser}
+            orders={orders}
+            products={products}
+            quotations={quotations}
+            vendorProfile={vendorProfile}
+            commissionRate={commRate}
+          />
+        );
+      })()}
 
       {/* profile tab */}
       {activeTab === 'profile' && (
@@ -1105,8 +1135,27 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
           {/* Mode 1: CSV Upload */}
           {bulkMode === 'csv' && (
             <div className="space-y-6">
-              <div className="border-2 border-dashed border-slate-300 hover:border-teal-600 rounded-2xl p-8 text-center transition bg-slate-50/60">
-                <Upload className="w-10 h-10 text-teal-600 mx-auto mb-2" />
+              <div 
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  const file = e.dataTransfer.files ? e.dataTransfer.files[0] : null;
+                  if (file) {
+                    processFile(file);
+                  }
+                }}
+                className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 ${
+                  isDragging 
+                    ? 'border-teal-500 bg-teal-50/70 scale-[1.01] shadow-md shadow-teal-500/10' 
+                    : 'border-slate-300 hover:border-teal-600 bg-slate-50/60'
+                }`}
+              >
+                <Upload className={`w-10 h-10 mx-auto mb-2 transition-transform duration-300 ${isDragging ? 'text-teal-500 scale-110' : 'text-teal-600'}`} />
                 <input
                   type="file"
                   accept=".csv, .txt, .xlsx"
