@@ -2682,27 +2682,19 @@ export default function CustomerPanel({
 
                 {/* Ledger Financial breakdown */}
                 <div className="space-y-2.5">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inter-Ledger Commercial Breakdown</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Commercial Breakdown</p>
                   
                   <div className="space-y-1.5 text-xs font-semibold text-slate-600">
                     <div className="flex justify-between">
-                      <span className="font-normal text-slate-500">Negotiated Vendor Base Price (per unit)</span>
-                      <span className="font-mono text-slate-700">₹{basePrice.toLocaleString('en-IN')}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-normal text-slate-500">Platform Escrow Commission ({commissionRate}%)</span>
-                      <span className="font-mono text-teal-700">+₹{commissionFee.toLocaleString('en-IN')}</span>
-                    </div>
-                    <div className="flex justify-between pt-1 border-t border-slate-100">
-                      <span className="font-bold text-slate-900">Final Certified Price (per unit)</span>
+                      <span className="font-bold text-slate-900">Quoted Price (per unit)</span>
                       <span className="font-mono font-bold text-slate-900">₹{quo.pricePerUnit.toLocaleString('en-IN')}</span>
                     </div>
-                    <div className="flex justify-between pt-1.5">
+                    <div className="flex justify-between pt-1 border-t border-slate-100">
                       <span className="font-normal text-slate-500">Subtotal ({rfq.quantity} units)</span>
                       <span className="font-mono text-slate-700">₹{subtotal.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="font-normal text-slate-500">Vendor Specified GST ({qGstRate}%)</span>
+                      <span className="font-normal text-slate-500">Specified GST ({qGstRate}%)</span>
                       <span className="font-mono text-slate-700">₹{gstAmount.toLocaleString('en-IN')}</span>
                     </div>
                     

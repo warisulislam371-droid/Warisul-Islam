@@ -648,7 +648,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
       'quote_received'
     );
 
-    addToast(`Your bid proposal has been submitted with commission injection (${commRate}% platform fee & ${gstRate}% GST included).`, 'success');
+    addToast(`Your bid proposal has been successfully submitted to the procurement system (${gstRate}% GST included).`, 'success');
     setActiveRfqBid(null);
     setBidPrice(0);
     setBidSpecs('');
@@ -1716,7 +1716,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                             }`}>
                               Bid: {myBid.status}
                             </span>
-                            <p className="text-xs font-bold text-slate-900 font-mono mt-1">₹{myBid.totalPrice.toLocaleString('en-IN')}</p>
+                            <p className="text-xs font-bold text-slate-900 font-mono mt-1">
+                              ₹{(myBid.vendor_base_price || myBid.pricePerUnit).toLocaleString('en-IN')}/unit
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-medium">
+                              Total (incl. GST): ₹{Math.round(((myBid.vendor_base_price || myBid.pricePerUnit) * r.quantity) * (1 + (myBid.gstRate || 12) / 100)).toLocaleString('en-IN')}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -1770,41 +1775,28 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                 </div>
 
                 {bidPrice > 0 && (() => {
-                  const commRate = vendorProfile?.customCommissionRate !== undefined 
-                    ? vendorProfile.customCommissionRate 
-                    : (dbLocal.getPaymentSettings().platformCommissionRate || 10);
                   const basePrice = Number(bidPrice);
-                  const platformFee = basePrice * (commRate / 100);
-                  const finalCustomerPrice = basePrice + platformFee;
-                  const finalTotalPrice = finalCustomerPrice * activeRfqBid.quantity;
-                  const gstAmount = finalTotalPrice * (bidGstRate / 100);
-                  const grandTotal = finalTotalPrice + gstAmount;
+                  const totalBasePrice = basePrice * activeRfqBid.quantity;
+                  const gstAmount = totalBasePrice * (bidGstRate / 100);
+                  const grandTotal = totalBasePrice + gstAmount;
 
                   return (
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5 text-[10px] text-slate-600 font-semibold">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Commercial Quote Preview</p>
                       <div className="flex justify-between">
-                        <span>Negotiated Base (Unit):</span>
-                        <span className="font-mono text-slate-700">₹{basePrice.toLocaleString('en-IN')}</span>
+                        <span>Quote Unit Price:</span>
+                        <span className="font-mono text-slate-700 font-bold">₹{basePrice.toLocaleString('en-IN')}</span>
                       </div>
-                      <div className="flex justify-between text-teal-700">
-                        <span>Platform Commission ({commRate}%):</span>
-                        <span className="font-mono">+₹{platformFee.toLocaleString('en-IN')}</span>
-                      </div>
-                      <div className="flex justify-between text-slate-900 font-bold border-t border-slate-200 pt-1">
-                        <span>Certified Customer Price (Unit):</span>
-                        <span className="font-mono">₹{finalCustomerPrice.toLocaleString('en-IN')}</span>
-                      </div>
-                      <div className="flex justify-between pt-1">
+                      <div className="flex justify-between pt-1 border-t border-slate-100">
                         <span>Subtotal ({activeRfqBid.quantity} units):</span>
-                        <span className="font-mono text-slate-700">₹{finalTotalPrice.toLocaleString('en-IN')}</span>
+                        <span className="font-mono text-slate-700">₹{totalBasePrice.toLocaleString('en-IN')}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Selected GST ({bidGstRate}%):</span>
                         <span className="font-mono text-slate-700">₹{gstAmount.toLocaleString('en-IN')}</span>
                       </div>
                       <div className="flex justify-between border-t border-dashed border-slate-300 pt-1.5 text-[11px] text-emerald-800 font-black">
-                        <span>Grand Total (Payable):</span>
+                        <span>Total Estimated Quote:</span>
                         <span className="font-mono text-emerald-700">₹{grandTotal.toLocaleString('en-IN')}</span>
                       </div>
                     </div>
