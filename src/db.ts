@@ -749,6 +749,7 @@ export const dbLocal = {
     const old = this.get(STORAGE_KEYS.USERS, DEFAULT_USERS) as User[];
     this.set(STORAGE_KEYS.USERS, users);
     syncListToFirestoreWithDeletions('users', users, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Current logged in User
@@ -761,6 +762,7 @@ export const dbLocal = {
     const old = this.getVendors();
     this.set(STORAGE_KEYS.VENDORS, vendors);
     syncListToFirestoreWithDeletions('vendors', vendors, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Products
@@ -791,6 +793,7 @@ export const dbLocal = {
     const old = this.getOrders();
     this.set(STORAGE_KEYS.ORDERS, orders);
     syncListToFirestoreWithDeletions('orders', orders, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // RFQs
@@ -799,6 +802,7 @@ export const dbLocal = {
     const old = this.getRfqs();
     this.set(STORAGE_KEYS.RFQS, rfqs);
     syncListToFirestoreWithDeletions('rfqs', rfqs, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Quotations
@@ -807,6 +811,7 @@ export const dbLocal = {
     const old = this.getQuotations();
     this.set(STORAGE_KEYS.QUOTATIONS, quotations);
     syncListToFirestoreWithDeletions('quotations', quotations, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Tickets
@@ -815,6 +820,7 @@ export const dbLocal = {
     const old = this.getTickets();
     this.set(STORAGE_KEYS.TICKETS, tickets);
     syncListToFirestoreWithDeletions('tickets', tickets, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Blogs
@@ -823,6 +829,7 @@ export const dbLocal = {
     const old = this.getBlogs();
     this.set(STORAGE_KEYS.BLOGS, blogs);
     syncListToFirestoreWithDeletions('blogs', blogs, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Notifications
@@ -831,6 +838,7 @@ export const dbLocal = {
     const old = this.getNotifications();
     this.set(STORAGE_KEYS.NOTIFICATIONS, notifs);
     syncListToFirestoreWithDeletions('notifications', notifs, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Reviews
@@ -839,6 +847,7 @@ export const dbLocal = {
     const old = this.getReviews();
     this.set(STORAGE_KEYS.REVIEWS, reviews);
     syncListToFirestoreWithDeletions('reviews', reviews, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Payment Settings
