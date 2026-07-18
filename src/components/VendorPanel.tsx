@@ -718,7 +718,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
               <Store className="w-24 h-24" />
             </div>
             <span className={`px-3.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-sm ${
-              vendorProfile.status === 'Pending' ? 'bg-amber-500 text-slate-950' :
+              (vendorProfile.status === 'Pending' || vendorProfile.status === 'Pending Approval') ? 'bg-amber-500 text-slate-950' :
               vendorProfile.status === 'MoreInfoRequired' ? 'bg-orange-500 text-white' :
               vendorProfile.status === 'Suspended' ? 'bg-red-600 text-white' :
               'bg-rose-500 text-white'
@@ -766,12 +766,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                 </div>
 
                 <div className={`border rounded-xl p-4 flex items-center gap-3 ${
-                  vendorProfile.status === 'Pending' ? 'border-amber-200 bg-amber-50/40 animate-pulse' :
+                  (vendorProfile.status === 'Pending' || vendorProfile.status === 'Pending Approval') ? 'border-amber-200 bg-amber-50/40 animate-pulse' :
                   vendorProfile.status === 'MoreInfoRequired' ? 'border-orange-200 bg-orange-50/30' :
                   'border-rose-200 bg-rose-50/30'
                 }`}>
                   <div className={`rounded-full p-1.5 shrink-0 ${
-                    vendorProfile.status === 'Pending' ? 'bg-amber-500 text-slate-950' :
+                    (vendorProfile.status === 'Pending' || vendorProfile.status === 'Pending Approval') ? 'bg-amber-500 text-slate-950' :
                     'bg-orange-500 text-white'
                   }`}>
                     <Activity className="w-4 h-4" />

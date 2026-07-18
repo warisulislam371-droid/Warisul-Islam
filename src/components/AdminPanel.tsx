@@ -762,7 +762,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
   // Calculations
   const totalRevenue = orders.reduce((sum, o) => sum + o.finalAmount, 0);
-  const pendingVendorsCount = vendors.filter(v => v.status === 'Pending').length;
+  const pendingVendorsCount = vendors.filter(v => v.status === 'Pending' || v.status === 'Pending Approval').length;
   const pendingProductsCount = products.filter(p => p.status === 'Pending').length;
   const activeRfqsCount = dbLocal.getRfqs().filter(r => r.status === 'Open').length;
   const openTicketsCount = tickets.filter(t => t.status !== 'Closed').length;
@@ -771,7 +771,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   // Actions
   const handleVendorStatus = (
     vendorId: string,
-    newStatus: 'Approved' | 'Rejected' | 'MoreInfoRequired' | 'Suspended',
+    newStatus: 'Approved' | 'Rejected' | 'MoreInfoRequired' | 'Suspended' | 'Pending Approval',
     reasonText: string = ''
   ) => {
     const updated = vendors.map(v => {
@@ -781,6 +781,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
         // Formulate a beautiful status name for printing
         const statusLabelMap: Record<string, string> = {
           Approved: 'APPROVED & LIVE',
+          'Pending Approval': 'PENDING APPROVAL',
           Rejected: 'REJECTED',
           MoreInfoRequired: 'MORE INFORMATION REQUIRED',
           Suspended: 'TEMPORARILY SUSPENDED'
@@ -1459,7 +1460,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                   <div className="flex justify-between text-slate-700 mb-1.5">
                     <span>Pending Administrative Audit</span>
                     <span className="font-mono text-orange-600">
-                      {vendors.filter(v => v.status === 'Pending').length} Vendors
+                      {vendors.filter(v => v.status === 'Pending' || v.status === 'Pending Approval').length} Vendors
                     </span>
                   </div>
                   <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
@@ -2000,7 +2001,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 v.mobileNumber.includes(vendorSearchText) ||
                 v.gstNumber.toLowerCase().includes(vendorSearchText.toLowerCase()) ||
                 (v.state && v.state.toLowerCase().includes(vendorSearchText.toLowerCase()));
-              const matchesStatus = vendorStatusFilter === 'All' || v.status === vendorStatusFilter;
+              const matchesStatus = vendorStatusFilter === 'All' || (vendorStatusFilter === 'Pending' ? (v.status === 'Pending' || v.status === 'Pending Approval') : v.status === vendorStatusFilter);
               return matchesSearch && matchesStatus;
             });
 
@@ -2089,8 +2090,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                             <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold border ${
                               v.status === 'Approved'
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : v.status === 'Pending'
-                                ? 'bg-orange-50 text-orange-700 border-orange-200 animate-pulse'
+                                : (v.status === 'Pending' || v.status === 'Pending Approval')
+                                ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
                                 : 'bg-rose-50 text-rose-700 border-rose-200'
                             }`}>
                               {v.status}
@@ -2122,15 +2123,28 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                               <Shield className="w-3 h-3 text-amber-600" />
                               {v.trustSeal ? 'Seal' : 'Grant Seal'}
                             </button>
-                            {v.status !== 'Approved' && (
+                            
+                            {/* Approve Toggle Switch */}
+                            <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg" title={v.status === 'Approved' ? 'Toggle to Deactivate Account' : 'Toggle to Approve Account'}>
+                              <span className="text-[10px] font-black uppercase text-slate-600">Approved</span>
                               <button
-                                onClick={() => handleVendorStatus(v.id, 'Approved')}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition"
+                                onClick={() => {
+                                  const nextStatus = v.status === 'Approved' ? 'Pending Approval' : 'Approved';
+                                  handleVendorStatus(v.id, nextStatus as any);
+                                }}
+                                className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                                  v.status === 'Approved' ? 'bg-emerald-500' : 'bg-slate-300'
+                                }`}
                               >
-                                Approve
+                                <span
+                                  className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                                    v.status === 'Approved' ? 'translate-x-4' : 'translate-x-0'
+                                  }`}
+                                />
                               </button>
-                            )}
-                            {v.status === 'Pending' && (
+                            </div>
+
+                            {(v.status === 'Pending' || v.status === 'Pending Approval') && (
                               <button
                                 onClick={() => handleVendorStatus(v.id, 'Rejected')}
                                 className="bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition"
@@ -2300,6 +2314,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-xs font-bold focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                       >
                         <option value="Approved">🟢 Approved & Live</option>
+                        <option value="Pending Approval">🟠 Pending Approval</option>
                         <option value="Pending">🟠 Pending Review</option>
                         <option value="Suspended">🟡 Suspended</option>
                         <option value="Rejected">🔴 Rejected</option>

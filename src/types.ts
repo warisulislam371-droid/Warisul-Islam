@@ -14,7 +14,7 @@ export interface User {
   createdAt?: string;
 }
 
-export type VendorStatus = 'Pending' | 'Approved' | 'Rejected' | 'Suspended' | 'MoreInfoRequired';
+export type VendorStatus = 'Pending' | 'Pending Approval' | 'Approved' | 'Rejected' | 'Suspended' | 'MoreInfoRequired';
 
 export interface BankDetails {
   bankName: string;

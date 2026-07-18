@@ -442,7 +442,7 @@ const DEFAULT_VENDORS: Vendor[] = [
       panCardUrl: 'hightech_pan.jpg',
       aadhaarCardUrl: 'hightech_aadhaar.jpg'
     },
-    status: 'Pending',
+    status: 'Pending Approval',
     createdAt: '2026-06-25T14:10:00Z'
   }
 ];

@@ -514,7 +514,7 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
         drugLicenseName: uploadedDocs.drugLicense.name,
         fssaiLicenseName: uploadedDocs.fssaiLicense.name,
       },
-      status: 'Pending', // Pending admin audit review
+      status: 'Pending Approval', // Pending admin audit review
       createdAt: new Date().toISOString()
     };
 
