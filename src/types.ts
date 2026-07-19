@@ -144,7 +144,6 @@ export interface Product {
     inquiries: number;
     sales: number;
   };
-  rating?: number;
 }
 
 export interface Category {
@@ -345,9 +344,6 @@ export interface RFQ {
   createdAt: string;
   quotationsCount: number;
   winningQuotationId?: string;
-  category?: string;
-  urgency?: string;
-  targetDate?: string;
 }
 
 export interface Quotation {

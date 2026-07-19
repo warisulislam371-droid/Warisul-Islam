@@ -33,7 +33,6 @@ import {
 } from 'lucide-react';
 import { Order, Product, Quotation, Vendor } from '../types';
 import VendorReportPDF from './VendorReportPDF';
-import D3BusinessInsights from './D3BusinessInsights';
 
 interface VendorAnalyticsProps {
   currentUser: { id: string; name: string };
@@ -119,8 +118,7 @@ export default function VendorAnalytics({
       winRate,
       totalQuotes,
       acceptedQuotes,
-      recentGross,
-      completedCount: completed.length
+      recentGross
     };
   }, [orders, filteredOrders, quotations, commissionRate]);
 
@@ -342,16 +340,16 @@ export default function VendorAnalytics({
 
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* KPI 1: Net Payout Balance */}
+        {/* KPI 1: Gross Sales */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition">
           <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-xl pointer-events-none" />
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Net Settlement Balance</span>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight font-mono">{formatRupee(metrics.totalNetEarnings)}</h3>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Total Sales Revenue</span>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight font-mono">{formatRupee(metrics.totalGrossSales)}</h3>
               <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
                 <TrendingUp className="w-3.5 h-3.5" />
-                <span>+12.4% Net Growth</span>
+                <span>+14.2% Growth</span>
               </div>
             </div>
             <div className="p-3 bg-teal-50 text-teal-700 rounded-xl">
@@ -359,21 +357,21 @@ export default function VendorAnalytics({
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-            <span>Net cleared balance</span>
-            <span>{metrics.completedCount} Settlements</span>
+            <span>AOV: {formatRupee(metrics.aov)}</span>
+            <span>{orders.length} Procurements</span>
           </div>
         </div>
 
-        {/* KPI 2: Completed Contracts */}
+        {/* KPI 2: Net Payout Balance */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition">
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Delivered Contracts</span>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight font-mono">{metrics.completedCount} <span className="text-xs text-slate-500 font-normal">Tenders</span></h3>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Net Platform Earnings</span>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight font-mono">{formatRupee(metrics.totalNetEarnings)}</h3>
               <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
                 <Activity className="w-3.5 h-3.5 text-teal-600" />
-                <span>100% Fulfillment Target</span>
+                <span>Platform commission: {commissionRate}%</span>
               </div>
             </div>
             <div className="p-3 bg-emerald-50 text-emerald-700 rounded-xl">
@@ -381,8 +379,8 @@ export default function VendorAnalytics({
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-            <span>Tenders fully supplied</span>
-            <span className="text-emerald-700 font-bold">100% Quality Rate</span>
+            <span>Commission Paid: {formatRupee(metrics.totalCommission)}</span>
+            <span className="text-emerald-700 font-bold">90% Payout Share</span>
           </div>
         </div>
 
@@ -430,16 +428,6 @@ export default function VendorAnalytics({
           </div>
         </div>
       </div>
-
-      {/* Advanced D3 Business Insights Platform */}
-      <D3BusinessInsights
-        currentUser={currentUser}
-        orders={orders}
-        products={products}
-        quotations={quotations}
-        vendorProfile={vendorProfile}
-        commissionRate={commissionRate}
-      />
 
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

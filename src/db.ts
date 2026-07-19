@@ -217,31 +217,8 @@ function listenToCollection<T extends { id: string }>(collName: string, storageK
         syncedHashes.set(`${collName}/${data.id}`, JSON.stringify(sanitizeForFirestore(data)));
       }
     });
-
-    let finalItems = [...items];
-    try {
-      const currentStoredRaw = localStorage.getItem(storageKey);
-      if (currentStoredRaw) {
-        const localItems = JSON.parse(currentStoredRaw);
-        if (Array.isArray(localItems)) {
-          const incomingIds = new Set(items.map(item => item.id));
-          const unsynced = localItems.filter(localItem => {
-            if (!localItem || !localItem.id) return false;
-            if (incomingIds.has(localItem.id)) return false;
-            const hashKey = `${collName}/${localItem.id}`;
-            return !syncedHashes.has(hashKey);
-          });
-          if (unsynced.length > 0) {
-            finalItems = [...unsynced, ...items];
-          }
-        }
-      }
-    } catch (e) {
-      console.warn(`Error merging local and firestore lists for '${collName}':`, e);
-    }
-
-    if (finalItems.length > 0) {
-      const serialized = JSON.stringify(finalItems);
+    if (items.length > 0) {
+      const serialized = JSON.stringify(items);
       const currentStored = localStorage.getItem(storageKey);
       if (currentStored !== serialized) {
         localStorage.setItem(storageKey, serialized);
@@ -990,7 +967,6 @@ export const dbLocal = {
     const old = this.getPromoBanners();
     this.set(STORAGE_KEYS.PROMO_BANNERS, banners);
     syncListToFirestoreWithDeletions('promo_banners', banners, old);
-    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Dynamic Categories

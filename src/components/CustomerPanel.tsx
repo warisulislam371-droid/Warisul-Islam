@@ -42,12 +42,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Headphones,
-  BadgeDollarSign,
-  ArrowUpDown,
-  Trash2,
-  Eye,
-  EyeOff,
-  Edit
+  BadgeDollarSign
 } from 'lucide-react';
 import InvoicePDF from './InvoicePDF';
 import HomepageTrustSection from './HomepageTrustSection';
@@ -100,118 +95,9 @@ export default function CustomerPanel({
   const [reviews, setReviews] = useState<Review[]>([]);
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>([]);
   const [activeBannerIdx, setActiveBannerIdx] = useState(0);
-  const carouselBanners = promoBanners.filter(b => b.isActive);
-  const [isInlineUploadingBanner, setIsInlineUploadingBanner] = useState(false);
-  const [inlineEditingBanner, setInlineEditingBanner] = useState<PromoBanner | null>(null);
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
-  const [inlineBannerForm, setInlineBannerForm] = useState<Omit<PromoBanner, 'id' | 'createdAt'>>({
-    title: '',
-    subtitle: '',
-    imageUrl: '',
-    linkUrl: '#catalog',
-    buttonText: 'Explore Catalog',
-    badgeText: 'CLINICAL QUALITY ASSURED • WHOLESALE PRICING',
-    positionOrder: 1,
-    isActive: true
-  });
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [categories, setCategories] = useState<Category[]>(() => dbLocal.getCategories().filter(c => c.isActive !== false));
   const [brands, setBrands] = useState<Brand[]>(() => dbLocal.getBrands().filter(b => b.isActive !== false));
-
-  const handleBannerImageUpload = (file: File, isEdit: boolean) => {
-    if (file.size > 8 * 1024 * 1024) {
-      addToast('Image file size exceeds the 8MB limit.', 'error');
-      return;
-    }
-    if (!file.type.startsWith('image/')) {
-      addToast('Unsupported file format. Please upload an image.', 'error');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        if (isEdit) {
-          setInlineEditingBanner(prev => prev ? { ...prev, imageUrl: e.target.result as string } : null);
-        } else {
-          setInlineBannerForm(prev => ({ ...prev, imageUrl: e.target.result as string }));
-        }
-        addToast('Banner image uploaded and processed successfully!', 'success');
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingFile(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingFile(false);
-  };
-
-  const handleBannerDrop = (e: React.DragEvent, isEdit: boolean) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingFile(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleBannerImageUpload(e.dataTransfer.files[0], isEdit);
-    }
-  };
-
-  const handleSaveNewBannerInline = () => {
-    if (!inlineBannerForm.title.trim() || !inlineBannerForm.imageUrl.trim()) {
-      addToast('Banner Title and Image URL/File are required!', 'error');
-      return;
-    }
-    const newBanner: PromoBanner = {
-      ...inlineBannerForm,
-      id: `banner-${Date.now()}`,
-      createdAt: new Date().toISOString()
-    };
-    const list = [newBanner, ...dbLocal.getPromoBanners()];
-    dbLocal.savePromoBanners(list);
-    setIsInlineUploadingBanner(false);
-    setInlineBannerForm({
-      title: '',
-      subtitle: '',
-      imageUrl: '',
-      linkUrl: '#catalog',
-      buttonText: 'Explore Catalog',
-      badgeText: 'CLINICAL QUALITY ASSURED • WHOLESALE PRICING',
-      positionOrder: list.length + 1,
-      isActive: true
-    });
-    addToast('Promotional banner published successfully!', 'success');
-  };
-
-  const handleUpdateBannerInline = () => {
-    if (!inlineEditingBanner) return;
-    if (!inlineEditingBanner.title.trim() || !inlineEditingBanner.imageUrl.trim()) {
-      addToast('Banner Title and Image URL/File are required!', 'error');
-      return;
-    }
-    const list = dbLocal.getPromoBanners().map(b => b.id === inlineEditingBanner.id ? inlineEditingBanner : b);
-    dbLocal.savePromoBanners(list);
-    setInlineEditingBanner(null);
-    addToast('Promotional banner updated successfully!', 'success');
-  };
-
-  const handleToggleBannerActiveInline = (id: string) => {
-    const list = dbLocal.getPromoBanners().map(b => b.id === id ? { ...b, isActive: !b.isActive } : b);
-    dbLocal.savePromoBanners(list);
-    addToast('Banner display status toggled.', 'success');
-  };
-
-  const handleDeleteBannerInline = (id: string, title: string) => {
-    if (!confirm(`Permanently remove banner "${title}"?`)) return;
-    const list = dbLocal.getPromoBanners().filter(b => b.id !== id);
-    dbLocal.savePromoBanners(list);
-    addToast('Promotional banner deleted.', 'info');
-  };
 
   // AI-Powered state variables
   const [aiSearchResults, setAiSearchResults] = useState<{ productId: string; relevanceScore: number; aiInsight: string }[]>([]);
@@ -232,25 +118,14 @@ export default function CustomerPanel({
   const [filterMinRating, setFilterMinRating] = useState<number>(0);
   const [filterInStockOnly, setFilterInStockOnly] = useState(false);
   const [filterCountry, setFilterCountry] = useState('');
-  const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'rating_desc' | 'moq_asc'>('default');
 
-  // RFQ Submission form state & Wizard Extended States
+  // RFQ Submission form state
   const [rfqName, setRfqName] = useState('');
   const [rfqQty, setRfqQty] = useState<number>(1);
   const [rfqBudget, setRfqBudget] = useState<number>(0);
   const [rfqLocation, setRfqLocation] = useState('');
   const [rfqDesc, setRfqDesc] = useState('');
   const [rfqAttachmentName, setRfqAttachmentName] = useState('');
-  const [rfqWizardStep, setRfqWizardStep] = useState<number>(1);
-  const [rfqCategory, setRfqCategory] = useState<string>('');
-  const [rfqUrgency, setRfqUrgency] = useState<'Normal' | 'Urgent' | 'Critical'>('Normal');
-  const [rfqTargetDate, setRfqTargetDate] = useState<string>('');
-
-  // Vendor Rating System & Order Tracking popup states
-  const [ratingModalOrder, setRatingModalOrder] = useState<Order | null>(null);
-  const [ratingValue, setRatingValue] = useState<number>(5);
-  const [ratingComment, setRatingComment] = useState<string>('');
-  const [activeTrackingOrderId, setActiveTrackingOrderId] = useState<string | null>(null);
 
   // Payment sandbox state
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout' | 'processing' | 'success'>('cart');
@@ -286,30 +161,6 @@ export default function CustomerPanel({
   // References to keep track of previous API request payloads to avoid infinite quota-draining requests
   const lastSearchKeyRef = useRef<string>('');
   const lastRecommendKeyRef = useRef<string>('');
-
-  // Dynamic Vendor rating calculation based on user reviews database
-  const getVendorRating = (vendorId?: string, vendorName?: string) => {
-    const allProducts = dbLocal.getProducts();
-    const vendorProductIds = allProducts
-      .filter(p => p.vendorId === vendorId || p.vendorName === vendorName)
-      .map(p => p.id);
-
-    const vendorReviews = reviews.filter(r => 
-      vendorProductIds.includes(r.productId) || 
-      (r as any).vendorId === vendorId
-    );
-
-    if (vendorReviews.length === 0) {
-      // Default starting rating for vetted clinical suppliers
-      return { avg: 4.8, count: 3 };
-    }
-
-    const total = vendorReviews.reduce((sum, r) => sum + r.rating, 0);
-    return {
-      avg: Math.round((total / vendorReviews.length) * 10) / 10,
-      count: vendorReviews.length
-    };
-  };
 
   const loadData = () => {
     const approvedVendors = dbLocal.getVendors().filter(v => v.status === 'Approved');
@@ -357,8 +208,7 @@ export default function CustomerPanel({
     const currentSettings = dbLocal.getPaymentSettings();
     setPaymentSettings(currentSettings);
 
-    const allBanners = dbLocal.getPromoBanners().sort((a, b) => (a.positionOrder || 0) - (b.positionOrder || 0));
-    const liveBanners = currentUser?.role === 'super_admin' ? allBanners : allBanners.filter(b => b.isActive);
+    const liveBanners = dbLocal.getPromoBanners().filter(b => b.isActive).sort((a, b) => (a.positionOrder || 0) - (b.positionOrder || 0));
     setPromoBanners(prev => {
       if (JSON.stringify(prev) === JSON.stringify(liveBanners)) return prev;
       return liveBanners;
@@ -386,12 +236,12 @@ export default function CustomerPanel({
   }, [currentUser]);
 
   useEffect(() => {
-    if (carouselBanners.length <= 1) return;
+    if (promoBanners.length <= 1) return;
     const sliderInterval = setInterval(() => {
-      setActiveBannerIdx((prev) => (prev + 1) % carouselBanners.length);
+      setActiveBannerIdx((prev) => (prev + 1) % promoBanners.length);
     }, 6000);
     return () => clearInterval(sliderInterval);
-  }, [carouselBanners.length]);
+  }, [promoBanners.length]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && products.length > 0) {
@@ -555,26 +405,17 @@ export default function CustomerPanel({
       return true;
     });
 
-    // 2. Sort results dynamically based on chosen criteria
-    const sorted = [...matched];
-    if (sortBy === 'price_asc') {
-      sorted.sort((a, b) => a.salePrice - b.salePrice);
-    } else if (sortBy === 'price_desc') {
-      sorted.sort((a, b) => b.salePrice - a.salePrice);
-    } else if (sortBy === 'rating_desc') {
-      sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-    } else if (sortBy === 'moq_asc') {
-      sorted.sort((a, b) => a.moq - b.moq);
-    } else if (searchQuery && aiSearchResults.length > 0) {
-      sorted.sort((a, b) => {
+    // 2. Sort by AI Relevance score if active search is running and results are present
+    if (searchQuery && aiSearchResults.length > 0) {
+      return [...matched].sort((a, b) => {
         const scoreA = aiSearchResults.find(m => m.productId === a.id)?.relevanceScore || 0;
         const scoreB = aiSearchResults.find(m => m.productId === b.id)?.relevanceScore || 0;
         return scoreB - scoreA;
       });
     }
 
-    return sorted;
-  }, [products, searchQuery, selectedCategoryName, filterBrand, filterPriceRange, filterMoq, aiSearchResults, filterTrustSealOnly, vendors, filterMinRating, filterInStockOnly, filterCountry, sortBy]);
+    return matched;
+  }, [products, searchQuery, selectedCategoryName, filterBrand, filterPriceRange, filterMoq, aiSearchResults, filterTrustSealOnly, vendors, filterMinRating, filterInStockOnly, filterCountry]);
 
   const handleToggleWishlist = (id: string) => {
     let updated: string[];
@@ -828,57 +669,6 @@ export default function CustomerPanel({
     }, 2500);
   };
 
-  // Vendor Rating / Product Review Submission Handler
-  const handleReviewSubmit = () => {
-    if (!currentUser || !ratingModalOrder) return;
-    
-    const firstItem = ratingModalOrder.items[0];
-    if (!firstItem) return;
-    
-    const newReview: Review = {
-      id: `REV-${Math.floor(10000 + Math.random() * 90000)}`,
-      productId: firstItem.productId,
-      customerId: currentUser.id,
-      customerName: currentUser.name,
-      rating: ratingValue,
-      comment: ratingComment.trim() || `Excellent B2B equipment service and timely shipment from ${ratingModalOrder.vendorName}.`,
-      createdAt: new Date().toISOString()
-    };
-    
-    // Extend review object with vendor details
-    (newReview as any).vendorId = ratingModalOrder.vendorId;
-    (newReview as any).vendorName = ratingModalOrder.vendorName;
-    (newReview as any).orderId = ratingModalOrder.id;
-
-    const allReviews = dbLocal.getReviews();
-    allReviews.unshift(newReview);
-    dbLocal.saveReviews(allReviews);
-
-    // Update product rating
-    const allProducts = dbLocal.getProducts();
-    const prodIdx = allProducts.findIndex(p => p.id === firstItem.productId);
-    if (prodIdx > -1) {
-      const p = allProducts[prodIdx];
-      const productReviews = allReviews.filter(r => r.productId === p.id);
-      const total = productReviews.reduce((sum, r) => sum + r.rating, 0);
-      p.rating = Math.round((total / productReviews.length) * 10) / 10;
-      dbLocal.saveProducts(allProducts);
-    }
-
-    // Add dynamic notification to Vendor dashboard
-    dbLocal.addNotification(
-      ratingModalOrder.vendorId,
-      'New Customer Rating & Feedback Received',
-      `Client ${currentUser.name} rated your service with ${ratingValue}★ for Order #${ratingModalOrder.id}: "${newReview.comment}"`,
-      'review_added'
-    );
-
-    addToast(`Successfully rated ${ratingModalOrder.vendorName} with ${ratingValue} stars!`, 'success');
-    setRatingModalOrder(null);
-    setRatingComment('');
-    loadData();
-  };
-
   // RFQ Submission
   const handleRfqSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -900,10 +690,7 @@ export default function CustomerPanel({
       attachmentName: rfqAttachmentName || undefined,
       status: 'PENDING_ADMIN_REVIEW',
       createdAt: new Date().toISOString(),
-      quotationsCount: 0,
-      category: rfqCategory || 'Diagnostics',
-      urgency: rfqUrgency || 'Standard',
-      targetDate: rfqTargetDate || ''
+      quotationsCount: 0
     };
 
     const currentRfqs = dbLocal.getRfqs();
@@ -925,10 +712,6 @@ export default function CustomerPanel({
     setRfqLocation('');
     setRfqDesc('');
     setRfqAttachmentName('');
-    setRfqCategory('Diagnostics');
-    setRfqUrgency('Standard');
-    setRfqTargetDate('');
-    setRfqWizardStep(1);
     loadData();
   };
 
@@ -1086,13 +869,13 @@ export default function CustomerPanel({
         <div className="space-y-8 animate-fade-in">
           
           {/* Dynamic Promo Banner Carousel */}
-          {carouselBanners && carouselBanners.length > 0 ? (
+          {promoBanners && promoBanners.length > 0 ? (
             <div className="relative w-full rounded-3xl overflow-hidden shadow-2xl border border-slate-200/50 min-h-[400px] sm:min-h-[460px] flex items-center transition-all duration-700 group/carousel">
               {/* Active Banner Background Image */}
               <div className="absolute inset-0 z-0">
                 <img
-                  src={carouselBanners[activeBannerIdx]?.imageUrl || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=1600'}
-                  alt={carouselBanners[activeBannerIdx]?.title || 'Promotional Banner'}
+                  src={promoBanners[activeBannerIdx].imageUrl}
+                  alt={promoBanners[activeBannerIdx].title}
                   className="w-full h-full object-cover transition-all duration-1000 ease-in-out transform scale-100"
                   referrerPolicy="no-referrer"
                 />
@@ -1105,9 +888,9 @@ export default function CustomerPanel({
               <div className="w-full relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10 py-14 sm:py-24 px-6 sm:px-12 text-white">
                 <div className="max-w-2xl space-y-6">
                   <div className="flex flex-wrap items-center gap-2.5">
-                    {carouselBanners[activeBannerIdx]?.badgeText && (
+                    {promoBanners[activeBannerIdx].badgeText && (
                       <span className="inline-block bg-teal-500/20 text-teal-300 backdrop-blur-md border border-teal-500/40 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
-                        ⚡ {carouselBanners[activeBannerIdx]?.badgeText}
+                        ⚡ {promoBanners[activeBannerIdx].badgeText}
                       </span>
                     )}
                     <span className="inline-block bg-emerald-500 text-slate-950 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-md">
@@ -1115,18 +898,17 @@ export default function CustomerPanel({
                     </span>
                   </div>
                   <h1 className="text-3xl sm:text-[38px] font-bold text-white tracking-tight leading-tight font-sans drop-shadow-sm">
-                    {carouselBanners[activeBannerIdx]?.title}
+                    {promoBanners[activeBannerIdx].title}
                   </h1>
-                  {carouselBanners[activeBannerIdx]?.subtitle && (
+                  {promoBanners[activeBannerIdx].subtitle && (
                     <p className="text-sm sm:text-lg text-slate-200 leading-relaxed max-w-lg font-medium drop-shadow-sm">
-                      {carouselBanners[activeBannerIdx]?.subtitle}
+                      {promoBanners[activeBannerIdx].subtitle}
                     </p>
                   )}
                   <div className="flex flex-wrap gap-3.5 pt-3">
                     <button
-                      id="carousel-cta-btn"
                       onClick={() => {
-                        const link = carouselBanners[activeBannerIdx]?.linkUrl;
+                        const link = promoBanners[activeBannerIdx].linkUrl;
                         if (link && link.startsWith('#')) {
                           const el = document.getElementById(link.substring(1));
                           if (el) {
@@ -1146,11 +928,10 @@ export default function CustomerPanel({
                       }}
                       className="bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-extrabold px-7 py-4 rounded-xl transition duration-300 shadow-xl flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0 border border-teal-500/30"
                     >
-                      <span>{carouselBanners[activeBannerIdx]?.buttonText || 'Explore Catalog'}</span>
+                      <span>{promoBanners[activeBannerIdx].buttonText || 'Explore Catalog'}</span>
                       <ArrowRight className="w-4.5 h-4.5 text-white" />
                     </button>
                     <button
-                      id="carousel-tenders-btn"
                       onClick={() => {
                         onNavigate('rfqs');
                       }}
@@ -1188,7 +969,7 @@ export default function CustomerPanel({
                   <div className="bg-slate-950/40 backdrop-blur-xl p-6 rounded-3xl border border-white/15 shadow-2xl space-y-4 transform hover:scale-[1.02] transition-transform duration-500">
                     <div className="h-44 rounded-2xl overflow-hidden relative border border-white/10 shadow-inner">
                       <img
-                        src={carouselBanners[activeBannerIdx]?.imageUrl || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=1600'}
+                        src={promoBanners[activeBannerIdx].imageUrl}
                         alt="Current Offer"
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
@@ -1198,8 +979,8 @@ export default function CustomerPanel({
                       </span>
                     </div>
                     <div className="space-y-1 text-white">
-                      <h4 className="font-bold text-sm tracking-tight truncate">{carouselBanners[activeBannerIdx]?.title}</h4>
-                      <p className="text-[11px] text-teal-300 font-bold uppercase tracking-wider">{carouselBanners[activeBannerIdx]?.badgeText || 'Exclusive Deal'}</p>
+                      <h4 className="font-bold text-sm tracking-tight truncate">{promoBanners[activeBannerIdx].title}</h4>
+                      <p className="text-[11px] text-teal-300 font-bold uppercase tracking-wider">{promoBanners[activeBannerIdx].badgeText || 'Exclusive Deal'}</p>
                       <div className="flex items-center justify-between pt-2 border-t border-white/10 mt-2">
                         <div>
                           <span className="text-[9px] text-slate-400 block uppercase leading-none">B2B Platform</span>
@@ -1215,13 +996,12 @@ export default function CustomerPanel({
               </div>
 
               {/* Slider Manual Navigation Chevrons */}
-              {carouselBanners.length > 1 && (
+              {promoBanners.length > 1 && (
                 <>
                   <button
-                    id="carousel-prev-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveBannerIdx((prev) => (prev - 1 + carouselBanners.length) % carouselBanners.length);
+                      setActiveBannerIdx((prev) => (prev - 1 + promoBanners.length) % promoBanners.length);
                     }}
                     className="absolute left-4 z-20 p-2.5 bg-slate-950/50 hover:bg-slate-950/80 border border-white/10 text-white rounded-full transition opacity-0 group-hover/carousel:opacity-100 cursor-pointer hidden sm:block"
                     title="Previous Slide"
@@ -1229,10 +1009,9 @@ export default function CustomerPanel({
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <button
-                    id="carousel-next-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveBannerIdx((prev) => (prev + 1) % carouselBanners.length);
+                      setActiveBannerIdx((prev) => (prev + 1) % promoBanners.length);
                     }}
                     className="absolute right-4 z-20 p-2.5 bg-slate-950/50 hover:bg-slate-950/80 border border-white/10 text-white rounded-full transition opacity-0 group-hover/carousel:opacity-100 cursor-pointer hidden sm:block"
                     title="Next Slide"
@@ -1243,12 +1022,11 @@ export default function CustomerPanel({
               )}
 
               {/* Bottom Dot Indicators */}
-              {carouselBanners.length > 1 && (
+              {promoBanners.length > 1 && (
                 <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 z-20 flex gap-2">
-                  {carouselBanners.map((_, idx) => (
+                  {promoBanners.map((_, idx) => (
                     <button
                       key={idx}
-                      id={`carousel-indicator-${idx}`}
                       onClick={() => setActiveBannerIdx(idx)}
                       className={`w-2.5 h-2.5 rounded-full transition-all duration-300 cursor-pointer ${
                         idx === activeBannerIdx 
@@ -1361,535 +1139,6 @@ export default function CustomerPanel({
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Promotional Spotlights & Admin Inline Banner Manager Section */}
-          <div className="space-y-6" id="b2b-promotional-spotlights-section">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider font-display flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-teal-600 animate-pulse" />
-                  B2B Promotional Spotlights
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5 font-medium">
-                  Verified exclusive deals, seasonal clinical catalogs, and factory-direct equipment bundles
-                </p>
-              </div>
-              {currentUser?.role === 'super_admin' && (
-                <div className="flex items-center gap-2">
-                  <button
-                    id="admin-inline-upload-btn"
-                    onClick={() => {
-                      setInlineBannerForm({
-                        title: '',
-                        subtitle: '',
-                        imageUrl: '',
-                        linkUrl: '#catalog',
-                        buttonText: 'Explore Catalog',
-                        badgeText: 'CLINICAL QUALITY ASSURED • WHOLESALE PRICING',
-                        positionOrder: promoBanners.length + 1,
-                        isActive: true
-                      });
-                      setIsInlineUploadingBanner(true);
-                    }}
-                    className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition duration-300 shadow-md flex items-center gap-2 cursor-pointer border border-teal-600"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Upload New Banner</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {promoBanners && promoBanners.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {promoBanners.map((banner) => {
-                  const isInactive = !banner.isActive;
-                  return (
-                    <div
-                      key={banner.id}
-                      id={`promo-spotlight-card-${banner.id}`}
-                      className={`relative rounded-3xl overflow-hidden shadow-lg border border-slate-200/40 min-h-[220px] flex flex-col justify-between p-6 transition-all duration-300 hover:shadow-xl group/card ${
-                        isInactive ? 'opacity-75' : ''
-                      }`}
-                    >
-                      {/* Background Image */}
-                      <div className="absolute inset-0 z-0">
-                        <img
-                          src={banner.imageUrl || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=1600'}
-                          alt={banner.title}
-                          className={`w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-105 ${
-                            isInactive ? 'filter grayscale blur-[2px]' : ''
-                          }`}
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-900/80 to-slate-900/40" />
-                      </div>
-
-                      {/* Top Action Overlay (Admin Only) */}
-                      <div className="relative z-10 flex items-center justify-between w-full">
-                        <div>
-                          {banner.badgeText && (
-                            <span className="inline-block bg-teal-400/20 text-teal-300 border border-teal-400/30 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
-                              ⚡ {banner.badgeText}
-                            </span>
-                          )}
-                          {isInactive && (
-                            <span className="inline-block bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ml-2">
-                              Draft / Hidden
-                            </span>
-                          )}
-                        </div>
-
-                        {currentUser?.role === 'super_admin' && (
-                          <div className="flex gap-1.5 bg-slate-950/75 backdrop-blur-md p-1.5 rounded-xl border border-white/10 opacity-100 sm:opacity-0 group-hover/card:opacity-100 transition-opacity">
-                            <button
-                              id={`admin-btn-toggle-${banner.id}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleBannerActiveInline(banner.id);
-                              }}
-                              className="p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
-                              title={isInactive ? "Activate Banner" : "Deactivate Banner"}
-                            >
-                              {isInactive ? <Eye className="w-3.5 h-3.5 text-rose-400" /> : <EyeOff className="w-3.5 h-3.5 text-teal-400" />}
-                            </button>
-                            <button
-                              id={`admin-btn-edit-${banner.id}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setInlineEditingBanner({ ...banner });
-                              }}
-                              className="p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
-                              title="Edit Banner"
-                            >
-                              <Edit className="w-3.5 h-3.5 text-amber-400" />
-                            </button>
-                            <button
-                              id={`admin-btn-delete-${banner.id}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteBannerInline(banner.id, banner.title);
-                              }}
-                              className="p-1.5 text-slate-300 hover:text-red-400 rounded-lg hover:bg-white/10 transition cursor-pointer"
-                              title="Delete Banner"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Text Content */}
-                      <div className="relative z-10 mt-4 space-y-2 text-white">
-                        <h4 className="font-extrabold text-sm sm:text-base leading-snug tracking-tight drop-shadow-md text-white">
-                          {banner.title}
-                        </h4>
-                        {banner.subtitle && (
-                          <p className="text-xs text-slate-200 line-clamp-2 leading-relaxed drop-shadow-sm font-medium">
-                            {banner.subtitle}
-                          </p>
-                        )}
-                        <div className="pt-2">
-                          <button
-                            id={`promo-cta-btn-${banner.id}`}
-                            onClick={() => {
-                              const link = banner.linkUrl;
-                              if (link && link.startsWith('#')) {
-                                const el = document.getElementById(link.substring(1));
-                                el?.scrollIntoView({ behavior: 'smooth' });
-                              } else if (link && link.includes('rfq')) {
-                                onNavigate('rfqs');
-                              } else {
-                                document.getElementById('marketplace-anchor')?.scrollIntoView({ behavior: 'smooth' });
-                              }
-                            }}
-                            className="bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-extrabold px-4 py-2 rounded-lg transition duration-300 shadow-md inline-flex items-center gap-1.5 cursor-pointer transform hover:-translate-y-0.5"
-                          >
-                            <span>{banner.buttonText || 'Explore Catalog'}</span>
-                            <ArrowRight className="w-3 h-3 text-white" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center bg-slate-50">
-                <Sparkles className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs text-slate-500 font-bold">No active promotional campaigns at this time.</p>
-                <p className="text-[10px] text-slate-400 mt-1">Please check back later or contact support.</p>
-              </div>
-            )}
-          </div>
-
-          {/* Inline Upload Banner Modal */}
-          {isInlineUploadingBanner && (
-            <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex justify-center items-center p-4">
-              <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-scale-up font-sans text-slate-800">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <Plus className="w-5 h-5 text-teal-600 animate-pulse" /> Upload Promotional Banner (Admin)
-                  </h3>
-                  <button
-                    onClick={() => setIsInlineUploadingBanner(false)}
-                    className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer text-lg"
-                    title="Close"
-                  >
-                    ✕
-                  </button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Form Fields */}
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Headline / Title *</label>
-                      <input
-                        id="inline-banner-title-input"
-                        type="text"
-                        value={inlineBannerForm.title}
-                        onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, title: e.target.value })}
-                        placeholder="e.g., German ICU Surgical Ventilators"
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Subtitle / Description</label>
-                      <textarea
-                        id="inline-banner-subtitle-input"
-                        rows={2}
-                        value={inlineBannerForm.subtitle}
-                        onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, subtitle: e.target.value })}
-                        placeholder="Enter description..."
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Top Badge Text</label>
-                        <input
-                          id="inline-banner-badge-input"
-                          type="text"
-                          value={inlineBannerForm.badgeText}
-                          onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, badgeText: e.target.value })}
-                          placeholder="e.g. SPECIAL OFFER"
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">CTA Button Text</label>
-                        <input
-                          id="inline-banner-btntext-input"
-                          type="text"
-                          value={inlineBannerForm.buttonText}
-                          onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, buttonText: e.target.value })}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Display Order</label>
-                        <input
-                          id="inline-banner-order-input"
-                          type="number"
-                          value={inlineBannerForm.positionOrder}
-                          onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, positionOrder: Number(e.target.value) })}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Link Destination</label>
-                        <select
-                          id="inline-banner-link-input"
-                          value={inlineBannerForm.linkUrl}
-                          onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, linkUrl: e.target.value })}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        >
-                          <option value="#catalog">Shop Marketplace Catalog</option>
-                          <option value="#rfqs">B2B Tender RFQs Page</option>
-                          <option value="#home">Homepage Landing</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Drag and Drop Upload Area & Preview */}
-                  <div className="space-y-4 flex flex-col justify-between">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Banner Graphic Image *</label>
-                      <div
-                        id="inline-banner-dropzone"
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={(e) => handleBannerDrop(e, false)}
-                        onClick={() => document.getElementById('inline-banner-file-input')?.click()}
-                        className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition duration-300 flex flex-col items-center justify-center min-h-[140px] ${
-                          isDraggingFile
-                            ? 'border-teal-500 bg-teal-50/50 scale-[1.02]'
-                            : inlineBannerForm.imageUrl
-                            ? 'border-emerald-500 bg-emerald-50/10'
-                            : 'border-slate-300 bg-slate-50 hover:bg-slate-100/50'
-                        }`}
-                      >
-                        <input
-                          type="file"
-                          id="inline-banner-file-input"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              handleBannerImageUpload(e.target.files[0], false);
-                            }
-                          }}
-                        />
-                        <Upload className={`w-8 h-8 mb-2 ${inlineBannerForm.imageUrl ? 'text-emerald-500' : 'text-slate-400 animate-bounce'}`} />
-                        <span className="text-xs font-bold text-slate-700 block">
-                          {inlineBannerForm.imageUrl ? '✓ Banner Image Loaded' : 'Drag & drop image file, or click to upload'}
-                        </span>
-                        <span className="text-[10px] text-slate-400 mt-1 block">Supports JPG, PNG, WEBP (Max 8MB)</span>
-                      </div>
-                    </div>
-
-                    {/* Or Paste URL */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Or Paste Image URL</label>
-                      <input
-                        id="inline-banner-url-input"
-                        type="text"
-                        value={inlineBannerForm.imageUrl}
-                        onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, imageUrl: e.target.value })}
-                        placeholder="https://images.unsplash.com/..."
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      />
-                    </div>
-
-                    {/* Live Card Preview */}
-                    <div className="border border-slate-100 rounded-2xl p-3 bg-slate-50">
-                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-2">Live Grid Card Preview</p>
-                      <div className="relative rounded-xl overflow-hidden min-h-[100px] flex flex-col justify-between p-3 bg-slate-900 border border-slate-200/20">
-                        {inlineBannerForm.imageUrl && (
-                          <img
-                            src={inlineBannerForm.imageUrl}
-                            alt="Preview"
-                            className="absolute inset-0 w-full h-full object-cover z-0 opacity-40"
-                          />
-                        )}
-                        <div className="relative z-10">
-                          <span className="inline-block bg-teal-400/20 text-teal-300 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
-                            {inlineBannerForm.badgeText || 'PROMO'}
-                          </span>
-                        </div>
-                        <div className="relative z-10 text-white mt-2">
-                          <h5 className="font-extrabold text-[10px] leading-tight truncate">{inlineBannerForm.title || 'German ICU Surgical Ventilators'}</h5>
-                          <p className="text-[8px] text-slate-200 line-clamp-1 mt-0.5">{inlineBannerForm.subtitle || 'German precision systems...'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-                  <button
-                    onClick={() => setIsInlineUploadingBanner(false)}
-                    className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    id="inline-banner-submit-btn"
-                    onClick={handleSaveNewBannerInline}
-                    className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs shadow-md transition cursor-pointer border border-teal-600"
-                  >
-                    Publish Now
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Inline Edit Banner Modal */}
-          {inlineEditingBanner && (
-            <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex justify-center items-center p-4">
-              <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-scale-up font-sans text-slate-800">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    <Edit className="w-5 h-5 text-amber-500 animate-pulse" /> Edit Promotional Banner (Admin)
-                  </h3>
-                  <button
-                    onClick={() => setInlineEditingBanner(null)}
-                    className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer text-lg"
-                    title="Close"
-                  >
-                    ✕
-                  </button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Form Fields */}
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Headline / Title *</label>
-                      <input
-                        id="inline-edit-title-input"
-                        type="text"
-                        value={inlineEditingBanner.title}
-                        onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, title: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Subtitle / Description</label>
-                      <textarea
-                        id="inline-edit-subtitle-input"
-                        rows={2}
-                        value={inlineEditingBanner.subtitle || ''}
-                        onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, subtitle: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Top Badge Text</label>
-                        <input
-                          id="inline-edit-badge-input"
-                          type="text"
-                          value={inlineEditingBanner.badgeText || ''}
-                          onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, badgeText: e.target.value })}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">CTA Button Text</label>
-                        <input
-                          id="inline-edit-btntext-input"
-                          type="text"
-                          value={inlineEditingBanner.buttonText || ''}
-                          onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, buttonText: e.target.value })}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Display Order</label>
-                        <input
-                          id="inline-edit-order-input"
-                          type="number"
-                          value={inlineEditingBanner.positionOrder}
-                          onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, positionOrder: Number(e.target.value) })}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Link Destination</label>
-                        <select
-                          id="inline-edit-link-input"
-                          value={inlineEditingBanner.linkUrl || '#catalog'}
-                          onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, linkUrl: e.target.value })}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        >
-                          <option value="#catalog">Shop Marketplace Catalog</option>
-                          <option value="#rfqs">B2B Tender RFQs Page</option>
-                          <option value="#home">Homepage Landing</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Drag and Drop Upload Area & Preview */}
-                  <div className="space-y-4 flex flex-col justify-between">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Banner Graphic Image *</label>
-                      <div
-                        id="inline-edit-dropzone"
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={(e) => handleBannerDrop(e, true)}
-                        onClick={() => document.getElementById('inline-edit-file-input')?.click()}
-                        className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition duration-300 flex flex-col items-center justify-center min-h-[140px] ${
-                          isDraggingFile
-                            ? 'border-teal-500 bg-teal-50/50 scale-[1.02]'
-                            : inlineEditingBanner.imageUrl
-                            ? 'border-emerald-500 bg-emerald-50/10'
-                            : 'border-slate-300 bg-slate-50 hover:bg-slate-100/50'
-                        }`}
-                      >
-                        <input
-                          type="file"
-                          id="inline-edit-file-input"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              handleBannerImageUpload(e.target.files[0], true);
-                            }
-                          }}
-                        />
-                        <Upload className="w-8 h-8 mb-2 text-emerald-500" />
-                        <span className="text-xs font-bold text-slate-700 block">
-                          ✓ Banner Image Loaded (Click to Replace)
-                        </span>
-                        <span className="text-[10px] text-slate-400 mt-1 block">Supports JPG, PNG, WEBP (Max 8MB)</span>
-                      </div>
-                    </div>
-
-                    {/* Or Paste URL */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Or Paste Image URL</label>
-                      <input
-                        id="inline-edit-url-input"
-                        type="text"
-                        value={inlineEditingBanner.imageUrl}
-                        onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, imageUrl: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      />
-                    </div>
-
-                    {/* Live Card Preview */}
-                    <div className="border border-slate-100 rounded-2xl p-3 bg-slate-50">
-                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-2">Live Grid Card Preview</p>
-                      <div className="relative rounded-xl overflow-hidden min-h-[100px] flex flex-col justify-between p-3 bg-slate-900 border border-slate-200/20">
-                        {inlineEditingBanner.imageUrl && (
-                          <img
-                            src={inlineEditingBanner.imageUrl}
-                            alt="Preview"
-                            className="absolute inset-0 w-full h-full object-cover z-0 opacity-40"
-                          />
-                        )}
-                        <div className="relative z-10">
-                          <span className="inline-block bg-teal-400/20 text-teal-300 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
-                            {inlineEditingBanner.badgeText || 'PROMO'}
-                          </span>
-                        </div>
-                        <div className="relative z-10 text-white mt-2">
-                          <h5 className="font-extrabold text-[10px] leading-tight truncate">{inlineEditingBanner.title || 'German ICU Surgical Ventilators'}</h5>
-                          <p className="text-[8px] text-slate-200 line-clamp-1 mt-0.5">{inlineEditingBanner.subtitle || 'German precision systems...'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-                  <button
-                    onClick={() => setInlineEditingBanner(null)}
-                    className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    id="inline-edit-submit-btn"
-                    onClick={handleUpdateBannerInline}
-                    className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs shadow-md transition cursor-pointer border border-teal-600"
-                  >
-                    Save Changes
-                  </button>
                 </div>
               </div>
             </div>
@@ -2066,33 +1315,14 @@ export default function CustomerPanel({
                   <SlidersHorizontal className="w-4 h-4 text-teal-700" />
                   Commercial Filters
                 </h3>
-                {(filterBrand || selectedCategoryName || filterPriceRange < 500000 || filterMoq < 100 || filterTrustSealOnly || filterMinRating > 0 || filterInStockOnly || filterCountry || sortBy !== 'default') && (
+                {(filterBrand || selectedCategoryName || filterPriceRange < 500000 || filterMoq < 100 || filterTrustSealOnly || filterMinRating > 0 || filterInStockOnly || filterCountry) && (
                   <button
-                    onClick={() => { setFilterBrand(''); onCategorySelect(''); setFilterPriceRange(500000); setFilterMoq(100); setFilterTrustSealOnly(false); setFilterMinRating(0); setFilterInStockOnly(false); setFilterCountry(''); setSortBy('default'); }}
+                    onClick={() => { setFilterBrand(''); onCategorySelect(''); setFilterPriceRange(500000); setFilterMoq(100); setFilterTrustSealOnly(false); setFilterMinRating(0); setFilterInStockOnly(false); setFilterCountry(''); }}
                     className="text-[10px] font-bold text-rose-600 hover:text-rose-800"
                   >
                     Reset All
                   </button>
                 )}
-              </div>
-
-              {/* Dynamic Sorting Filter */}
-              <div className="space-y-1.5 text-xs font-semibold border-b border-slate-100 pb-4">
-                <label className="text-slate-500 flex items-center gap-1.5 mb-1">
-                  <ArrowUpDown className="w-3.5 h-3.5 text-teal-700" />
-                  Sort Catalog By
-                </label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-semibold text-slate-700 hover:bg-slate-100/50 transition cursor-pointer"
-                >
-                  <option value="default">AI Match Relevance</option>
-                  <option value="price_asc">Price: Low to High</option>
-                  <option value="price_desc">Price: High to Low</option>
-                  <option value="rating_desc">Highest Rated ★</option>
-                  <option value="moq_asc">MOQ Requirement (Low to High)</option>
-                </select>
               </div>
 
               {/* Trust Seal Toggle Filter */}
@@ -2321,19 +1551,9 @@ export default function CustomerPanel({
                             >
                               {p.name}
                             </h4>
-                            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 mt-1">
-                              <span className="flex items-center gap-1">
-                                <Building className="w-3 h-3 shrink-0 text-slate-400" />
-                                <span className="truncate">Supplier: <strong className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>{p.vendorName || productVendor?.companyName || 'Verified Partner'}</strong></span>
-                              </span>
-                              {(() => {
-                                const ratingData = getVendorRating(p.vendorId, p.vendorName);
-                                return (
-                                  <span className="flex items-center gap-0.5 bg-amber-50 text-amber-700 px-1.5 py-0.2 rounded font-bold text-[9px] border border-amber-200">
-                                    ★ {ratingData.avg} ({ratingData.count})
-                                  </span>
-                                );
-                              })()}
+                            <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
+                              <Building className="w-3 h-3 shrink-0 text-slate-400" />
+                              <span className="truncate">Supplier: <strong className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>{p.vendorName || productVendor?.companyName || 'Verified Partner'}</strong></span>
                             </div>
                             <p className={`text-[11px] line-clamp-2 mt-1 leading-relaxed ${
                               isDarkMode ? 'text-slate-300' : 'text-slate-500'
@@ -2353,39 +1573,6 @@ export default function CustomerPanel({
                                   <span className="font-bold">Clinical Insight: </span>
                                   {aiMatch.aiInsight}
                                 </div>
-                              </div>
-                            )}
-
-                            {/* Visual Stock / Inventory Urgency Indicator */}
-                            {p.stockQuantity !== undefined && (
-                              <div className="mt-2.5 text-[10px]">
-                                {p.stockQuantity <= 0 ? (
-                                  <div className="flex items-center gap-1 font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-[4px] px-2 py-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
-                                    <span>Out of Stock (Pre-order / Quote)</span>
-                                  </div>
-                                ) : p.stockQuantity <= 15 ? (
-                                  <div className="space-y-1">
-                                    <div className="flex items-center justify-between font-extrabold text-amber-700 bg-amber-50 border border-amber-200 rounded-[4px] px-2 py-1">
-                                      <span className="flex items-center gap-1">
-                                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                                        <span>Low Stock: Only {p.stockQuantity} unit{p.stockQuantity > 1 ? 's' : ''} left!</span>
-                                      </span>
-                                      <span className="text-[9px] text-amber-600 uppercase tracking-wide font-black">Urgent</span>
-                                    </div>
-                                    <div className="w-full bg-amber-100 h-1.5 rounded-full overflow-hidden">
-                                      <div 
-                                        className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                                        style={{ width: `${(p.stockQuantity / 15) * 100}%` }}
-                                      ></div>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-[4px] px-2 py-1">
-                                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                                    <span>In Stock: {p.stockQuantity} units available</span>
-                                  </div>
-                                )}
                               </div>
                             )}
                           </div>
@@ -3222,227 +2409,92 @@ export default function CustomerPanel({
       {/* RFQ and Tenders Procurement Page */}
       {currentView === 'rfqs' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
+          
           {/* Submit Custom RFQ Form */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-1 h-fit">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-1.5">
               <FilePlus className="w-4.5 h-4.5 text-teal-700" />
-              Guided Tender RFQ Wizard
+              Open Custom Clinical Tender
             </h3>
+            <form onSubmit={handleRfqSubmit} className="space-y-4 text-xs font-medium">
+              <div>
+                <label className="text-slate-500 block mb-1">Equipment Name / Product Requirements *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 50 ICU Ventilators with calibration"
+                  value={rfqName}
+                  onChange={(e) => setRfqName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition"
+                />
+              </div>
 
-            {/* Progress Stepper Bar */}
-            <div className="flex items-center justify-between mb-5 border-b border-slate-100 pb-3">
-              {[1, 2, 3].map((step) => (
-                <div key={step} className="flex items-center gap-1.5">
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] ${
-                    rfqWizardStep === step ? 'bg-teal-700 text-white' :
-                    rfqWizardStep > step ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-400'
-                  }`}>
-                    {rfqWizardStep > step ? '✓' : step}
-                  </span>
-                  <span className={`text-[9px] uppercase tracking-wider font-extrabold ${
-                    rfqWizardStep === step ? 'text-teal-800 font-black' : 'text-slate-400'
-                  }`}>
-                    {step === 1 ? 'Reqs' : step === 2 ? 'Logistics' : 'Review'}
-                  </span>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-500 block mb-1">Quantity *</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={rfqQty || ''}
+                    onChange={(e) => setRfqQty(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none"
+                  />
                 </div>
-              ))}
-            </div>
-
-            <form onSubmit={handleRfqSubmit} className="text-xs font-medium">
-              
-              {/* Step 1: Clinical Requirements & Category */}
-              {rfqWizardStep === 1 && (
-                <div className="space-y-4 animate-fade-in">
-                  <div>
-                    <label className="text-slate-500 block mb-1">Equipment / Product Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 50 ICU Ventilators with calibration"
-                      value={rfqName}
-                      onChange={(e) => setRfqName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition font-bold text-slate-800 text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-slate-500 block mb-1">Clinical Category *</label>
-                    <select
-                      value={rfqCategory}
-                      onChange={(e) => setRfqCategory(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none text-xs text-slate-700 font-semibold cursor-pointer"
-                    >
-                      <option value="Diagnostics">Diagnostics & Imaging</option>
-                      <option value="Life Support">Life Support & ICU</option>
-                      <option value="Surgical">Surgical & OR</option>
-                      <option value="Laboratory">Laboratory & Research</option>
-                      <option value="General">General Medical Consumables</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-slate-500 block mb-1">Quantity Required *</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={rfqQty || ''}
-                      onChange={(e) => setRfqQty(Number(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-bold text-xs"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!rfqName.trim()) {
-                        addToast('Please specify the equipment name or requirements.', 'error');
-                        return;
-                      }
-                      if (rfqQty < 1) {
-                        addToast('Please enter a valid quantity of 1 or more.', 'error');
-                        return;
-                      }
-                      setRfqWizardStep(2);
-                    }}
-                    className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 rounded-xl uppercase tracking-wide transition cursor-pointer text-[10px] text-center"
-                  >
-                    Next: Budget & Logistics &rarr;
-                  </button>
+                <div>
+                  <label className="text-slate-500 block mb-1">Est. Total Budget (INR) *</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="e.g. 500000"
+                    value={rfqBudget || ''}
+                    onChange={(e) => setRfqBudget(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-mono"
+                  />
                 </div>
-              )}
+              </div>
 
-              {/* Step 2: Logistics, Urgency & Budget */}
-              {rfqWizardStep === 2 && (
-                <div className="space-y-4 animate-fade-in">
-                  <div>
-                    <label className="text-slate-500 block mb-1">Est. Total Budget (INR) *</label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 500000"
-                      value={rfqBudget || ''}
-                      onChange={(e) => setRfqBudget(Number(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-mono text-xs font-bold"
-                    />
-                  </div>
+              <div>
+                <label className="text-slate-500 block mb-1">Consignment Destination (Hospital/Wing) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Fortis Hospital, Phase 3, Mohali"
+                  value={rfqLocation}
+                  onChange={(e) => setRfqLocation(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none"
+                />
+              </div>
 
-                  <div>
-                    <label className="text-slate-500 block mb-1">Consignment Destination (Hospital) *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Fortis Hospital, Mohali"
-                      value={rfqLocation}
-                      onChange={(e) => setRfqLocation(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none text-xs font-semibold"
-                    />
-                  </div>
+              <div>
+                <label className="text-slate-500 block mb-1">Detailed Technical Specifications *</label>
+                <textarea
+                  rows={4}
+                  required
+                  placeholder="Describe mandatory ISO/CE certifications, specific sensor standards, AMC duration requirements..."
+                  value={rfqDesc}
+                  onChange={(e) => setRfqDesc(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none"
+                />
+              </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-slate-500 block mb-1">Tender Urgency *</label>
-                      <select
-                        value={rfqUrgency}
-                        onChange={(e) => setRfqUrgency(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 outline-none text-xs font-semibold cursor-pointer"
-                      >
-                        <option value="Standard">Standard (15-30 days)</option>
-                        <option value="Urgent">Urgent (5-10 days)</option>
-                        <option value="Critical ICU Needed">Critical ICU (Under 48h)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-slate-500 block mb-1">Installation Target Date</label>
-                      <input
-                        type="date"
-                        value={rfqTargetDate}
-                        onChange={(e) => setRfqTargetDate(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 outline-none text-xs font-mono"
-                      />
-                    </div>
-                  </div>
+              <div>
+                <label className="text-slate-500 block mb-1">Upload Tender Specifications Sheet</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Fortis_Tender_Specs_v2.pdf"
+                  value={rfqAttachmentName}
+                  onChange={(e) => setRfqAttachmentName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none"
+                />
+              </div>
 
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setRfqWizardStep(1)}
-                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl uppercase text-[10px] transition cursor-pointer"
-                    >
-                      &larr; Back
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (rfqBudget <= 0) {
-                          addToast('Please enter an estimated B2B acquisition budget.', 'error');
-                          return;
-                        }
-                        if (!rfqLocation.trim()) {
-                          addToast('Please specify the destination clinical facility address.', 'error');
-                          return;
-                        }
-                        setRfqWizardStep(3);
-                      }}
-                      className="flex-1 bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 rounded-xl uppercase text-[10px] tracking-wide transition cursor-pointer text-center"
-                    >
-                      Next: Specifications &rarr;
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3: Technical Specifications & Attachments */}
-              {rfqWizardStep === 3 && (
-                <div className="space-y-4 animate-fade-in">
-                  <div>
-                    <label className="text-slate-500 block mb-1">Detailed Technical Specifications *</label>
-                    <textarea
-                      rows={3}
-                      required
-                      placeholder="Describe mandatory ISO/CE certifications, specific sensor standards, AMC duration requirements..."
-                      value={rfqDesc}
-                      onChange={(e) => setRfqDesc(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none text-xs leading-normal font-semibold focus:border-teal-700 transition"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-slate-500 block mb-1">Upload Tender Specifications Sheet</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Fortis_Tender_Specs_v2.pdf"
-                      value={rfqAttachmentName}
-                      onChange={(e) => setRfqAttachmentName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none text-xs"
-                    />
-                  </div>
-
-                  {/* Summary preview block */}
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-[10px] text-slate-600 space-y-1.5 font-sans leading-normal">
-                    <p className="text-[9px] uppercase font-bold text-teal-800 border-b border-slate-200 pb-1 mb-1 tracking-wider">Consignment Summary Review</p>
-                    <p><strong>Clinical Product:</strong> {rfqName} (Qty: {rfqQty})</p>
-                    <p><strong>Category:</strong> {rfqCategory}</p>
-                    <p><strong>Escrow Budget:</strong> ₹{rfqBudget.toLocaleString('en-IN')}</p>
-                    <p><strong>Destination:</strong> {rfqLocation}</p>
-                    <p><strong>Triage Level:</strong> <span className={rfqUrgency === 'Critical ICU Needed' ? 'text-rose-600 font-black animate-pulse' : 'font-bold text-slate-800'}>{rfqUrgency}</span></p>
-                    {rfqTargetDate && <p><strong>Target Installation:</strong> {rfqTargetDate}</p>}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setRfqWizardStep(2)}
-                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl uppercase text-[10px] transition cursor-pointer"
-                    >
-                      &larr; Back
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-1 bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 rounded-xl uppercase text-[10px] tracking-wide transition cursor-pointer text-center animate-pulse-once"
-                    >
-                      Publish Tender RFQ
-                    </button>
-                  </div>
-                </div>
-              )}
-
+              <button
+                type="submit"
+                className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 rounded-xl uppercase tracking-wide transition cursor-pointer"
+              >
+                Publish Procurement RFQ
+              </button>
             </form>
           </div>
 
@@ -4135,35 +3187,12 @@ export default function CustomerPanel({
                             </div>
                           )}
 
-                          {/* Action footer (View PDF Invoice, Track Order & Rate Supplier) */}
-                          <div className="flex flex-wrap justify-between items-center gap-2 border-t border-slate-100 pt-3.5 mt-2">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <button
-                                onClick={() => setActiveTrackingOrderId(order.id)}
-                                className="bg-sky-50 hover:bg-sky-100 text-sky-800 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition text-[10px] cursor-pointer"
-                              >
-                                <Truck className="w-3.5 h-3.5" />
-                                Track Order
-                              </button>
-
-                              {['Completed', 'Delivered'].includes(order.status) && (
-                                <button
-                                  onClick={() => {
-                                    setRatingModalOrder(order);
-                                    setRatingValue(5);
-                                    setRatingComment('');
-                                  }}
-                                  className="bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition text-[10px] cursor-pointer"
-                                >
-                                  <Star className="w-3.5 h-3.5 text-amber-500 fill-current" />
-                                  Rate Supplier
-                                </button>
-                              )}
-                            </div>
-                            
+                          {/* Action footer (View PDF Invoice) */}
+                          <div className="flex justify-between items-center border-t border-slate-100 pt-3.5 mt-2">
+                            <span className="text-[10px] text-slate-400 font-medium">Clearance cleared by AI B2B Gateway</span>
                             <button
                               onClick={() => setViewInvoiceOrder(order)}
-                              className="text-teal-700 hover:text-teal-800 font-bold flex items-center gap-1.5 transition text-[10px]"
+                              className="text-teal-700 hover:text-teal-800 font-bold flex items-center gap-1.5 transition text-[11px]"
                             >
                               <FileText className="w-3.5 h-3.5" />
                               View Corporate Invoice (PDF)
@@ -4257,22 +3286,16 @@ export default function CustomerPanel({
                   <button onClick={() => setSelectedProduct(null)} className="text-slate-400 hover:text-slate-600 font-bold text-xl leading-none">&times;</button>
                 </div>
 
-                 {/* Supplier & Trust Seal info */}
+                {/* Supplier & Trust Seal info */}
                 {(() => {
                   const modalVendor = vendors.find(v => v.id === selectedProduct.vendorId || v.companyName === selectedProduct.vendorName);
-                  const ratingData = getVendorRating(selectedProduct.vendorId, selectedProduct.vendorName);
                   return (
                     <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Building className="w-4 h-4 text-teal-700 shrink-0" />
                         <div>
                           <span className="text-[10px] text-slate-400 block font-semibold">Authorized Supplier</span>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-bold text-slate-800 text-xs">{selectedProduct.vendorName || modalVendor?.companyName || 'Verified Medical Partner'}</span>
-                            <span className="flex items-center gap-0.5 bg-amber-50 text-amber-700 px-1.5 py-0.2 rounded font-extrabold text-[9px] border border-amber-200">
-                              ★ {ratingData.avg} ({ratingData.count})
-                            </span>
-                          </div>
+                          <span className="font-bold text-slate-800 text-xs">{selectedProduct.vendorName || modalVendor?.companyName || 'Verified Medical Partner'}</span>
                         </div>
                       </div>
                       {modalVendor?.trustSeal && (
@@ -4340,196 +3363,6 @@ export default function CustomerPanel({
       {viewInvoiceOrder && (
         <InvoicePDF order={viewInvoiceOrder} onClose={() => setViewInvoiceOrder(null)} addToast={addToast} />
       )}
-
-      {/* Vendor Rating / Product Review Modal Overlay */}
-      {ratingModalOrder && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full shadow-2xl p-6 relative overflow-hidden font-sans">
-            <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5 border-b border-slate-100 pb-2">
-              <Star className="w-5 h-5 text-amber-500 fill-current" />
-              Rate Supplier & Review Equipment
-            </h4>
-            <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
-              Your direct feedback audits partner performance in the B2B marketplace and validates certified consignment standards.
-            </p>
-            
-            <div className="space-y-4">
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/50 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-slate-400 font-semibold uppercase">Authorized Vendor</p>
-                  <p className="font-bold text-slate-800 text-xs">{ratingModalOrder.vendorName}</p>
-                  <p className="text-[9px] text-slate-400 font-medium">Order Reference: #{ratingModalOrder.id}</p>
-                </div>
-                <div className="bg-teal-50 text-teal-800 px-2.5 py-1 rounded font-bold text-[10px] uppercase font-mono tracking-wider">
-                  Delivered
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">Supplier Rating Quality</label>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      onClick={() => setRatingValue(star)}
-                      className="p-1 text-amber-500 hover:scale-110 transition cursor-pointer"
-                    >
-                      <Star className={`w-7 h-7 ${star <= ratingValue ? 'fill-current text-amber-500' : 'text-slate-300'}`} />
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1.5 italic">
-                  {ratingValue === 5 ? 'Outstanding (Flawless calibration and dispatch)' :
-                   ratingValue === 4 ? 'Good Quality (Certified standards matched)' :
-                   ratingValue === 3 ? 'Satisfactory (Standard clinical guidelines)' :
-                   ratingValue === 2 ? 'Needs Improvement (Minor calibration gaps)' :
-                   'Unsatisfactory (Tender specs mismatched)'}
-                </p>
-              </div>
-
-              <div>
-                <label className="text-[10px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">Detailed Performance Review</label>
-                <textarea
-                  rows={4}
-                  placeholder="Review the clinical calibration, delivery speed, and overall customer satisfaction of this supplier..."
-                  value={ratingComment}
-                  onChange={(e) => setRatingComment(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none text-xs font-semibold leading-normal focus:border-teal-700 transition"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2 border-t border-slate-100">
-                <button
-                  onClick={() => setRatingModalOrder(null)}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-center uppercase tracking-wider text-[10px] transition cursor-pointer"
-                >
-                  Discard
-                </button>
-                <button
-                  onClick={handleReviewSubmit}
-                  className="flex-1 bg-teal-700 hover:bg-teal-800 text-white font-bold py-2 rounded-xl text-center uppercase tracking-wider text-[10px] transition cursor-pointer animate-pulse-once"
-                >
-                  Submit Audit Rating
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Advanced Visual Order Dispatch Tracking Modal Overlay */}
-      {(() => {
-        if (!activeTrackingOrderId) return null;
-        const trackingOrder = orders.find(o => o.id === activeTrackingOrderId);
-        if (!trackingOrder) return null;
-
-        // Custom Milestones for tracking
-        const statusSteps = [
-          { status: 'Confirmed', label: 'Order Confirmed', desc: 'Acquisition registered', icon: '📝' },
-          { status: 'Awaiting Payment Verification', label: 'Payment Verified', desc: 'Escrow funding cleared', icon: '💳' },
-          { status: 'Packed', label: 'Clinical Packaging', desc: 'Sealed & calibrated', icon: '📦' },
-          { status: 'Shipped', label: 'Transit Dispatch', desc: 'Consigned to courier partner', icon: '🚚' },
-          { status: 'Completed', label: 'Delivered', desc: 'Hospital installation done', icon: '🏥' }
-        ];
-
-        // Determine current step index
-        const currentStatus = trackingOrder.status;
-        let activeIdx = 0;
-        if (['Confirmed', 'Order Sent to Vendor'].includes(currentStatus)) activeIdx = 0;
-        else if (['Awaiting Payment Verification', 'Payment Verified', 'Vendor Accepted'].includes(currentStatus)) activeIdx = 1;
-        else if (currentStatus === 'Packed') activeIdx = 2;
-        else if (currentStatus === 'Shipped') activeIdx = 3;
-        else if (['Delivered', 'Completed'].includes(currentStatus)) activeIdx = 4;
-
-        return (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 animate-fade-in">
-            <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full shadow-2xl p-6 relative overflow-hidden font-sans">
-              
-              <div className="flex justify-between items-start border-b border-slate-100 pb-3 mb-4">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <Truck className="w-5 h-5 text-teal-700" />
-                    B2B Consignment Tracker
-                  </h4>
-                  <p className="text-[10px] font-mono text-slate-400 mt-1">Consignment ID: <span className="font-bold text-slate-800">#{trackingOrder.id}</span></p>
-                </div>
-                <button
-                  onClick={() => setActiveTrackingOrderId(null)}
-                  className="text-slate-400 hover:text-slate-600 font-bold text-xl leading-none"
-                >
-                  &times;
-                </button>
-              </div>
-
-              {/* Header Box */}
-              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-wrap gap-4 justify-between items-center mb-6">
-                <div className="space-y-1">
-                  <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider">Estimated Delivery Target</span>
-                  <p className="font-black text-slate-800 text-sm flex items-center gap-1">
-                    {trackingOrder.estimatedDeliveryTime || 'Under 3-5 Working Days'}
-                  </p>
-                </div>
-                <div className="space-y-1 text-right">
-                  <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider">Courier / AWB Number</span>
-                  <p className="font-mono text-xs font-black text-teal-800 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
-                    {trackingOrder.trackingNumber || 'Awaiting Partner Sync'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Stepper Timeline Tracker */}
-              <div className="space-y-6 relative pl-6 border-l-2 border-slate-100 ml-4 mb-6">
-                {statusSteps.map((step, idx) => {
-                  const isCompleted = idx <= activeIdx;
-                  const isActive = idx === activeIdx;
-                  return (
-                    <div key={idx} className="relative">
-                      {/* Circle Dot Icon */}
-                      <span className={`absolute left-[-37px] top-0.5 w-7 h-7 rounded-full border flex items-center justify-center text-xs shadow-sm transition-all ${
-                        isCompleted ? 'bg-teal-600 border-teal-600 text-white font-bold' :
-                        isActive ? 'bg-sky-500 border-sky-500 text-white animate-pulse' :
-                        'bg-white border-slate-200 text-slate-400'
-                      }`}>
-                        {isCompleted ? '✓' : step.icon}
-                      </span>
-                      
-                      {/* Step Text Info */}
-                      <div>
-                        <h5 className={`text-xs font-bold ${
-                          isCompleted ? 'text-teal-800' :
-                          isActive ? 'text-sky-850' : 'text-slate-400'
-                        }`}>
-                          {step.label}
-                        </h5>
-                        <p className="text-[10px] text-slate-500 font-medium leading-relaxed mt-0.5">{step.desc}</p>
-                        
-                        {isActive && (
-                          <span className="text-[9px] text-sky-600 font-bold font-mono tracking-wide uppercase animate-pulse">● Live Step</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Delivery consignee coordinates details */}
-              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-xs text-slate-600 leading-normal space-y-1.5">
-                <p className="text-[9px] uppercase text-teal-800 font-bold tracking-wider mb-1">Target Institution</p>
-                <p><strong>Institution Name:</strong> {trackingOrder.customerName}</p>
-                <p><strong>Consignment Address:</strong> {trackingOrder.shippingAddress.address}, {trackingOrder.shippingAddress.city}, {trackingOrder.shippingAddress.state} - {trackingOrder.shippingAddress.pincode}</p>
-                <p><strong>Courier Logistics Partner:</strong> {trackingOrder.courierName || 'Standard Tracked Clinical Express Delivery'}</p>
-              </div>
-
-              <button
-                onClick={() => setActiveTrackingOrderId(null)}
-                className="w-full bg-slate-900 text-white font-bold py-2.5 rounded-xl uppercase tracking-wider text-[10px] mt-6 hover:bg-slate-800 transition cursor-pointer"
-              >
-                Close Tracking Console
-              </button>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Floating Cart Bar */}
       {cart.length > 0 && currentView !== 'cart' && currentView !== 'checkout' && (
