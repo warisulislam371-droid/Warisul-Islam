@@ -27,7 +27,9 @@ import {
   TrendingUp,
   Tag,
   Box,
-  Globe
+  Globe,
+  Info,
+  ChevronDown
 } from 'lucide-react';
 
 interface VendorProductManagerProps {
@@ -65,6 +67,7 @@ export default function VendorProductManager({
   const [importProducts, setImportProducts] = useState<any[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [showSpecsGuide, setShowSpecsGuide] = useState(false);
 
   // New Category / Brand Request Form State
   const [reqCatName, setReqCatName] = useState('');
@@ -973,10 +976,36 @@ export default function VendorProductManager({
 
         {/* Product Catalog Cards / Table */}
         {filteredProducts.length === 0 ? (
-          <div className="py-12 text-center text-slate-400">
-            <Box className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-            <p className="text-xs font-bold text-slate-600">No products match your active search or filters.</p>
-            <p className="text-[11px] text-slate-400 mt-1">Try resetting filters or click "Add New Product" to register medical equipment.</p>
+          <div className="py-16 text-center max-w-md mx-auto">
+            <div className="p-4 bg-slate-50 border border-slate-100 rounded-3xl inline-block mb-4">
+              <Box className="w-10 h-10 text-slate-400" />
+            </div>
+            <p className="text-sm font-extrabold text-slate-800">No medical equipment matches current filters</p>
+            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+              To begin showcasing your catalog on Healnex MediBazar, try clearing your active filters, register an individual listing, or import multiple items using our bulk CSV uploader.
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setImportProducts([]);
+                  setImportError(null);
+                  setShowBulkImportModal(true);
+                }}
+                className="bg-teal-50 hover:bg-teal-100 text-teal-800 font-extrabold text-xs px-4 py-2.5 rounded-xl border border-teal-200 transition flex items-center gap-2 shadow-sm"
+              >
+                <Upload className="w-4 h-4 text-teal-600" />
+                Bulk Import CSV
+              </button>
+              <button
+                type="button"
+                onClick={openAddModal}
+                className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs px-4.5 py-2.5 rounded-xl shadow-md transition flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                Add Product
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1389,12 +1418,109 @@ export default function VendorProductManager({
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={handleDownloadTemplate}
                   className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold px-4.5 py-2.5 rounded-xl transition flex items-center gap-2 shadow-sm whitespace-nowrap"
                 >
                   <Download className="w-4 h-4" />
                   Download Template CSV
                 </button>
+              </div>
+
+              {/* Collapsible Column Format Specification Guide */}
+              <div className="bg-slate-50 border border-slate-200/60 rounded-2xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowSpecsGuide(!showSpecsGuide)}
+                  className="w-full p-4.5 flex items-center justify-between hover:bg-slate-100/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Info className="w-4 h-4 text-teal-600 shrink-0" />
+                    <span className="font-extrabold text-slate-800 text-sm">CSV Column Format & Validation Rules</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform duration-200 shrink-0 ${showSpecsGuide ? 'rotate-180' : ''}`} />
+                </button>
+                {showSpecsGuide && (
+                  <div className="p-5 border-t border-slate-200/60 bg-white space-y-4">
+                    <p className="text-slate-500 leading-relaxed text-[11px]">
+                      Preparing a batch of products is simple. The system matches column headers flexibly (case-insensitive, ignoring special characters and spaces). All imported products are routed to the Admin panel automatically for review.
+                    </p>
+                    <div className="overflow-x-auto border border-slate-100 rounded-xl">
+                      <table className="w-full text-left border-collapse text-[11px]">
+                        <thead>
+                          <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200/60 text-[10px] uppercase tracking-wider">
+                            <th className="p-2.5 font-bold">Column Header</th>
+                            <th className="p-2.5 font-bold">Required</th>
+                            <th className="p-2.5 font-bold">Data Type</th>
+                            <th className="p-2.5 font-bold">Description & Examples</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-[11px] text-slate-600">
+                          <tr>
+                            <td className="p-2.5 font-mono font-bold text-teal-700">Name</td>
+                            <td className="p-2.5"><span className="text-rose-600 font-bold">Yes</span></td>
+                            <td className="p-2.5">Plain text</td>
+                            <td className="p-2.5 text-slate-500">Human-readable product title. <code className="text-slate-800">e.g., ICU Ventilator Pro</code></td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-mono font-bold text-teal-700">SKU</td>
+                            <td className="p-2.5"><span className="text-rose-600 font-bold">Yes</span></td>
+                            <td className="p-2.5">Unique String</td>
+                            <td className="p-2.5 text-slate-500">Unique Stock Keeping Unit code. <code className="text-slate-800">e.g., HN-VENT-1092</code></td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-mono font-bold text-teal-700">VendorPrice</td>
+                            <td className="p-2.5"><span className="text-rose-600 font-bold">Yes</span></td>
+                            <td className="p-2.5">Positive Decimal</td>
+                            <td className="p-2.5 text-slate-500">Your base payout price before commission. <code className="text-slate-800">e.g., 180000</code></td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-mono font-bold text-teal-700">MRP</td>
+                            <td className="p-2.5">No</td>
+                            <td className="p-2.5">Positive Decimal</td>
+                            <td className="p-2.5 text-slate-500">Max Retail Price. Defaults to VendorPrice + 25%. <code className="text-slate-800">e.g., 225000</code></td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-mono font-bold text-teal-700">WholesalePrice</td>
+                            <td className="p-2.5">No</td>
+                            <td className="p-2.5">Positive Decimal</td>
+                            <td className="p-2.5 text-slate-500">Wholesale baseline price. Defaults to VendorPrice - 10%. <code className="text-slate-800">e.g., 162000</code></td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-mono font-bold text-teal-700">Brand</td>
+                            <td className="p-2.5">No</td>
+                            <td className="p-2.5">Plain text</td>
+                            <td className="p-2.5 text-slate-500">Manufacturer or Brand. Defaults to your default active brand. <code className="text-slate-800">e.g., SafeShield</code></td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-mono font-bold text-teal-700">Category</td>
+                            <td className="p-2.5">No</td>
+                            <td className="p-2.5">Plain text</td>
+                            <td className="p-2.5 text-slate-500">Main department category. Defaults to Diagnostic. <code className="text-slate-800">e.g., Operating Theatre</code></td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-mono font-bold text-teal-700">StockQuantity</td>
+                            <td className="p-2.5">No</td>
+                            <td className="p-2.5">Positive Integer</td>
+                            <td className="p-2.5 text-slate-500">Initially available unit stock. Defaults to 10. <code className="text-slate-800">e.g., 50</code></td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-mono font-bold text-teal-700">PricingTiers</td>
+                            <td className="p-2.5">No</td>
+                            <td className="p-2.5">Semicolon-pairs</td>
+                            <td className="p-2.5 text-slate-500">Syntax: <code>Qty:Price;Qty:Price</code>. <code className="text-slate-800">e.g., 10:150000;25:140000</code></td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-mono font-bold text-teal-700">ImageUrls</td>
+                            <td className="p-2.5">No</td>
+                            <td className="p-2.5">Semicolon-URLs</td>
+                            <td className="p-2.5 text-slate-500">List of live image links. <code className="text-slate-800">e.g., https://site.com/icu1.jpg;https://site.com/icu2.jpg</code></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Drag and Drop Zone */}

@@ -1087,7 +1087,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     setProducts(updated);
     addToast('Product rejected. Vendor notified.', 'info');
     setRejectingProduct(null);
-    setRejectionReasonText('');
+    setProductRejectReasonText('');
   };
 
   const handleRequestChanges = (productId: string, reason: string) => {
@@ -1120,7 +1120,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     setProducts(updated);
     addToast('Changes requested. Vendor notified.', 'info');
     setRejectingProduct(null);
-    setRejectionReasonText('');
+    setProductRejectReasonText('');
   };
 
   const handleAdminDeleteProduct = (productId: string, productName: string) => {
@@ -1327,8 +1327,12 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
         <div className="space-y-8 animate-fade-in">
           {/* KPI Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+            <div 
+              onClick={() => setActiveTab('commission-ledger')}
+              className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4 cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all group"
+              title="Click to view Commission Ledger"
+            >
+              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-100 transition-colors">
                 <DollarSign className="w-6 h-6" />
               </div>
               <div>
@@ -1337,8 +1341,12 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-teal-50 text-teal-600 rounded-xl">
+            <div 
+              onClick={() => setActiveTab('orders')}
+              className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4 cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all group"
+              title="Click to view Orders & Dispatch"
+            >
+              <div className="p-3 bg-teal-50 text-teal-600 rounded-xl group-hover:bg-teal-100 transition-colors">
                 <TrendingUp className="w-6 h-6" />
               </div>
               <div>
@@ -1347,8 +1355,15 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-orange-50 text-orange-600 rounded-xl">
+            <div 
+              onClick={() => {
+                setActiveTab('vendors');
+                setVendorStatusFilter('Pending');
+              }}
+              className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4 cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all group"
+              title="Click to view Pending Vendors Audit"
+            >
+              <div className="p-3 bg-orange-50 text-orange-600 rounded-xl group-hover:bg-orange-100 transition-colors">
                 <Users className="w-6 h-6" />
               </div>
               <div>
@@ -1357,8 +1372,15 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
+            <div 
+              onClick={() => {
+                setActiveTab('products');
+                setProductStatusFilter('Pending');
+              }}
+              className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4 cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all group"
+              title="Click to audit Pending Products"
+            >
+              <div className="p-3 bg-rose-50 text-rose-600 rounded-xl group-hover:bg-rose-100 transition-colors">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div>
@@ -1367,8 +1389,12 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-sky-50 text-sky-600 rounded-xl">
+            <div 
+              onClick={() => setActiveTab('rfq-tenders')}
+              className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4 cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all group"
+              title="Click to view RFQ Tenders"
+            >
+              <div className="p-3 bg-sky-50 text-sky-600 rounded-xl group-hover:bg-sky-100 transition-colors">
                 <Briefcase className="w-6 h-6" />
               </div>
               <div>
@@ -2878,7 +2904,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                               onClick={() => {
                                 setRejectingProduct(p);
                                 setIsRequestChangesAction(false);
-                                setRejectionReasonText('');
+                                setProductRejectReasonText('');
                               }}
                               className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1"
                               title="Reject product listing"
@@ -2893,7 +2919,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                               onClick={() => {
                                 setRejectingProduct(p);
                                 setIsRequestChangesAction(true);
-                                setRejectionReasonText('');
+                                setProductRejectReasonText('');
                               }}
                               className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1"
                               title="Request specifications updates from vendor"
@@ -2971,7 +2997,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       )}
                     </h3>
                     <button
-                      onClick={() => { setRejectingProduct(null); setRejectionReasonText(''); }}
+                      onClick={() => { setRejectingProduct(null); setProductRejectReasonText(''); }}
                       className="text-slate-400 hover:text-slate-600 font-bold p-1 text-lg"
                     >
                       ✕
