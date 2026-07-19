@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { Order, Product, Quotation, Vendor } from '../types';
 import VendorReportPDF from './VendorReportPDF';
+import D3BusinessInsights from './D3BusinessInsights';
 
 interface VendorAnalyticsProps {
   currentUser: { id: string; name: string };
@@ -428,6 +429,16 @@ export default function VendorAnalytics({
           </div>
         </div>
       </div>
+
+      {/* Advanced D3 Business Insights Platform */}
+      <D3BusinessInsights
+        currentUser={currentUser}
+        orders={orders}
+        products={products}
+        quotations={quotations}
+        vendorProfile={vendorProfile}
+        commissionRate={commissionRate}
+      />
 
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

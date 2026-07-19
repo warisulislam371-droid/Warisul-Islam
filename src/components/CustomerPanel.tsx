@@ -42,7 +42,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Headphones,
-  BadgeDollarSign
+  BadgeDollarSign,
+  ArrowUpDown
 } from 'lucide-react';
 import InvoicePDF from './InvoicePDF';
 import HomepageTrustSection from './HomepageTrustSection';
@@ -118,14 +119,25 @@ export default function CustomerPanel({
   const [filterMinRating, setFilterMinRating] = useState<number>(0);
   const [filterInStockOnly, setFilterInStockOnly] = useState(false);
   const [filterCountry, setFilterCountry] = useState('');
+  const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'rating_desc' | 'moq_asc'>('default');
 
-  // RFQ Submission form state
+  // RFQ Submission form state & Wizard Extended States
   const [rfqName, setRfqName] = useState('');
   const [rfqQty, setRfqQty] = useState<number>(1);
   const [rfqBudget, setRfqBudget] = useState<number>(0);
   const [rfqLocation, setRfqLocation] = useState('');
   const [rfqDesc, setRfqDesc] = useState('');
   const [rfqAttachmentName, setRfqAttachmentName] = useState('');
+  const [rfqWizardStep, setRfqWizardStep] = useState<number>(1);
+  const [rfqCategory, setRfqCategory] = useState<string>('');
+  const [rfqUrgency, setRfqUrgency] = useState<'Normal' | 'Urgent' | 'Critical'>('Normal');
+  const [rfqTargetDate, setRfqTargetDate] = useState<string>('');
+
+  // Vendor Rating System & Order Tracking popup states
+  const [ratingModalOrder, setRatingModalOrder] = useState<Order | null>(null);
+  const [ratingValue, setRatingValue] = useState<number>(5);
+  const [ratingComment, setRatingComment] = useState<string>('');
+  const [activeTrackingOrderId, setActiveTrackingOrderId] = useState<string | null>(null);
 
   // Payment sandbox state
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'checkout' | 'processing' | 'success'>('cart');
@@ -161,6 +173,30 @@ export default function CustomerPanel({
   // References to keep track of previous API request payloads to avoid infinite quota-draining requests
   const lastSearchKeyRef = useRef<string>('');
   const lastRecommendKeyRef = useRef<string>('');
+
+  // Dynamic Vendor rating calculation based on user reviews database
+  const getVendorRating = (vendorId?: string, vendorName?: string) => {
+    const allProducts = dbLocal.getProducts();
+    const vendorProductIds = allProducts
+      .filter(p => p.vendorId === vendorId || p.vendorName === vendorName)
+      .map(p => p.id);
+
+    const vendorReviews = reviews.filter(r => 
+      vendorProductIds.includes(r.productId) || 
+      (r as any).vendorId === vendorId
+    );
+
+    if (vendorReviews.length === 0) {
+      // Default starting rating for vetted clinical suppliers
+      return { avg: 4.8, count: 3 };
+    }
+
+    const total = vendorReviews.reduce((sum, r) => sum + r.rating, 0);
+    return {
+      avg: Math.round((total / vendorReviews.length) * 10) / 10,
+      count: vendorReviews.length
+    };
+  };
 
   const loadData = () => {
     const approvedVendors = dbLocal.getVendors().filter(v => v.status === 'Approved');
@@ -405,17 +441,26 @@ export default function CustomerPanel({
       return true;
     });
 
-    // 2. Sort by AI Relevance score if active search is running and results are present
-    if (searchQuery && aiSearchResults.length > 0) {
-      return [...matched].sort((a, b) => {
+    // 2. Sort results dynamically based on chosen criteria
+    const sorted = [...matched];
+    if (sortBy === 'price_asc') {
+      sorted.sort((a, b) => a.salePrice - b.salePrice);
+    } else if (sortBy === 'price_desc') {
+      sorted.sort((a, b) => b.salePrice - a.salePrice);
+    } else if (sortBy === 'rating_desc') {
+      sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else if (sortBy === 'moq_asc') {
+      sorted.sort((a, b) => a.moq - b.moq);
+    } else if (searchQuery && aiSearchResults.length > 0) {
+      sorted.sort((a, b) => {
         const scoreA = aiSearchResults.find(m => m.productId === a.id)?.relevanceScore || 0;
         const scoreB = aiSearchResults.find(m => m.productId === b.id)?.relevanceScore || 0;
         return scoreB - scoreA;
       });
     }
 
-    return matched;
-  }, [products, searchQuery, selectedCategoryName, filterBrand, filterPriceRange, filterMoq, aiSearchResults, filterTrustSealOnly, vendors, filterMinRating, filterInStockOnly, filterCountry]);
+    return sorted;
+  }, [products, searchQuery, selectedCategoryName, filterBrand, filterPriceRange, filterMoq, aiSearchResults, filterTrustSealOnly, vendors, filterMinRating, filterInStockOnly, filterCountry, sortBy]);
 
   const handleToggleWishlist = (id: string) => {
     let updated: string[];
@@ -669,6 +714,57 @@ export default function CustomerPanel({
     }, 2500);
   };
 
+  // Vendor Rating / Product Review Submission Handler
+  const handleReviewSubmit = () => {
+    if (!currentUser || !ratingModalOrder) return;
+    
+    const firstItem = ratingModalOrder.items[0];
+    if (!firstItem) return;
+    
+    const newReview: Review = {
+      id: `REV-${Math.floor(10000 + Math.random() * 90000)}`,
+      productId: firstItem.productId,
+      customerId: currentUser.id,
+      customerName: currentUser.name,
+      rating: ratingValue,
+      comment: ratingComment.trim() || `Excellent B2B equipment service and timely shipment from ${ratingModalOrder.vendorName}.`,
+      createdAt: new Date().toISOString()
+    };
+    
+    // Extend review object with vendor details
+    (newReview as any).vendorId = ratingModalOrder.vendorId;
+    (newReview as any).vendorName = ratingModalOrder.vendorName;
+    (newReview as any).orderId = ratingModalOrder.id;
+
+    const allReviews = dbLocal.getReviews();
+    allReviews.unshift(newReview);
+    dbLocal.saveReviews(allReviews);
+
+    // Update product rating
+    const allProducts = dbLocal.getProducts();
+    const prodIdx = allProducts.findIndex(p => p.id === firstItem.productId);
+    if (prodIdx > -1) {
+      const p = allProducts[prodIdx];
+      const productReviews = allReviews.filter(r => r.productId === p.id);
+      const total = productReviews.reduce((sum, r) => sum + r.rating, 0);
+      p.rating = Math.round((total / productReviews.length) * 10) / 10;
+      dbLocal.saveProducts(allProducts);
+    }
+
+    // Add dynamic notification to Vendor dashboard
+    dbLocal.addNotification(
+      ratingModalOrder.vendorId,
+      'New Customer Rating & Feedback Received',
+      `Client ${currentUser.name} rated your service with ${ratingValue}★ for Order #${ratingModalOrder.id}: "${newReview.comment}"`,
+      'review_added'
+    );
+
+    addToast(`Successfully rated ${ratingModalOrder.vendorName} with ${ratingValue} stars!`, 'success');
+    setRatingModalOrder(null);
+    setRatingComment('');
+    loadData();
+  };
+
   // RFQ Submission
   const handleRfqSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -690,7 +786,10 @@ export default function CustomerPanel({
       attachmentName: rfqAttachmentName || undefined,
       status: 'PENDING_ADMIN_REVIEW',
       createdAt: new Date().toISOString(),
-      quotationsCount: 0
+      quotationsCount: 0,
+      category: rfqCategory || 'Diagnostics',
+      urgency: rfqUrgency || 'Standard',
+      targetDate: rfqTargetDate || ''
     };
 
     const currentRfqs = dbLocal.getRfqs();
@@ -712,6 +811,10 @@ export default function CustomerPanel({
     setRfqLocation('');
     setRfqDesc('');
     setRfqAttachmentName('');
+    setRfqCategory('Diagnostics');
+    setRfqUrgency('Standard');
+    setRfqTargetDate('');
+    setRfqWizardStep(1);
     loadData();
   };
 
@@ -1315,14 +1418,33 @@ export default function CustomerPanel({
                   <SlidersHorizontal className="w-4 h-4 text-teal-700" />
                   Commercial Filters
                 </h3>
-                {(filterBrand || selectedCategoryName || filterPriceRange < 500000 || filterMoq < 100 || filterTrustSealOnly || filterMinRating > 0 || filterInStockOnly || filterCountry) && (
+                {(filterBrand || selectedCategoryName || filterPriceRange < 500000 || filterMoq < 100 || filterTrustSealOnly || filterMinRating > 0 || filterInStockOnly || filterCountry || sortBy !== 'default') && (
                   <button
-                    onClick={() => { setFilterBrand(''); onCategorySelect(''); setFilterPriceRange(500000); setFilterMoq(100); setFilterTrustSealOnly(false); setFilterMinRating(0); setFilterInStockOnly(false); setFilterCountry(''); }}
+                    onClick={() => { setFilterBrand(''); onCategorySelect(''); setFilterPriceRange(500000); setFilterMoq(100); setFilterTrustSealOnly(false); setFilterMinRating(0); setFilterInStockOnly(false); setFilterCountry(''); setSortBy('default'); }}
                     className="text-[10px] font-bold text-rose-600 hover:text-rose-800"
                   >
                     Reset All
                   </button>
                 )}
+              </div>
+
+              {/* Dynamic Sorting Filter */}
+              <div className="space-y-1.5 text-xs font-semibold border-b border-slate-100 pb-4">
+                <label className="text-slate-500 flex items-center gap-1.5 mb-1">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-teal-700" />
+                  Sort Catalog By
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-semibold text-slate-700 hover:bg-slate-100/50 transition cursor-pointer"
+                >
+                  <option value="default">AI Match Relevance</option>
+                  <option value="price_asc">Price: Low to High</option>
+                  <option value="price_desc">Price: High to Low</option>
+                  <option value="rating_desc">Highest Rated ★</option>
+                  <option value="moq_asc">MOQ Requirement (Low to High)</option>
+                </select>
               </div>
 
               {/* Trust Seal Toggle Filter */}
@@ -1551,9 +1673,19 @@ export default function CustomerPanel({
                             >
                               {p.name}
                             </h4>
-                            <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
-                              <Building className="w-3 h-3 shrink-0 text-slate-400" />
-                              <span className="truncate">Supplier: <strong className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>{p.vendorName || productVendor?.companyName || 'Verified Partner'}</strong></span>
+                            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 mt-1">
+                              <span className="flex items-center gap-1">
+                                <Building className="w-3 h-3 shrink-0 text-slate-400" />
+                                <span className="truncate">Supplier: <strong className={isDarkMode ? 'text-slate-300' : 'text-slate-600'}>{p.vendorName || productVendor?.companyName || 'Verified Partner'}</strong></span>
+                              </span>
+                              {(() => {
+                                const ratingData = getVendorRating(p.vendorId, p.vendorName);
+                                return (
+                                  <span className="flex items-center gap-0.5 bg-amber-50 text-amber-700 px-1.5 py-0.2 rounded font-bold text-[9px] border border-amber-200">
+                                    ★ {ratingData.avg} ({ratingData.count})
+                                  </span>
+                                );
+                              })()}
                             </div>
                             <p className={`text-[11px] line-clamp-2 mt-1 leading-relaxed ${
                               isDarkMode ? 'text-slate-300' : 'text-slate-500'
@@ -1573,6 +1705,39 @@ export default function CustomerPanel({
                                   <span className="font-bold">Clinical Insight: </span>
                                   {aiMatch.aiInsight}
                                 </div>
+                              </div>
+                            )}
+
+                            {/* Visual Stock / Inventory Urgency Indicator */}
+                            {p.stockQuantity !== undefined && (
+                              <div className="mt-2.5 text-[10px]">
+                                {p.stockQuantity <= 0 ? (
+                                  <div className="flex items-center gap-1 font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-[4px] px-2 py-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
+                                    <span>Out of Stock (Pre-order / Quote)</span>
+                                  </div>
+                                ) : p.stockQuantity <= 15 ? (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between font-extrabold text-amber-700 bg-amber-50 border border-amber-200 rounded-[4px] px-2 py-1">
+                                      <span className="flex items-center gap-1">
+                                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                                        <span>Low Stock: Only {p.stockQuantity} unit{p.stockQuantity > 1 ? 's' : ''} left!</span>
+                                      </span>
+                                      <span className="text-[9px] text-amber-600 uppercase tracking-wide font-black">Urgent</span>
+                                    </div>
+                                    <div className="w-full bg-amber-100 h-1.5 rounded-full overflow-hidden">
+                                      <div 
+                                        className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                                        style={{ width: `${(p.stockQuantity / 15) * 100}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-[4px] px-2 py-1">
+                                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                                    <span>In Stock: {p.stockQuantity} units available</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -2409,92 +2574,227 @@ export default function CustomerPanel({
       {/* RFQ and Tenders Procurement Page */}
       {currentView === 'rfqs' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
-          
           {/* Submit Custom RFQ Form */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-1 h-fit">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-1.5">
               <FilePlus className="w-4.5 h-4.5 text-teal-700" />
-              Open Custom Clinical Tender
+              Guided Tender RFQ Wizard
             </h3>
-            <form onSubmit={handleRfqSubmit} className="space-y-4 text-xs font-medium">
-              <div>
-                <label className="text-slate-500 block mb-1">Equipment Name / Product Requirements *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 50 ICU Ventilators with calibration"
-                  value={rfqName}
-                  onChange={(e) => setRfqName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition"
-                />
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-500 block mb-1">Quantity *</label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={rfqQty || ''}
-                    onChange={(e) => setRfqQty(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none"
-                  />
+            {/* Progress Stepper Bar */}
+            <div className="flex items-center justify-between mb-5 border-b border-slate-100 pb-3">
+              {[1, 2, 3].map((step) => (
+                <div key={step} className="flex items-center gap-1.5">
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] ${
+                    rfqWizardStep === step ? 'bg-teal-700 text-white' :
+                    rfqWizardStep > step ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-400'
+                  }`}>
+                    {rfqWizardStep > step ? '✓' : step}
+                  </span>
+                  <span className={`text-[9px] uppercase tracking-wider font-extrabold ${
+                    rfqWizardStep === step ? 'text-teal-800 font-black' : 'text-slate-400'
+                  }`}>
+                    {step === 1 ? 'Reqs' : step === 2 ? 'Logistics' : 'Review'}
+                  </span>
                 </div>
-                <div>
-                  <label className="text-slate-500 block mb-1">Est. Total Budget (INR) *</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="e.g. 500000"
-                    value={rfqBudget || ''}
-                    onChange={(e) => setRfqBudget(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-mono"
-                  />
+              ))}
+            </div>
+
+            <form onSubmit={handleRfqSubmit} className="text-xs font-medium">
+              
+              {/* Step 1: Clinical Requirements & Category */}
+              {rfqWizardStep === 1 && (
+                <div className="space-y-4 animate-fade-in">
+                  <div>
+                    <label className="text-slate-500 block mb-1">Equipment / Product Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 50 ICU Ventilators with calibration"
+                      value={rfqName}
+                      onChange={(e) => setRfqName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition font-bold text-slate-800 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-500 block mb-1">Clinical Category *</label>
+                    <select
+                      value={rfqCategory}
+                      onChange={(e) => setRfqCategory(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none text-xs text-slate-700 font-semibold cursor-pointer"
+                    >
+                      <option value="Diagnostics">Diagnostics & Imaging</option>
+                      <option value="Life Support">Life Support & ICU</option>
+                      <option value="Surgical">Surgical & OR</option>
+                      <option value="Laboratory">Laboratory & Research</option>
+                      <option value="General">General Medical Consumables</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-slate-500 block mb-1">Quantity Required *</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={rfqQty || ''}
+                      onChange={(e) => setRfqQty(Number(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-bold text-xs"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!rfqName.trim()) {
+                        addToast('Please specify the equipment name or requirements.', 'error');
+                        return;
+                      }
+                      if (rfqQty < 1) {
+                        addToast('Please enter a valid quantity of 1 or more.', 'error');
+                        return;
+                      }
+                      setRfqWizardStep(2);
+                    }}
+                    className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 rounded-xl uppercase tracking-wide transition cursor-pointer text-[10px] text-center"
+                  >
+                    Next: Budget & Logistics &rarr;
+                  </button>
                 </div>
-              </div>
+              )}
 
-              <div>
-                <label className="text-slate-500 block mb-1">Consignment Destination (Hospital/Wing) *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Fortis Hospital, Phase 3, Mohali"
-                  value={rfqLocation}
-                  onChange={(e) => setRfqLocation(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none"
-                />
-              </div>
+              {/* Step 2: Logistics, Urgency & Budget */}
+              {rfqWizardStep === 2 && (
+                <div className="space-y-4 animate-fade-in">
+                  <div>
+                    <label className="text-slate-500 block mb-1">Est. Total Budget (INR) *</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 500000"
+                      value={rfqBudget || ''}
+                      onChange={(e) => setRfqBudget(Number(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-mono text-xs font-bold"
+                    />
+                  </div>
 
-              <div>
-                <label className="text-slate-500 block mb-1">Detailed Technical Specifications *</label>
-                <textarea
-                  rows={4}
-                  required
-                  placeholder="Describe mandatory ISO/CE certifications, specific sensor standards, AMC duration requirements..."
-                  value={rfqDesc}
-                  onChange={(e) => setRfqDesc(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none"
-                />
-              </div>
+                  <div>
+                    <label className="text-slate-500 block mb-1">Consignment Destination (Hospital) *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Fortis Hospital, Mohali"
+                      value={rfqLocation}
+                      onChange={(e) => setRfqLocation(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none text-xs font-semibold"
+                    />
+                  </div>
 
-              <div>
-                <label className="text-slate-500 block mb-1">Upload Tender Specifications Sheet</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Fortis_Tender_Specs_v2.pdf"
-                  value={rfqAttachmentName}
-                  onChange={(e) => setRfqAttachmentName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none"
-                />
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-slate-500 block mb-1">Tender Urgency *</label>
+                      <select
+                        value={rfqUrgency}
+                        onChange={(e) => setRfqUrgency(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 outline-none text-xs font-semibold cursor-pointer"
+                      >
+                        <option value="Standard">Standard (15-30 days)</option>
+                        <option value="Urgent">Urgent (5-10 days)</option>
+                        <option value="Critical ICU Needed">Critical ICU (Under 48h)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-slate-500 block mb-1">Installation Target Date</label>
+                      <input
+                        type="date"
+                        value={rfqTargetDate}
+                        onChange={(e) => setRfqTargetDate(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 outline-none text-xs font-mono"
+                      />
+                    </div>
+                  </div>
 
-              <button
-                type="submit"
-                className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 rounded-xl uppercase tracking-wide transition cursor-pointer"
-              >
-                Publish Procurement RFQ
-              </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRfqWizardStep(1)}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl uppercase text-[10px] transition cursor-pointer"
+                    >
+                      &larr; Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (rfqBudget <= 0) {
+                          addToast('Please enter an estimated B2B acquisition budget.', 'error');
+                          return;
+                        }
+                        if (!rfqLocation.trim()) {
+                          addToast('Please specify the destination clinical facility address.', 'error');
+                          return;
+                        }
+                        setRfqWizardStep(3);
+                      }}
+                      className="flex-1 bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 rounded-xl uppercase text-[10px] tracking-wide transition cursor-pointer text-center"
+                    >
+                      Next: Specifications &rarr;
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Technical Specifications & Attachments */}
+              {rfqWizardStep === 3 && (
+                <div className="space-y-4 animate-fade-in">
+                  <div>
+                    <label className="text-slate-500 block mb-1">Detailed Technical Specifications *</label>
+                    <textarea
+                      rows={3}
+                      required
+                      placeholder="Describe mandatory ISO/CE certifications, specific sensor standards, AMC duration requirements..."
+                      value={rfqDesc}
+                      onChange={(e) => setRfqDesc(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none text-xs leading-normal font-semibold focus:border-teal-700 transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-500 block mb-1">Upload Tender Specifications Sheet</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Fortis_Tender_Specs_v2.pdf"
+                      value={rfqAttachmentName}
+                      onChange={(e) => setRfqAttachmentName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none text-xs"
+                    />
+                  </div>
+
+                  {/* Summary preview block */}
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-[10px] text-slate-600 space-y-1.5 font-sans leading-normal">
+                    <p className="text-[9px] uppercase font-bold text-teal-800 border-b border-slate-200 pb-1 mb-1 tracking-wider">Consignment Summary Review</p>
+                    <p><strong>Clinical Product:</strong> {rfqName} (Qty: {rfqQty})</p>
+                    <p><strong>Category:</strong> {rfqCategory}</p>
+                    <p><strong>Escrow Budget:</strong> ₹{rfqBudget.toLocaleString('en-IN')}</p>
+                    <p><strong>Destination:</strong> {rfqLocation}</p>
+                    <p><strong>Triage Level:</strong> <span className={rfqUrgency === 'Critical ICU Needed' ? 'text-rose-600 font-black animate-pulse' : 'font-bold text-slate-800'}>{rfqUrgency}</span></p>
+                    {rfqTargetDate && <p><strong>Target Installation:</strong> {rfqTargetDate}</p>}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRfqWizardStep(2)}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl uppercase text-[10px] transition cursor-pointer"
+                    >
+                      &larr; Back
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 rounded-xl uppercase text-[10px] tracking-wide transition cursor-pointer text-center animate-pulse-once"
+                    >
+                      Publish Tender RFQ
+                    </button>
+                  </div>
+                </div>
+              )}
+
             </form>
           </div>
 
@@ -3187,12 +3487,35 @@ export default function CustomerPanel({
                             </div>
                           )}
 
-                          {/* Action footer (View PDF Invoice) */}
-                          <div className="flex justify-between items-center border-t border-slate-100 pt-3.5 mt-2">
-                            <span className="text-[10px] text-slate-400 font-medium">Clearance cleared by AI B2B Gateway</span>
+                          {/* Action footer (View PDF Invoice, Track Order & Rate Supplier) */}
+                          <div className="flex flex-wrap justify-between items-center gap-2 border-t border-slate-100 pt-3.5 mt-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <button
+                                onClick={() => setActiveTrackingOrderId(order.id)}
+                                className="bg-sky-50 hover:bg-sky-100 text-sky-800 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition text-[10px] cursor-pointer"
+                              >
+                                <Truck className="w-3.5 h-3.5" />
+                                Track Order
+                              </button>
+
+                              {['Completed', 'Delivered'].includes(order.status) && (
+                                <button
+                                  onClick={() => {
+                                    setRatingModalOrder(order);
+                                    setRatingValue(5);
+                                    setRatingComment('');
+                                  }}
+                                  className="bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition text-[10px] cursor-pointer"
+                                >
+                                  <Star className="w-3.5 h-3.5 text-amber-500 fill-current" />
+                                  Rate Supplier
+                                </button>
+                              )}
+                            </div>
+                            
                             <button
                               onClick={() => setViewInvoiceOrder(order)}
-                              className="text-teal-700 hover:text-teal-800 font-bold flex items-center gap-1.5 transition text-[11px]"
+                              className="text-teal-700 hover:text-teal-800 font-bold flex items-center gap-1.5 transition text-[10px]"
                             >
                               <FileText className="w-3.5 h-3.5" />
                               View Corporate Invoice (PDF)
@@ -3286,16 +3609,22 @@ export default function CustomerPanel({
                   <button onClick={() => setSelectedProduct(null)} className="text-slate-400 hover:text-slate-600 font-bold text-xl leading-none">&times;</button>
                 </div>
 
-                {/* Supplier & Trust Seal info */}
+                 {/* Supplier & Trust Seal info */}
                 {(() => {
                   const modalVendor = vendors.find(v => v.id === selectedProduct.vendorId || v.companyName === selectedProduct.vendorName);
+                  const ratingData = getVendorRating(selectedProduct.vendorId, selectedProduct.vendorName);
                   return (
                     <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Building className="w-4 h-4 text-teal-700 shrink-0" />
                         <div>
                           <span className="text-[10px] text-slate-400 block font-semibold">Authorized Supplier</span>
-                          <span className="font-bold text-slate-800 text-xs">{selectedProduct.vendorName || modalVendor?.companyName || 'Verified Medical Partner'}</span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-bold text-slate-800 text-xs">{selectedProduct.vendorName || modalVendor?.companyName || 'Verified Medical Partner'}</span>
+                            <span className="flex items-center gap-0.5 bg-amber-50 text-amber-700 px-1.5 py-0.2 rounded font-extrabold text-[9px] border border-amber-200">
+                              ★ {ratingData.avg} ({ratingData.count})
+                            </span>
+                          </div>
                         </div>
                       </div>
                       {modalVendor?.trustSeal && (
@@ -3363,6 +3692,196 @@ export default function CustomerPanel({
       {viewInvoiceOrder && (
         <InvoicePDF order={viewInvoiceOrder} onClose={() => setViewInvoiceOrder(null)} addToast={addToast} />
       )}
+
+      {/* Vendor Rating / Product Review Modal Overlay */}
+      {ratingModalOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full shadow-2xl p-6 relative overflow-hidden font-sans">
+            <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5 border-b border-slate-100 pb-2">
+              <Star className="w-5 h-5 text-amber-500 fill-current" />
+              Rate Supplier & Review Equipment
+            </h4>
+            <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
+              Your direct feedback audits partner performance in the B2B marketplace and validates certified consignment standards.
+            </p>
+            
+            <div className="space-y-4">
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/50 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase">Authorized Vendor</p>
+                  <p className="font-bold text-slate-800 text-xs">{ratingModalOrder.vendorName}</p>
+                  <p className="text-[9px] text-slate-400 font-medium">Order Reference: #{ratingModalOrder.id}</p>
+                </div>
+                <div className="bg-teal-50 text-teal-800 px-2.5 py-1 rounded font-bold text-[10px] uppercase font-mono tracking-wider">
+                  Delivered
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">Supplier Rating Quality</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setRatingValue(star)}
+                      className="p-1 text-amber-500 hover:scale-110 transition cursor-pointer"
+                    >
+                      <Star className={`w-7 h-7 ${star <= ratingValue ? 'fill-current text-amber-500' : 'text-slate-300'}`} />
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5 italic">
+                  {ratingValue === 5 ? 'Outstanding (Flawless calibration and dispatch)' :
+                   ratingValue === 4 ? 'Good Quality (Certified standards matched)' :
+                   ratingValue === 3 ? 'Satisfactory (Standard clinical guidelines)' :
+                   ratingValue === 2 ? 'Needs Improvement (Minor calibration gaps)' :
+                   'Unsatisfactory (Tender specs mismatched)'}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">Detailed Performance Review</label>
+                <textarea
+                  rows={4}
+                  placeholder="Review the clinical calibration, delivery speed, and overall customer satisfaction of this supplier..."
+                  value={ratingComment}
+                  onChange={(e) => setRatingComment(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none text-xs font-semibold leading-normal focus:border-teal-700 transition"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => setRatingModalOrder(null)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-center uppercase tracking-wider text-[10px] transition cursor-pointer"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={handleReviewSubmit}
+                  className="flex-1 bg-teal-700 hover:bg-teal-800 text-white font-bold py-2 rounded-xl text-center uppercase tracking-wider text-[10px] transition cursor-pointer animate-pulse-once"
+                >
+                  Submit Audit Rating
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Advanced Visual Order Dispatch Tracking Modal Overlay */}
+      {(() => {
+        if (!activeTrackingOrderId) return null;
+        const trackingOrder = orders.find(o => o.id === activeTrackingOrderId);
+        if (!trackingOrder) return null;
+
+        // Custom Milestones for tracking
+        const statusSteps = [
+          { status: 'Confirmed', label: 'Order Confirmed', desc: 'Acquisition registered', icon: '📝' },
+          { status: 'Awaiting Payment Verification', label: 'Payment Verified', desc: 'Escrow funding cleared', icon: '💳' },
+          { status: 'Packed', label: 'Clinical Packaging', desc: 'Sealed & calibrated', icon: '📦' },
+          { status: 'Shipped', label: 'Transit Dispatch', desc: 'Consigned to courier partner', icon: '🚚' },
+          { status: 'Completed', label: 'Delivered', desc: 'Hospital installation done', icon: '🏥' }
+        ];
+
+        // Determine current step index
+        const currentStatus = trackingOrder.status;
+        let activeIdx = 0;
+        if (['Confirmed', 'Order Sent to Vendor'].includes(currentStatus)) activeIdx = 0;
+        else if (['Awaiting Payment Verification', 'Payment Verified', 'Vendor Accepted'].includes(currentStatus)) activeIdx = 1;
+        else if (currentStatus === 'Packed') activeIdx = 2;
+        else if (currentStatus === 'Shipped') activeIdx = 3;
+        else if (['Delivered', 'Completed'].includes(currentStatus)) activeIdx = 4;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 animate-fade-in">
+            <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full shadow-2xl p-6 relative overflow-hidden font-sans">
+              
+              <div className="flex justify-between items-start border-b border-slate-100 pb-3 mb-4">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Truck className="w-5 h-5 text-teal-700" />
+                    B2B Consignment Tracker
+                  </h4>
+                  <p className="text-[10px] font-mono text-slate-400 mt-1">Consignment ID: <span className="font-bold text-slate-800">#{trackingOrder.id}</span></p>
+                </div>
+                <button
+                  onClick={() => setActiveTrackingOrderId(null)}
+                  className="text-slate-400 hover:text-slate-600 font-bold text-xl leading-none"
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* Header Box */}
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-wrap gap-4 justify-between items-center mb-6">
+                <div className="space-y-1">
+                  <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider">Estimated Delivery Target</span>
+                  <p className="font-black text-slate-800 text-sm flex items-center gap-1">
+                    {trackingOrder.estimatedDeliveryTime || 'Under 3-5 Working Days'}
+                  </p>
+                </div>
+                <div className="space-y-1 text-right">
+                  <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider">Courier / AWB Number</span>
+                  <p className="font-mono text-xs font-black text-teal-800 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                    {trackingOrder.trackingNumber || 'Awaiting Partner Sync'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Stepper Timeline Tracker */}
+              <div className="space-y-6 relative pl-6 border-l-2 border-slate-100 ml-4 mb-6">
+                {statusSteps.map((step, idx) => {
+                  const isCompleted = idx <= activeIdx;
+                  const isActive = idx === activeIdx;
+                  return (
+                    <div key={idx} className="relative">
+                      {/* Circle Dot Icon */}
+                      <span className={`absolute left-[-37px] top-0.5 w-7 h-7 rounded-full border flex items-center justify-center text-xs shadow-sm transition-all ${
+                        isCompleted ? 'bg-teal-600 border-teal-600 text-white font-bold' :
+                        isActive ? 'bg-sky-500 border-sky-500 text-white animate-pulse' :
+                        'bg-white border-slate-200 text-slate-400'
+                      }`}>
+                        {isCompleted ? '✓' : step.icon}
+                      </span>
+                      
+                      {/* Step Text Info */}
+                      <div>
+                        <h5 className={`text-xs font-bold ${
+                          isCompleted ? 'text-teal-800' :
+                          isActive ? 'text-sky-850' : 'text-slate-400'
+                        }`}>
+                          {step.label}
+                        </h5>
+                        <p className="text-[10px] text-slate-500 font-medium leading-relaxed mt-0.5">{step.desc}</p>
+                        
+                        {isActive && (
+                          <span className="text-[9px] text-sky-600 font-bold font-mono tracking-wide uppercase animate-pulse">● Live Step</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Delivery consignee coordinates details */}
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-xs text-slate-600 leading-normal space-y-1.5">
+                <p className="text-[9px] uppercase text-teal-800 font-bold tracking-wider mb-1">Target Institution</p>
+                <p><strong>Institution Name:</strong> {trackingOrder.customerName}</p>
+                <p><strong>Consignment Address:</strong> {trackingOrder.shippingAddress.address}, {trackingOrder.shippingAddress.city}, {trackingOrder.shippingAddress.state} - {trackingOrder.shippingAddress.pincode}</p>
+                <p><strong>Courier Logistics Partner:</strong> {trackingOrder.courierName || 'Standard Tracked Clinical Express Delivery'}</p>
+              </div>
+
+              <button
+                onClick={() => setActiveTrackingOrderId(null)}
+                className="w-full bg-slate-900 text-white font-bold py-2.5 rounded-xl uppercase tracking-wider text-[10px] mt-6 hover:bg-slate-800 transition cursor-pointer"
+              >
+                Close Tracking Console
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Floating Cart Bar */}
       {cart.length > 0 && currentView !== 'cart' && currentView !== 'checkout' && (

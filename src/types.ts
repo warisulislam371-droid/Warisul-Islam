@@ -119,6 +119,8 @@ export interface Product {
   tags?: string[];
   mrp?: number;
   wholesalePrice?: number;
+  pricingTiers?: { minQty: number; price: number; }[];
+  imageMetadata?: { url: string; alt: string; description?: string; }[];
   discountPercentage?: number;
   unit?: string; // Piece, Box, Pack, etc.
   videoUrl?: string;
@@ -142,6 +144,7 @@ export interface Product {
     inquiries: number;
     sales: number;
   };
+  rating?: number;
 }
 
 export interface Category {
@@ -342,6 +345,9 @@ export interface RFQ {
   createdAt: string;
   quotationsCount: number;
   winningQuotationId?: string;
+  category?: string;
+  urgency?: string;
+  targetDate?: string;
 }
 
 export interface Quotation {

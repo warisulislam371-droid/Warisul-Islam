@@ -60,6 +60,12 @@ export default function VendorProductManager({
   const [showBrandRequestModal, setShowBrandRequestModal] = useState(false);
   const [analyticsModalProduct, setAnalyticsModalProduct] = useState<Product | null>(null);
 
+  // Bulk Import state
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [importProducts, setImportProducts] = useState<any[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+
   // New Category / Brand Request Form State
   const [reqCatName, setReqCatName] = useState('');
   const [reqCatDesc, setReqCatDesc] = useState('');
@@ -400,6 +406,394 @@ export default function VendorProductManager({
     setShowBrandRequestModal(false);
   };
 
+  const parseCSV = (text: string): string[][] => {
+    const lines: string[][] = [];
+    let row: string[] = [];
+    let currentVal = '';
+    let insideQuote = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (insideQuote && nextChar === '"') {
+          currentVal += '"';
+          i++;
+        } else {
+          insideQuote = !insideQuote;
+        }
+      } else if (char === ',' && !insideQuote) {
+        row.push(currentVal.trim());
+        currentVal = '';
+      } else if ((char === '\r' || char === '\n') && !insideQuote) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        row.push(currentVal.trim());
+        if (row.length > 0 && row.some(cell => cell !== '')) {
+          lines.push(row);
+        }
+        row = [];
+        currentVal = '';
+      } else {
+        currentVal += char;
+      }
+    }
+    if (currentVal || row.length > 0) {
+      row.push(currentVal.trim());
+      if (row.length > 0 && row.some(cell => cell !== '')) {
+        lines.push(row);
+      }
+    }
+    return lines;
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'Name',
+      'SKU',
+      'ModelNumber',
+      'Brand',
+      'Category',
+      'Subcategory',
+      'VendorPrice',
+      'MRP',
+      'WholesalePrice',
+      'StockQuantity',
+      'MinOrderQty',
+      'HSNCode',
+      'GSTRate',
+      'Warranty',
+      'CountryOfOrigin',
+      'Unit',
+      'ShortDescription',
+      'FullDescription',
+      'ImageUrls',
+      'ImageAlts',
+      'PricingTiers'
+    ];
+    
+    const sampleRow = [
+      'Digital ICU Ventilator v3',
+      `HN-VENT-${Math.floor(1000 + Math.random() * 9000)}`,
+      'VT-990-PRO',
+      brands[0]?.name || 'SafeShield',
+      categories[0]?.name || 'Diagnostic & Critical Care',
+      'Ventilator',
+      '180000',
+      '240000',
+      '165000',
+      '15',
+      '1',
+      '90189011',
+      '12',
+      '2 Years Standard Warranty',
+      'Germany',
+      'Piece',
+      'Advanced clinical touch ventilator with electronic turbine system.',
+      'Designed for neonatal and adult ventilation in intensive care units, featuring high-speed turbine and backup battery.',
+      'https://images.unsplash.com/photo-1603398938378-e54eab446dde?auto=format&fit=crop&w=400',
+      'Digital Ventilator Side View',
+      '10:162000;25:158000;50:150000'
+    ];
+
+    const csvContent = 'data:text/csv;charset=utf-8,' 
+      + [headers.join(','), sampleRow.map(v => `"${v.replace(/"/g, '""')}"`).join(',')].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'healnex_bulk_import_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCsvFileChange = (file: File) => {
+    if (!file) return;
+    if (!file.name.endsWith('.csv')) {
+      setImportError('Please upload a valid .csv file.');
+      return;
+    }
+
+    setImportError(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        if (!text) {
+          setImportError('The uploaded file is empty.');
+          return;
+        }
+
+        const lines = parseCSV(text);
+        if (lines.length < 2) {
+          setImportError('The CSV file must have a header row and at least one product row.');
+          return;
+        }
+
+        const headers = lines[0].map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+        
+        // Define expected header mapping
+        const colMap: Record<string, number> = {
+          name: headers.indexOf('name'),
+          sku: headers.indexOf('sku'),
+          modelnumber: headers.indexOf('modelnumber'),
+          brand: headers.indexOf('brand'),
+          category: headers.indexOf('category'),
+          subcategory: headers.indexOf('subcategory'),
+          vendorprice: headers.indexOf('vendorprice'),
+          mrp: headers.indexOf('mrp'),
+          wholesaleprice: headers.indexOf('wholesaleprice'),
+          stockquantity: headers.indexOf('stockquantity'),
+          minorderqty: headers.indexOf('minorderqty'),
+          hsncode: headers.indexOf('hsncode'),
+          gstrate: headers.indexOf('gstrate'),
+          warranty: headers.indexOf('warranty'),
+          countryoforigin: headers.indexOf('countryoforigin'),
+          unit: headers.indexOf('unit'),
+          shortdescription: headers.indexOf('shortdescription'),
+          fulldescription: headers.indexOf('fulldescription'),
+          imageurls: headers.indexOf('imageurls'),
+          imagealts: headers.indexOf('imagealts'),
+          pricingtiers: headers.indexOf('pricingtiers')
+        };
+
+        // Quick verification: Name and SKU column are absolutely mandatory
+        if (colMap.name === -1 || colMap.sku === -1) {
+          setImportError('Invalid CSV structure. Missing "Name" or "SKU" columns.');
+          return;
+        }
+
+        const dbProducts = dbLocal.getProducts();
+        const parsedProducts: any[] = [];
+        const seenSkus = new Set<string>();
+
+        for (let idx = 1; idx < lines.length; idx++) {
+          const row = lines[idx];
+          if (row.length === 0 || row.every(cell => cell === '')) continue;
+
+          const getVal = (colKey: string, defaultValue = '') => {
+            const colIdx = colMap[colKey];
+            return colIdx !== undefined && colIdx !== -1 && row[colIdx] !== undefined ? row[colIdx] : defaultValue;
+          };
+
+          const rawSku = getVal('sku').trim();
+          const rawName = getVal('name').trim();
+          
+          if (!rawSku || !rawName) {
+            parsedProducts.push({
+              rowNumber: idx + 1,
+              isValid: false,
+              errors: ['Product Name and SKU are required.'],
+              name: rawName || '[Empty Name]',
+              sku: rawSku || '[Empty SKU]'
+            });
+            continue;
+          }
+
+          const errors: string[] = [];
+          const skuLower = rawSku.toLowerCase();
+
+          // Check if SKU duplicated in current CSV batch
+          if (seenSkus.has(skuLower)) {
+            errors.push(`SKU "${rawSku}" is duplicated in the uploaded CSV file.`);
+          }
+          seenSkus.add(skuLower);
+
+          // Check if SKU duplicated in database
+          const existsInDb = dbProducts.some(p => p.sku.toLowerCase() === skuLower);
+          if (existsInDb) {
+            errors.push(`SKU "${rawSku}" already exists in the catalog database.`);
+          }
+
+          // Fields parsing
+          const brand = getVal('brand', brands[0]?.name || 'SafeShield').trim();
+          const category = getVal('category', categories[0]?.name || 'Diagnostic & Critical Care').trim();
+          const subcategory = getVal('subcategory', category).trim();
+          
+          const vendorPriceNum = Number(getVal('vendorprice', '15000').trim().replace(/[^0-9.]/g, ''));
+          if (isNaN(vendorPriceNum) || vendorPriceNum <= 0) {
+            errors.push('Vendor Price (Sale price) must be a positive number.');
+          }
+
+          const mrpNum = Number(getVal('mrp', '').trim().replace(/[^0-9.]/g, '')) || Math.round(vendorPriceNum * 1.25);
+          const wholesalePriceNum = Number(getVal('wholesaleprice', '').trim().replace(/[^0-9.]/g, '')) || Math.round(vendorPriceNum * 0.9);
+          const stockQuantity = Number(getVal('stockquantity', '10').trim().replace(/[^0-9]/g, '')) || 10;
+          const minOrderQty = Number(getVal('minorderqty', '1').trim().replace(/[^0-9]/g, '')) || 1;
+          const gstRate = Number(getVal('gstrate', '12').trim().replace(/[^0-9]/g, '')) || 12;
+
+          // Parse image metadata and URLs
+          const imageUrlsStr = getVal('imageurls');
+          const imageAltsStr = getVal('imagealts');
+          const urlsList = imageUrlsStr ? imageUrlsStr.split(';').map(u => u.trim()).filter(Boolean) : [];
+          if (urlsList.length === 0) {
+            urlsList.push('https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800');
+          }
+          const altsList = imageAltsStr ? imageAltsStr.split(';').map(a => a.trim()) : [];
+          const imageMetadata = urlsList.map((url, i) => ({
+            url,
+            alt: altsList[i] || `${rawName} Image ${i + 1}`,
+            description: altsList[i] || `${rawName} Image ${i + 1}`
+          }));
+
+          // Parse pricing tiers: Qty:Price;Qty:Price
+          const pricingTiersStr = getVal('pricingtiers');
+          const parsedTiers: { minQty: number; price: number; }[] = [];
+          if (pricingTiersStr) {
+            const tiersList = pricingTiersStr.split(';').map(t => t.trim()).filter(Boolean);
+            tiersList.forEach(tierItem => {
+              const [qtyPart, pricePart] = tierItem.split(':');
+              const qtyVal = Number(qtyPart?.trim());
+              const priceVal = Number(pricePart?.trim());
+              if (!isNaN(qtyVal) && !isNaN(priceVal)) {
+                parsedTiers.push({ minQty: qtyVal, price: priceVal });
+              }
+            });
+          }
+
+          parsedProducts.push({
+            rowNumber: idx + 1,
+            isValid: errors.length === 0,
+            errors,
+            name: rawName,
+            sku: rawSku,
+            modelNumber: getVal('modelnumber').trim(),
+            brand,
+            category,
+            subcategory,
+            vendorPrice: vendorPriceNum,
+            mrp: mrpNum,
+            wholesalePrice: wholesalePriceNum,
+            stockQuantity,
+            minOrderQty,
+            hsnCode: getVal('hsncode', '9018').trim(),
+            gstRate,
+            warranty: getVal('warranty', '1 Year Warranty').trim(),
+            countryOfOrigin: getVal('countryoforigin', 'India').trim(),
+            unit: getVal('unit', 'Piece').trim(),
+            shortDescription: getVal('shortdescription', rawName).trim(),
+            fullDescription: getVal('fulldescription', rawName).trim(),
+            images: urlsList,
+            imageMetadata,
+            pricingTiers: parsedTiers
+          });
+        }
+
+        setImportProducts(parsedProducts);
+      } catch (err) {
+        console.error('Error reading CSV:', err);
+        setImportError('Failed to parse the CSV file. Please make sure the format is correct.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmBulkImport = () => {
+    const validProds = importProducts.filter(p => p.isValid);
+    if (validProds.length === 0) {
+      setImportError('No valid products to import.');
+      return;
+    }
+
+    const globalCommissionRate = dbLocal.getPaymentSettings().platformCommissionRate || 10;
+    const now = new Date().toISOString();
+
+    validProds.forEach(prod => {
+      const commissionAmount = Math.round((prod.vendorPrice * globalCommissionRate) / 100 * 100) / 100;
+      const finalPrice = prod.vendorPrice + commissionAmount;
+      const vendorPayout = prod.vendorPrice;
+
+      const newProd: Product = {
+        id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        vendorId: vendor.id,
+        vendorName: vendor.companyName,
+        name: prod.name,
+        sku: prod.sku,
+        modelNumber: prod.modelNumber || `MOD-${Math.floor(1000 + Math.random() * 9000)}`,
+        brand: prod.brand,
+        category: prod.category,
+        subcategory: prod.subcategory,
+        description: prod.shortDescription || prod.name,
+        shortDescription: prod.shortDescription,
+        fullDescription: prod.fullDescription,
+        price: finalPrice,
+        mrp: prod.mrp || finalPrice * 1.2,
+        salePrice: finalPrice,
+        wholesalePrice: prod.wholesalePrice,
+        moq: prod.minOrderQty,
+        stockQuantity: prod.stockQuantity,
+        hsnCode: prod.hsnCode,
+        gstRate: prod.gstRate,
+        warranty: prod.warranty,
+        countryOfOrigin: prod.countryOfOrigin,
+        unit: prod.unit,
+        images: prod.images,
+        imageMetadata: prod.imageMetadata,
+        pricingTiers: prod.pricingTiers,
+        specifications: [],
+        
+        vendorPrice: prod.vendorPrice,
+        commissionRate: globalCommissionRate,
+        commissionAmount,
+        finalPrice,
+        vendorPayout,
+
+        status: 'Pending',
+        published: false,
+        isActive: false,
+        approvedBy: '',
+        approvedAt: null,
+        publishedAt: null,
+        rejectedAt: null,
+        rejectReason: '',
+        rejectionReason: '',
+        createdAt: now,
+        updatedAt: now,
+        performance: { views: 0, inquiries: 0, sales: 0 }
+      };
+
+      dbLocal.addProduct(newProd);
+
+      dbLocal.addNotification(
+        'admin',
+        `Bulk Product Upload: ${newProd.name}`,
+        `Vendor "${vendor.companyName}" uploaded product "${newProd.name}" (SKU: ${newProd.sku}) via Bulk Import.`,
+        'info'
+      );
+    });
+
+    dbLocal.addNotification(
+      vendor.id,
+      `Bulk Import Completed`,
+      `Successfully imported ${validProds.length} products to your catalog. They are awaiting Admin review.`,
+      'success'
+    );
+
+    showToast(`Successfully imported ${validProds.length} products!`);
+    setShowBulkImportModal(false);
+    onRefresh();
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleCsvFileChange(e.dataTransfer.files[0]);
+    }
+  };
+
   const handleExportCsv = () => {
     const headers = ['ID', 'Name', 'SKU', 'Model Number', 'Category', 'Brand', 'MSRP', 'Vendor Price', 'Est. Payout', 'Stock Quantity', 'MOQ', 'Status', 'Views', 'Inquiries'];
     const rows = filteredProducts.map(p => [
@@ -464,6 +858,17 @@ export default function VendorProductManager({
           >
             <Download className="w-4 h-4" />
             Export CSV
+          </button>
+          <button
+            onClick={() => {
+              setImportProducts([]);
+              setImportError(null);
+              setShowBulkImportModal(true);
+            }}
+            className="bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-xs px-4 py-2.5 rounded-xl transition border border-teal-200 flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4 text-teal-600" />
+            Bulk Import
           </button>
           <button
             onClick={() => setShowCategoryRequestModal(true)}
@@ -717,6 +1122,38 @@ export default function VendorProductManager({
                           </span>
                         </div>
                       </div>
+
+                      {/* Pricing Tiers & Image Metadata Badge */}
+                      {((p.pricingTiers && p.pricingTiers.length > 0) || (p.imageMetadata && p.imageMetadata.length > 0)) && (
+                        <div className="mt-3 pt-2.5 border-t border-dashed border-slate-100 flex flex-wrap gap-2">
+                          {p.pricingTiers && p.pricingTiers.length > 0 && (
+                            <span className="text-[10px] bg-indigo-50 text-indigo-700 font-extrabold px-2 py-0.5 rounded-full border border-indigo-100 flex items-center gap-1" title={p.pricingTiers.map(t => `${t.minQty}+: ₹${t.price}`).join(', ')}>
+                              <Tag className="w-3 h-3" />
+                              {p.pricingTiers.length} Pricing Tiers
+                            </span>
+                          )}
+                          {p.imageMetadata && p.imageMetadata.length > 0 && (
+                            <span className="text-[10px] bg-sky-50 text-sky-700 font-extrabold px-2 py-0.5 rounded-full border border-sky-100 flex items-center gap-1" title={p.imageMetadata.map(m => m.alt).join(', ')}>
+                              <Globe className="w-3 h-3" />
+                              {p.imageMetadata.length} Image Alts
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {p.pricingTiers && p.pricingTiers.length > 0 && (
+                        <div className="mt-2.5 bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Wholesale Pricing Tiers</span>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {p.pricingTiers.map((tier, idx) => (
+                              <div key={idx} className="flex justify-between text-[11px] bg-white px-2 py-1 rounded-md border border-slate-200/50 font-mono">
+                                <span className="text-slate-500 font-bold">{tier.minQty}+ units</span>
+                                <span className="text-teal-700 font-extrabold">₹{tier.price.toLocaleString('en-IN')}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -913,6 +1350,220 @@ export default function VendorProductManager({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Bulk Import Products Modal */}
+      {showBulkImportModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden my-auto">
+            
+            {/* Modal Header */}
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-teal-500/20 text-teal-400 rounded-xl border border-teal-500/30">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold">Bulk Product Catalog Import</h3>
+                  <p className="text-[11px] text-slate-400">Upload multiple medical instruments, set wholesale tiers, and map product images instantly.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowBulkImportModal(false)} 
+                className="p-2 text-slate-400 hover:text-white rounded-lg transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+              
+              {/* Instructions and Download Template Row */}
+              <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="space-y-1">
+                  <h4 className="font-extrabold text-slate-800 text-sm">Download the Official CSV Template</h4>
+                  <p className="text-slate-500 leading-relaxed max-w-xl">
+                    Ensure your columns match our format, including custom headers for <strong className="text-teal-800">pricing tiers</strong> (e.g., <code>10:1500;50:1400</code>) and <strong className="text-teal-800">image metadata/alts</strong>.
+                  </p>
+                </div>
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold px-4.5 py-2.5 rounded-xl transition flex items-center gap-2 shadow-sm whitespace-nowrap"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Template CSV
+                </button>
+              </div>
+
+              {/* Drag and Drop Zone */}
+              <div
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-2xl p-8 text-center transition flex flex-col items-center justify-center gap-3 cursor-pointer ${
+                  dragActive 
+                    ? 'border-teal-600 bg-teal-50/20' 
+                    : 'border-slate-200 hover:border-teal-500 hover:bg-slate-50/30'
+                }`}
+                onClick={() => document.getElementById('csv-file-input')?.click()}
+              >
+                <input
+                  id="csv-file-input"
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleCsvFileChange(e.target.files[0]);
+                    }
+                  }}
+                />
+                <div className="p-3 bg-slate-100 text-slate-600 rounded-2xl">
+                  <Upload className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="font-extrabold text-slate-800 text-sm">Drag & drop your populated CSV here</p>
+                  <p className="text-slate-400 mt-0.5">or click to browse from local computer files</p>
+                </div>
+              </div>
+
+              {importError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl flex items-start gap-3">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                  <div>
+                    <span className="font-extrabold block">Validation Error</span>
+                    <span className="text-[11px] leading-relaxed">{importError}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Parsed Products Table Preview */}
+              {importProducts.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                      <span>Import Preview</span>
+                      <span className="bg-slate-100 text-slate-600 font-mono text-xs px-2.5 py-0.5 rounded-full border border-slate-200">
+                        {importProducts.filter(p => p.isValid).length} / {importProducts.length} Valid Rows
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 font-medium">Please review records below before finalizing imports.</p>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+                    <div className="overflow-x-auto max-h-[32vh]">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-900 text-white font-bold border-b border-slate-100 text-[10px] uppercase tracking-wider">
+                            <th className="p-3 pl-4">Row</th>
+                            <th className="p-3">Status</th>
+                            <th className="p-3">SKU</th>
+                            <th className="p-3">Product Name</th>
+                            <th className="p-3">Brand</th>
+                            <th className="p-3">Category</th>
+                            <th className="p-3 text-right">Vendor Price (₹)</th>
+                            <th className="p-3">Tiers</th>
+                            <th className="p-3">Images</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-[11px]">
+                          {importProducts.map((p, index) => (
+                            <React.Fragment key={index}>
+                              <tr className={`hover:bg-slate-50/50 ${!p.isValid ? 'bg-rose-50/20' : ''}`}>
+                                <td className="p-3 pl-4 font-mono font-bold text-slate-400">#{p.rowNumber}</td>
+                                <td className="p-3">
+                                  {p.isValid ? (
+                                    <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 font-extrabold px-2.5 py-1 rounded-full border border-emerald-100">
+                                      <Check className="w-3 h-3" /> Valid
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 font-extrabold px-2.5 py-1 rounded-full border border-rose-100">
+                                      <X className="w-3 h-3" /> Error
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-3 font-mono font-bold text-slate-700">{p.sku}</td>
+                                <td className="p-3 font-extrabold text-slate-900 max-w-xs truncate" title={p.name}>{p.name}</td>
+                                <td className="p-3 font-semibold text-slate-600">{p.brand}</td>
+                                <td className="p-3 text-slate-500">{p.category}</td>
+                                <td className="p-3 text-right font-mono font-black text-slate-900">
+                                  ₹{(p.vendorPrice || 0).toLocaleString('en-IN')}
+                                </td>
+                                <td className="p-3">
+                                  {p.pricingTiers && p.pricingTiers.length > 0 ? (
+                                    <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md border border-indigo-100" title={p.pricingTiers.map((t: any) => `${t.minQty}+: ₹${t.price}`).join(', ')}>
+                                      {p.pricingTiers.length} tiers
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400">-</span>
+                                  )}
+                                </td>
+                                <td className="p-3">
+                                  {p.imageMetadata && p.imageMetadata.length > 0 ? (
+                                    <span className="bg-sky-50 text-sky-700 font-bold px-2 py-0.5 rounded-md border border-sky-100" title={p.imageMetadata.map((m: any) => m.alt).join(', ')}>
+                                      {p.imageMetadata.length} imgs
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                              {!p.isValid && p.errors && p.errors.length > 0 && (
+                                <tr className="bg-rose-50/10">
+                                  <td colSpan={9} className="p-3 pl-12 bg-rose-50/30 border-b border-rose-100">
+                                    <div className="flex flex-col gap-1">
+                                      {p.errors.map((err: string, errIdx: number) => (
+                                        <div key={errIdx} className="text-rose-600 font-bold flex items-center gap-1.5">
+                                          <AlertCircle className="w-3 h-3" />
+                                          <span>{err}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowBulkImportModal(false)}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold px-5 py-3 rounded-xl transition text-xs"
+              >
+                Cancel
+              </button>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleConfirmBulkImport}
+                  disabled={importProducts.filter(p => p.isValid).length === 0}
+                  className={`font-extrabold px-6 py-3 rounded-xl transition text-xs shadow-md flex items-center gap-2 ${
+                    importProducts.filter(p => p.isValid).length > 0
+                      ? 'bg-teal-700 hover:bg-teal-800 text-white'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                  }`}
+                >
+                  <Check className="w-4 h-4 stroke-[2.5]" />
+                  <span>Confirm and Import ({importProducts.filter(p => p.isValid).length} Products)</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
         </div>
       )}
 
