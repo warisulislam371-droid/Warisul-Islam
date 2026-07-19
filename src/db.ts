@@ -967,6 +967,7 @@ export const dbLocal = {
     const old = this.getPromoBanners();
     this.set(STORAGE_KEYS.PROMO_BANNERS, banners);
     syncListToFirestoreWithDeletions('promo_banners', banners, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Dynamic Categories

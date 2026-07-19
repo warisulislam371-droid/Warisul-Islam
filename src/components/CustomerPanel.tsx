@@ -43,7 +43,11 @@ import {
   ChevronRight,
   Headphones,
   BadgeDollarSign,
-  ArrowUpDown
+  ArrowUpDown,
+  Trash2,
+  Eye,
+  EyeOff,
+  Edit
 } from 'lucide-react';
 import InvoicePDF from './InvoicePDF';
 import HomepageTrustSection from './HomepageTrustSection';
@@ -96,9 +100,118 @@ export default function CustomerPanel({
   const [reviews, setReviews] = useState<Review[]>([]);
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>([]);
   const [activeBannerIdx, setActiveBannerIdx] = useState(0);
+  const carouselBanners = promoBanners.filter(b => b.isActive);
+  const [isInlineUploadingBanner, setIsInlineUploadingBanner] = useState(false);
+  const [inlineEditingBanner, setInlineEditingBanner] = useState<PromoBanner | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [inlineBannerForm, setInlineBannerForm] = useState<Omit<PromoBanner, 'id' | 'createdAt'>>({
+    title: '',
+    subtitle: '',
+    imageUrl: '',
+    linkUrl: '#catalog',
+    buttonText: 'Explore Catalog',
+    badgeText: 'CLINICAL QUALITY ASSURED • WHOLESALE PRICING',
+    positionOrder: 1,
+    isActive: true
+  });
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [categories, setCategories] = useState<Category[]>(() => dbLocal.getCategories().filter(c => c.isActive !== false));
   const [brands, setBrands] = useState<Brand[]>(() => dbLocal.getBrands().filter(b => b.isActive !== false));
+
+  const handleBannerImageUpload = (file: File, isEdit: boolean) => {
+    if (file.size > 8 * 1024 * 1024) {
+      addToast('Image file size exceeds the 8MB limit.', 'error');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      addToast('Unsupported file format. Please upload an image.', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        if (isEdit) {
+          setInlineEditingBanner(prev => prev ? { ...prev, imageUrl: e.target.result as string } : null);
+        } else {
+          setInlineBannerForm(prev => ({ ...prev, imageUrl: e.target.result as string }));
+        }
+        addToast('Banner image uploaded and processed successfully!', 'success');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+  };
+
+  const handleBannerDrop = (e: React.DragEvent, isEdit: boolean) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleBannerImageUpload(e.dataTransfer.files[0], isEdit);
+    }
+  };
+
+  const handleSaveNewBannerInline = () => {
+    if (!inlineBannerForm.title.trim() || !inlineBannerForm.imageUrl.trim()) {
+      addToast('Banner Title and Image URL/File are required!', 'error');
+      return;
+    }
+    const newBanner: PromoBanner = {
+      ...inlineBannerForm,
+      id: `banner-${Date.now()}`,
+      createdAt: new Date().toISOString()
+    };
+    const list = [newBanner, ...dbLocal.getPromoBanners()];
+    dbLocal.savePromoBanners(list);
+    setIsInlineUploadingBanner(false);
+    setInlineBannerForm({
+      title: '',
+      subtitle: '',
+      imageUrl: '',
+      linkUrl: '#catalog',
+      buttonText: 'Explore Catalog',
+      badgeText: 'CLINICAL QUALITY ASSURED • WHOLESALE PRICING',
+      positionOrder: list.length + 1,
+      isActive: true
+    });
+    addToast('Promotional banner published successfully!', 'success');
+  };
+
+  const handleUpdateBannerInline = () => {
+    if (!inlineEditingBanner) return;
+    if (!inlineEditingBanner.title.trim() || !inlineEditingBanner.imageUrl.trim()) {
+      addToast('Banner Title and Image URL/File are required!', 'error');
+      return;
+    }
+    const list = dbLocal.getPromoBanners().map(b => b.id === inlineEditingBanner.id ? inlineEditingBanner : b);
+    dbLocal.savePromoBanners(list);
+    setInlineEditingBanner(null);
+    addToast('Promotional banner updated successfully!', 'success');
+  };
+
+  const handleToggleBannerActiveInline = (id: string) => {
+    const list = dbLocal.getPromoBanners().map(b => b.id === id ? { ...b, isActive: !b.isActive } : b);
+    dbLocal.savePromoBanners(list);
+    addToast('Banner display status toggled.', 'success');
+  };
+
+  const handleDeleteBannerInline = (id: string, title: string) => {
+    if (!confirm(`Permanently remove banner "${title}"?`)) return;
+    const list = dbLocal.getPromoBanners().filter(b => b.id !== id);
+    dbLocal.savePromoBanners(list);
+    addToast('Promotional banner deleted.', 'info');
+  };
 
   // AI-Powered state variables
   const [aiSearchResults, setAiSearchResults] = useState<{ productId: string; relevanceScore: number; aiInsight: string }[]>([]);
@@ -244,7 +357,8 @@ export default function CustomerPanel({
     const currentSettings = dbLocal.getPaymentSettings();
     setPaymentSettings(currentSettings);
 
-    const liveBanners = dbLocal.getPromoBanners().filter(b => b.isActive).sort((a, b) => (a.positionOrder || 0) - (b.positionOrder || 0));
+    const allBanners = dbLocal.getPromoBanners().sort((a, b) => (a.positionOrder || 0) - (b.positionOrder || 0));
+    const liveBanners = currentUser?.role === 'super_admin' ? allBanners : allBanners.filter(b => b.isActive);
     setPromoBanners(prev => {
       if (JSON.stringify(prev) === JSON.stringify(liveBanners)) return prev;
       return liveBanners;
@@ -272,12 +386,12 @@ export default function CustomerPanel({
   }, [currentUser]);
 
   useEffect(() => {
-    if (promoBanners.length <= 1) return;
+    if (carouselBanners.length <= 1) return;
     const sliderInterval = setInterval(() => {
-      setActiveBannerIdx((prev) => (prev + 1) % promoBanners.length);
+      setActiveBannerIdx((prev) => (prev + 1) % carouselBanners.length);
     }, 6000);
     return () => clearInterval(sliderInterval);
-  }, [promoBanners.length]);
+  }, [carouselBanners.length]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && products.length > 0) {
@@ -972,13 +1086,13 @@ export default function CustomerPanel({
         <div className="space-y-8 animate-fade-in">
           
           {/* Dynamic Promo Banner Carousel */}
-          {promoBanners && promoBanners.length > 0 ? (
+          {carouselBanners && carouselBanners.length > 0 ? (
             <div className="relative w-full rounded-3xl overflow-hidden shadow-2xl border border-slate-200/50 min-h-[400px] sm:min-h-[460px] flex items-center transition-all duration-700 group/carousel">
               {/* Active Banner Background Image */}
               <div className="absolute inset-0 z-0">
                 <img
-                  src={promoBanners[activeBannerIdx].imageUrl}
-                  alt={promoBanners[activeBannerIdx].title}
+                  src={carouselBanners[activeBannerIdx]?.imageUrl || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=1600'}
+                  alt={carouselBanners[activeBannerIdx]?.title || 'Promotional Banner'}
                   className="w-full h-full object-cover transition-all duration-1000 ease-in-out transform scale-100"
                   referrerPolicy="no-referrer"
                 />
@@ -991,9 +1105,9 @@ export default function CustomerPanel({
               <div className="w-full relative z-10 flex flex-col lg:flex-row items-center justify-between gap-10 py-14 sm:py-24 px-6 sm:px-12 text-white">
                 <div className="max-w-2xl space-y-6">
                   <div className="flex flex-wrap items-center gap-2.5">
-                    {promoBanners[activeBannerIdx].badgeText && (
+                    {carouselBanners[activeBannerIdx]?.badgeText && (
                       <span className="inline-block bg-teal-500/20 text-teal-300 backdrop-blur-md border border-teal-500/40 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
-                        ⚡ {promoBanners[activeBannerIdx].badgeText}
+                        ⚡ {carouselBanners[activeBannerIdx]?.badgeText}
                       </span>
                     )}
                     <span className="inline-block bg-emerald-500 text-slate-950 text-[10px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-md">
@@ -1001,17 +1115,18 @@ export default function CustomerPanel({
                     </span>
                   </div>
                   <h1 className="text-3xl sm:text-[38px] font-bold text-white tracking-tight leading-tight font-sans drop-shadow-sm">
-                    {promoBanners[activeBannerIdx].title}
+                    {carouselBanners[activeBannerIdx]?.title}
                   </h1>
-                  {promoBanners[activeBannerIdx].subtitle && (
+                  {carouselBanners[activeBannerIdx]?.subtitle && (
                     <p className="text-sm sm:text-lg text-slate-200 leading-relaxed max-w-lg font-medium drop-shadow-sm">
-                      {promoBanners[activeBannerIdx].subtitle}
+                      {carouselBanners[activeBannerIdx]?.subtitle}
                     </p>
                   )}
                   <div className="flex flex-wrap gap-3.5 pt-3">
                     <button
+                      id="carousel-cta-btn"
                       onClick={() => {
-                        const link = promoBanners[activeBannerIdx].linkUrl;
+                        const link = carouselBanners[activeBannerIdx]?.linkUrl;
                         if (link && link.startsWith('#')) {
                           const el = document.getElementById(link.substring(1));
                           if (el) {
@@ -1031,10 +1146,11 @@ export default function CustomerPanel({
                       }}
                       className="bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-extrabold px-7 py-4 rounded-xl transition duration-300 shadow-xl flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0 border border-teal-500/30"
                     >
-                      <span>{promoBanners[activeBannerIdx].buttonText || 'Explore Catalog'}</span>
+                      <span>{carouselBanners[activeBannerIdx]?.buttonText || 'Explore Catalog'}</span>
                       <ArrowRight className="w-4.5 h-4.5 text-white" />
                     </button>
                     <button
+                      id="carousel-tenders-btn"
                       onClick={() => {
                         onNavigate('rfqs');
                       }}
@@ -1072,7 +1188,7 @@ export default function CustomerPanel({
                   <div className="bg-slate-950/40 backdrop-blur-xl p-6 rounded-3xl border border-white/15 shadow-2xl space-y-4 transform hover:scale-[1.02] transition-transform duration-500">
                     <div className="h-44 rounded-2xl overflow-hidden relative border border-white/10 shadow-inner">
                       <img
-                        src={promoBanners[activeBannerIdx].imageUrl}
+                        src={carouselBanners[activeBannerIdx]?.imageUrl || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=1600'}
                         alt="Current Offer"
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
@@ -1082,8 +1198,8 @@ export default function CustomerPanel({
                       </span>
                     </div>
                     <div className="space-y-1 text-white">
-                      <h4 className="font-bold text-sm tracking-tight truncate">{promoBanners[activeBannerIdx].title}</h4>
-                      <p className="text-[11px] text-teal-300 font-bold uppercase tracking-wider">{promoBanners[activeBannerIdx].badgeText || 'Exclusive Deal'}</p>
+                      <h4 className="font-bold text-sm tracking-tight truncate">{carouselBanners[activeBannerIdx]?.title}</h4>
+                      <p className="text-[11px] text-teal-300 font-bold uppercase tracking-wider">{carouselBanners[activeBannerIdx]?.badgeText || 'Exclusive Deal'}</p>
                       <div className="flex items-center justify-between pt-2 border-t border-white/10 mt-2">
                         <div>
                           <span className="text-[9px] text-slate-400 block uppercase leading-none">B2B Platform</span>
@@ -1099,12 +1215,13 @@ export default function CustomerPanel({
               </div>
 
               {/* Slider Manual Navigation Chevrons */}
-              {promoBanners.length > 1 && (
+              {carouselBanners.length > 1 && (
                 <>
                   <button
+                    id="carousel-prev-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveBannerIdx((prev) => (prev - 1 + promoBanners.length) % promoBanners.length);
+                      setActiveBannerIdx((prev) => (prev - 1 + carouselBanners.length) % carouselBanners.length);
                     }}
                     className="absolute left-4 z-20 p-2.5 bg-slate-950/50 hover:bg-slate-950/80 border border-white/10 text-white rounded-full transition opacity-0 group-hover/carousel:opacity-100 cursor-pointer hidden sm:block"
                     title="Previous Slide"
@@ -1112,9 +1229,10 @@ export default function CustomerPanel({
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <button
+                    id="carousel-next-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveBannerIdx((prev) => (prev + 1) % promoBanners.length);
+                      setActiveBannerIdx((prev) => (prev + 1) % carouselBanners.length);
                     }}
                     className="absolute right-4 z-20 p-2.5 bg-slate-950/50 hover:bg-slate-950/80 border border-white/10 text-white rounded-full transition opacity-0 group-hover/carousel:opacity-100 cursor-pointer hidden sm:block"
                     title="Next Slide"
@@ -1125,11 +1243,12 @@ export default function CustomerPanel({
               )}
 
               {/* Bottom Dot Indicators */}
-              {promoBanners.length > 1 && (
+              {carouselBanners.length > 1 && (
                 <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 z-20 flex gap-2">
-                  {promoBanners.map((_, idx) => (
+                  {carouselBanners.map((_, idx) => (
                     <button
                       key={idx}
+                      id={`carousel-indicator-${idx}`}
                       onClick={() => setActiveBannerIdx(idx)}
                       className={`w-2.5 h-2.5 rounded-full transition-all duration-300 cursor-pointer ${
                         idx === activeBannerIdx 
@@ -1242,6 +1361,535 @@ export default function CustomerPanel({
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Promotional Spotlights & Admin Inline Banner Manager Section */}
+          <div className="space-y-6" id="b2b-promotional-spotlights-section">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider font-display flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-teal-600 animate-pulse" />
+                  B2B Promotional Spotlights
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                  Verified exclusive deals, seasonal clinical catalogs, and factory-direct equipment bundles
+                </p>
+              </div>
+              {currentUser?.role === 'super_admin' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    id="admin-inline-upload-btn"
+                    onClick={() => {
+                      setInlineBannerForm({
+                        title: '',
+                        subtitle: '',
+                        imageUrl: '',
+                        linkUrl: '#catalog',
+                        buttonText: 'Explore Catalog',
+                        badgeText: 'CLINICAL QUALITY ASSURED • WHOLESALE PRICING',
+                        positionOrder: promoBanners.length + 1,
+                        isActive: true
+                      });
+                      setIsInlineUploadingBanner(true);
+                    }}
+                    className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition duration-300 shadow-md flex items-center gap-2 cursor-pointer border border-teal-600"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Upload New Banner</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {promoBanners && promoBanners.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {promoBanners.map((banner) => {
+                  const isInactive = !banner.isActive;
+                  return (
+                    <div
+                      key={banner.id}
+                      id={`promo-spotlight-card-${banner.id}`}
+                      className={`relative rounded-3xl overflow-hidden shadow-lg border border-slate-200/40 min-h-[220px] flex flex-col justify-between p-6 transition-all duration-300 hover:shadow-xl group/card ${
+                        isInactive ? 'opacity-75' : ''
+                      }`}
+                    >
+                      {/* Background Image */}
+                      <div className="absolute inset-0 z-0">
+                        <img
+                          src={banner.imageUrl || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=1600'}
+                          alt={banner.title}
+                          className={`w-full h-full object-cover transition-transform duration-500 group-hover/card:scale-105 ${
+                            isInactive ? 'filter grayscale blur-[2px]' : ''
+                          }`}
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-900/80 to-slate-900/40" />
+                      </div>
+
+                      {/* Top Action Overlay (Admin Only) */}
+                      <div className="relative z-10 flex items-center justify-between w-full">
+                        <div>
+                          {banner.badgeText && (
+                            <span className="inline-block bg-teal-400/20 text-teal-300 border border-teal-400/30 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+                              ⚡ {banner.badgeText}
+                            </span>
+                          )}
+                          {isInactive && (
+                            <span className="inline-block bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ml-2">
+                              Draft / Hidden
+                            </span>
+                          )}
+                        </div>
+
+                        {currentUser?.role === 'super_admin' && (
+                          <div className="flex gap-1.5 bg-slate-950/75 backdrop-blur-md p-1.5 rounded-xl border border-white/10 opacity-100 sm:opacity-0 group-hover/card:opacity-100 transition-opacity">
+                            <button
+                              id={`admin-btn-toggle-${banner.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleBannerActiveInline(banner.id);
+                              }}
+                              className="p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
+                              title={isInactive ? "Activate Banner" : "Deactivate Banner"}
+                            >
+                              {isInactive ? <Eye className="w-3.5 h-3.5 text-rose-400" /> : <EyeOff className="w-3.5 h-3.5 text-teal-400" />}
+                            </button>
+                            <button
+                              id={`admin-btn-edit-${banner.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setInlineEditingBanner({ ...banner });
+                              }}
+                              className="p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
+                              title="Edit Banner"
+                            >
+                              <Edit className="w-3.5 h-3.5 text-amber-400" />
+                            </button>
+                            <button
+                              id={`admin-btn-delete-${banner.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteBannerInline(banner.id, banner.title);
+                              }}
+                              className="p-1.5 text-slate-300 hover:text-red-400 rounded-lg hover:bg-white/10 transition cursor-pointer"
+                              title="Delete Banner"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Text Content */}
+                      <div className="relative z-10 mt-4 space-y-2 text-white">
+                        <h4 className="font-extrabold text-sm sm:text-base leading-snug tracking-tight drop-shadow-md text-white">
+                          {banner.title}
+                        </h4>
+                        {banner.subtitle && (
+                          <p className="text-xs text-slate-200 line-clamp-2 leading-relaxed drop-shadow-sm font-medium">
+                            {banner.subtitle}
+                          </p>
+                        )}
+                        <div className="pt-2">
+                          <button
+                            id={`promo-cta-btn-${banner.id}`}
+                            onClick={() => {
+                              const link = banner.linkUrl;
+                              if (link && link.startsWith('#')) {
+                                const el = document.getElementById(link.substring(1));
+                                el?.scrollIntoView({ behavior: 'smooth' });
+                              } else if (link && link.includes('rfq')) {
+                                onNavigate('rfqs');
+                              } else {
+                                document.getElementById('marketplace-anchor')?.scrollIntoView({ behavior: 'smooth' });
+                              }
+                            }}
+                            className="bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-extrabold px-4 py-2 rounded-lg transition duration-300 shadow-md inline-flex items-center gap-1.5 cursor-pointer transform hover:-translate-y-0.5"
+                          >
+                            <span>{banner.buttonText || 'Explore Catalog'}</span>
+                            <ArrowRight className="w-3 h-3 text-white" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center bg-slate-50">
+                <Sparkles className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-slate-500 font-bold">No active promotional campaigns at this time.</p>
+                <p className="text-[10px] text-slate-400 mt-1">Please check back later or contact support.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Inline Upload Banner Modal */}
+          {isInlineUploadingBanner && (
+            <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex justify-center items-center p-4">
+              <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-scale-up font-sans text-slate-800">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Plus className="w-5 h-5 text-teal-600 animate-pulse" /> Upload Promotional Banner (Admin)
+                  </h3>
+                  <button
+                    onClick={() => setIsInlineUploadingBanner(false)}
+                    className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer text-lg"
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Form Fields */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Headline / Title *</label>
+                      <input
+                        id="inline-banner-title-input"
+                        type="text"
+                        value={inlineBannerForm.title}
+                        onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, title: e.target.value })}
+                        placeholder="e.g., German ICU Surgical Ventilators"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Subtitle / Description</label>
+                      <textarea
+                        id="inline-banner-subtitle-input"
+                        rows={2}
+                        value={inlineBannerForm.subtitle}
+                        onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, subtitle: e.target.value })}
+                        placeholder="Enter description..."
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Top Badge Text</label>
+                        <input
+                          id="inline-banner-badge-input"
+                          type="text"
+                          value={inlineBannerForm.badgeText}
+                          onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, badgeText: e.target.value })}
+                          placeholder="e.g. SPECIAL OFFER"
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">CTA Button Text</label>
+                        <input
+                          id="inline-banner-btntext-input"
+                          type="text"
+                          value={inlineBannerForm.buttonText}
+                          onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, buttonText: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Display Order</label>
+                        <input
+                          id="inline-banner-order-input"
+                          type="number"
+                          value={inlineBannerForm.positionOrder}
+                          onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, positionOrder: Number(e.target.value) })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Link Destination</label>
+                        <select
+                          id="inline-banner-link-input"
+                          value={inlineBannerForm.linkUrl}
+                          onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, linkUrl: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        >
+                          <option value="#catalog">Shop Marketplace Catalog</option>
+                          <option value="#rfqs">B2B Tender RFQs Page</option>
+                          <option value="#home">Homepage Landing</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Drag and Drop Upload Area & Preview */}
+                  <div className="space-y-4 flex flex-col justify-between">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Banner Graphic Image *</label>
+                      <div
+                        id="inline-banner-dropzone"
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleBannerDrop(e, false)}
+                        onClick={() => document.getElementById('inline-banner-file-input')?.click()}
+                        className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition duration-300 flex flex-col items-center justify-center min-h-[140px] ${
+                          isDraggingFile
+                            ? 'border-teal-500 bg-teal-50/50 scale-[1.02]'
+                            : inlineBannerForm.imageUrl
+                            ? 'border-emerald-500 bg-emerald-50/10'
+                            : 'border-slate-300 bg-slate-50 hover:bg-slate-100/50'
+                        }`}
+                      >
+                        <input
+                          type="file"
+                          id="inline-banner-file-input"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleBannerImageUpload(e.target.files[0], false);
+                            }
+                          }}
+                        />
+                        <Upload className={`w-8 h-8 mb-2 ${inlineBannerForm.imageUrl ? 'text-emerald-500' : 'text-slate-400 animate-bounce'}`} />
+                        <span className="text-xs font-bold text-slate-700 block">
+                          {inlineBannerForm.imageUrl ? '✓ Banner Image Loaded' : 'Drag & drop image file, or click to upload'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-1 block">Supports JPG, PNG, WEBP (Max 8MB)</span>
+                      </div>
+                    </div>
+
+                    {/* Or Paste URL */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Or Paste Image URL</label>
+                      <input
+                        id="inline-banner-url-input"
+                        type="text"
+                        value={inlineBannerForm.imageUrl}
+                        onChange={(e) => setInlineBannerForm({ ...inlineBannerForm, imageUrl: e.target.value })}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+
+                    {/* Live Card Preview */}
+                    <div className="border border-slate-100 rounded-2xl p-3 bg-slate-50">
+                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-2">Live Grid Card Preview</p>
+                      <div className="relative rounded-xl overflow-hidden min-h-[100px] flex flex-col justify-between p-3 bg-slate-900 border border-slate-200/20">
+                        {inlineBannerForm.imageUrl && (
+                          <img
+                            src={inlineBannerForm.imageUrl}
+                            alt="Preview"
+                            className="absolute inset-0 w-full h-full object-cover z-0 opacity-40"
+                          />
+                        )}
+                        <div className="relative z-10">
+                          <span className="inline-block bg-teal-400/20 text-teal-300 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
+                            {inlineBannerForm.badgeText || 'PROMO'}
+                          </span>
+                        </div>
+                        <div className="relative z-10 text-white mt-2">
+                          <h5 className="font-extrabold text-[10px] leading-tight truncate">{inlineBannerForm.title || 'German ICU Surgical Ventilators'}</h5>
+                          <p className="text-[8px] text-slate-200 line-clamp-1 mt-0.5">{inlineBannerForm.subtitle || 'German precision systems...'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    onClick={() => setIsInlineUploadingBanner(false)}
+                    className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    id="inline-banner-submit-btn"
+                    onClick={handleSaveNewBannerInline}
+                    className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs shadow-md transition cursor-pointer border border-teal-600"
+                  >
+                    Publish Now
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Inline Edit Banner Modal */}
+          {inlineEditingBanner && (
+            <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex justify-center items-center p-4">
+              <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-scale-up font-sans text-slate-800">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Edit className="w-5 h-5 text-amber-500 animate-pulse" /> Edit Promotional Banner (Admin)
+                  </h3>
+                  <button
+                    onClick={() => setInlineEditingBanner(null)}
+                    className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer text-lg"
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Form Fields */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Headline / Title *</label>
+                      <input
+                        id="inline-edit-title-input"
+                        type="text"
+                        value={inlineEditingBanner.title}
+                        onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, title: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Subtitle / Description</label>
+                      <textarea
+                        id="inline-edit-subtitle-input"
+                        rows={2}
+                        value={inlineEditingBanner.subtitle || ''}
+                        onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, subtitle: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Top Badge Text</label>
+                        <input
+                          id="inline-edit-badge-input"
+                          type="text"
+                          value={inlineEditingBanner.badgeText || ''}
+                          onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, badgeText: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">CTA Button Text</label>
+                        <input
+                          id="inline-edit-btntext-input"
+                          type="text"
+                          value={inlineEditingBanner.buttonText || ''}
+                          onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, buttonText: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Display Order</label>
+                        <input
+                          id="inline-edit-order-input"
+                          type="number"
+                          value={inlineEditingBanner.positionOrder}
+                          onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, positionOrder: Number(e.target.value) })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Link Destination</label>
+                        <select
+                          id="inline-edit-link-input"
+                          value={inlineEditingBanner.linkUrl || '#catalog'}
+                          onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, linkUrl: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        >
+                          <option value="#catalog">Shop Marketplace Catalog</option>
+                          <option value="#rfqs">B2B Tender RFQs Page</option>
+                          <option value="#home">Homepage Landing</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Drag and Drop Upload Area & Preview */}
+                  <div className="space-y-4 flex flex-col justify-between">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Banner Graphic Image *</label>
+                      <div
+                        id="inline-edit-dropzone"
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleBannerDrop(e, true)}
+                        onClick={() => document.getElementById('inline-edit-file-input')?.click()}
+                        className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition duration-300 flex flex-col items-center justify-center min-h-[140px] ${
+                          isDraggingFile
+                            ? 'border-teal-500 bg-teal-50/50 scale-[1.02]'
+                            : inlineEditingBanner.imageUrl
+                            ? 'border-emerald-500 bg-emerald-50/10'
+                            : 'border-slate-300 bg-slate-50 hover:bg-slate-100/50'
+                        }`}
+                      >
+                        <input
+                          type="file"
+                          id="inline-edit-file-input"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleBannerImageUpload(e.target.files[0], true);
+                            }
+                          }}
+                        />
+                        <Upload className="w-8 h-8 mb-2 text-emerald-500" />
+                        <span className="text-xs font-bold text-slate-700 block">
+                          ✓ Banner Image Loaded (Click to Replace)
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-1 block">Supports JPG, PNG, WEBP (Max 8MB)</span>
+                      </div>
+                    </div>
+
+                    {/* Or Paste URL */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Or Paste Image URL</label>
+                      <input
+                        id="inline-edit-url-input"
+                        type="text"
+                        value={inlineEditingBanner.imageUrl}
+                        onChange={(e) => setInlineEditingBanner({ ...inlineEditingBanner, imageUrl: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+
+                    {/* Live Card Preview */}
+                    <div className="border border-slate-100 rounded-2xl p-3 bg-slate-50">
+                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-2">Live Grid Card Preview</p>
+                      <div className="relative rounded-xl overflow-hidden min-h-[100px] flex flex-col justify-between p-3 bg-slate-900 border border-slate-200/20">
+                        {inlineEditingBanner.imageUrl && (
+                          <img
+                            src={inlineEditingBanner.imageUrl}
+                            alt="Preview"
+                            className="absolute inset-0 w-full h-full object-cover z-0 opacity-40"
+                          />
+                        )}
+                        <div className="relative z-10">
+                          <span className="inline-block bg-teal-400/20 text-teal-300 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
+                            {inlineEditingBanner.badgeText || 'PROMO'}
+                          </span>
+                        </div>
+                        <div className="relative z-10 text-white mt-2">
+                          <h5 className="font-extrabold text-[10px] leading-tight truncate">{inlineEditingBanner.title || 'German ICU Surgical Ventilators'}</h5>
+                          <p className="text-[8px] text-slate-200 line-clamp-1 mt-0.5">{inlineEditingBanner.subtitle || 'German precision systems...'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    onClick={() => setInlineEditingBanner(null)}
+                    className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    id="inline-edit-submit-btn"
+                    onClick={handleUpdateBannerInline}
+                    className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs shadow-md transition cursor-pointer border border-teal-600"
+                  >
+                    Save Changes
+                  </button>
                 </div>
               </div>
             </div>
