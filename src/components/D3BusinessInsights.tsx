@@ -249,11 +249,11 @@ export default function D3BusinessInsights({
 
     // X scale
     const xScale = d3.scalePoint()
-      .domain(salesTrendData.map(d => d.label))
+      .domain(salesTrendData.map((d: any) => d.label))
       .range([0, width]);
 
     // Y scale
-    const maxGross = d3.max(salesTrendData, d => d.gross) || 100000;
+    const maxGross = (d3.max(salesTrendData, (d: any) => d.gross) || 100000) as number;
     const yScale = d3.scaleLinear()
       .domain([0, maxGross * 1.1]) // 10% breathing room
       .range([height, 0]);
@@ -366,14 +366,14 @@ export default function D3BusinessInsights({
       .data(salesTrendData)
       .enter()
       .append('circle')
-      .attr('cx', d => xScale(d.label) || 0)
-      .attr('cy', d => yScale(d.gross))
+      .attr('cx', (d: any) => xScale(d.label) || 0)
+      .attr('cy', (d: any) => yScale(d.gross))
       .attr('r', 5)
       .attr('fill', '#ffffff')
       .attr('stroke', '#0f766e')
       .attr('stroke-width', 2)
       .style('cursor', 'pointer')
-      .on('mouseover', function (event, d) {
+      .on('mouseover', function (event, d: any) {
         d3.select(this)
           .transition()
           .duration(150)
@@ -508,12 +508,12 @@ export default function D3BusinessInsights({
 
     // Y scale (categories)
     const yScale = d3.scaleBand()
-      .domain(categoryData.map(d => d.category))
+      .domain(categoryData.map((d: any) => d.category))
       .range([0, height])
       .padding(0.28);
 
     // X scale (revenue)
-    const maxRevenue = d3.max(categoryData, d => d.revenue) || 100000;
+    const maxRevenue = (d3.max(categoryData, (d: any) => d.revenue) || 100000) as number;
     const xScale = d3.scaleLinear()
       .domain([0, maxRevenue * 1.05])
       .range([0, width]);
@@ -524,7 +524,7 @@ export default function D3BusinessInsights({
       .enter()
       .append('rect')
       .attr('class', 'bg-bar')
-      .attr('y', d => yScale(d.category) || 0)
+      .attr('y', (d: any) => yScale(d.category) || 0)
       .attr('x', 0)
       .attr('height', yScale.bandwidth())
       .attr('width', width)
@@ -540,10 +540,10 @@ export default function D3BusinessInsights({
       .enter()
       .append('rect')
       .attr('class', 'value-bar')
-      .attr('y', d => yScale(d.category) || 0)
+      .attr('y', (d: any) => yScale(d.category) || 0)
       .attr('x', 0)
       .attr('height', yScale.bandwidth())
-      .attr('fill', (d, i) => colors[i % colors.length])
+      .attr('fill', (d: any, i: number) => colors[i % colors.length])
       .attr('rx', 4)
       .style('cursor', 'pointer');
 
@@ -551,11 +551,11 @@ export default function D3BusinessInsights({
     bars.transition()
       .duration(1000)
       .ease(d3.easeCubicOut)
-      .attr('width', d => xScale(d.revenue));
+      .attr('width', (d: any) => xScale(d.revenue));
 
     const tooltipDiv = d3.select('#d3-category-tooltip');
 
-    bars.on('mouseover', function (event, d) {
+    bars.on('mouseover', function (event, d: any) {
       d3.select(this)
         .transition()
         .duration(150)
@@ -608,13 +608,13 @@ export default function D3BusinessInsights({
       .enter()
       .append('text')
       .attr('class', 'bar-val')
-      .attr('y', d => (yScale(d.category) || 0) + yScale.bandwidth() / 2 + 3)
-      .attr('x', d => xScale(d.revenue) + 6)
+      .attr('y', (d: any) => (yScale(d.category) || 0) + yScale.bandwidth() / 2 + 3)
+      .attr('x', (d: any) => xScale(d.revenue) + 6)
       .attr('font-size', '8px')
       .attr('font-family', 'monospace')
       .attr('font-weight', 'bold')
       .attr('fill', '#475569')
-      .text(d => `₹${Math.round(d.revenue / 1000)}k`);
+      .text((d: any) => `₹${Math.round(d.revenue / 1000)}k`);
 
   }, [categoryData, categorySize]);
 

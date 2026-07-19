@@ -1887,24 +1887,9 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                   <Wallet className="w-5 h-5 text-teal-700" />
                   Vendor Earnings & Settlement Wallet
                 </h3>
-                <span className="text-xs bg-slate-100 text-slate-700 font-bold px-3 py-1 rounded-full border border-slate-200">
-                  Platform Commission: <strong className="text-teal-800">{commRate}%</strong>
-                </span>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Sales</span>
-                  <p className="text-xl font-black text-slate-900 mt-1 font-display">₹{totalSales.toLocaleString()}</p>
-                  <span className="text-[9px] text-slate-500 font-medium">{completedOrders.length} completed orders</span>
-                </div>
-
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 block">Commission ({commRate}%)</span>
-                  <p className="text-xl font-black text-rose-600 mt-1 font-display">-₹{totalComm.toLocaleString()}</p>
-                  <span className="text-[9px] text-slate-500 font-medium">Platform fee deducted</span>
-                </div>
-
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 block">Net Earnings</span>
                   <p className="text-xl font-black text-slate-800 mt-1 font-display">₹{netEarnings.toLocaleString()}</p>
@@ -1928,24 +1913,6 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                   <p className="text-xl font-black text-emerald-700 mt-1 font-display">₹{totalWithdrawn.toLocaleString()}</p>
                   <span className="text-[9px] text-slate-500 font-medium">Paid into bank/UPI</span>
                 </div>
-              </div>
-            </div>
-
-            {/* Automatic Calculation Example Box */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 text-white p-5 rounded-2xl shadow-sm border border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Percent className="w-4 h-4 text-teal-400" />
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-teal-300">Automatic Settlement Calculation Rule</h4>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
-                  For every completed order, HealNex automatically calculates earnings: <strong className="text-white">Order Amount - Platform Commission ({commRate}%) = Vendor Net Earnings</strong>. Upon payout approval, your Available Balance drops to ₹0 while Total Withdrawn reflects the cleared transfer.
-                </p>
-              </div>
-              <div className="bg-white/10 backdrop-blur border border-white/20 px-4 py-3 rounded-xl text-xs font-mono shrink-0 space-y-1">
-                <div className="flex justify-between gap-4"><span className="text-slate-300">Ex. Order:</span> <strong className="text-white">₹10,000</strong></div>
-                <div className="flex justify-between gap-4"><span className="text-rose-300">Commission ({commRate}%):</span> <strong className="text-rose-300">-₹1,000</strong></div>
-                <div className="border-t border-white/20 pt-1 flex justify-between gap-4"><span className="text-emerald-300 font-bold">Net Wallet:</span> <strong className="text-emerald-300 font-bold">₹9,000</strong></div>
               </div>
             </div>
 
@@ -2173,15 +2140,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                     </div>
 
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Gross Sales Revenue Covered:</span>
-                        <span className="font-bold">₹{(viewInvoiceModal.grossSales ?? viewInvoiceModal.amount).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Platform Commission Rate:</span>
-                        <span className="font-bold text-rose-600">{viewInvoiceModal.commissionRate ?? commRate}%</span>
-                      </div>
-                      <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-black text-slate-900">
+                      <div className="flex justify-between text-sm font-black text-slate-900">
                         <span>Net Payout Settlement Amount:</span>
                         <span className="text-teal-800 font-display">₹{viewInvoiceModal.amount.toLocaleString()}</span>
                       </div>
@@ -2198,7 +2157,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                     )}
 
                     <div className="text-[10px] text-slate-400 leading-relaxed border-t border-slate-100 pt-3">
-                      This is an electronically generated settlement statement from HealNex Medi Bazar Platform Administration. All platform commission fees are calculated strictly as per vendor marketplace agreement.
+                      This is an electronically generated settlement statement from HealNex Medi Bazar Platform Administration.
                     </div>
                   </div>
 
