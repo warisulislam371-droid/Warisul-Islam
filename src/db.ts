@@ -217,8 +217,31 @@ function listenToCollection<T extends { id: string }>(collName: string, storageK
         syncedHashes.set(`${collName}/${data.id}`, JSON.stringify(sanitizeForFirestore(data)));
       }
     });
-    if (items.length > 0) {
-      const serialized = JSON.stringify(items);
+
+    let finalItems = [...items];
+    try {
+      const currentStoredRaw = localStorage.getItem(storageKey);
+      if (currentStoredRaw) {
+        const localItems = JSON.parse(currentStoredRaw);
+        if (Array.isArray(localItems)) {
+          const incomingIds = new Set(items.map(item => item.id));
+          const unsynced = localItems.filter(localItem => {
+            if (!localItem || !localItem.id) return false;
+            if (incomingIds.has(localItem.id)) return false;
+            const hashKey = `${collName}/${localItem.id}`;
+            return !syncedHashes.has(hashKey);
+          });
+          if (unsynced.length > 0) {
+            finalItems = [...unsynced, ...items];
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`Error merging local and firestore lists for '${collName}':`, e);
+    }
+
+    if (finalItems.length > 0) {
+      const serialized = JSON.stringify(finalItems);
       const currentStored = localStorage.getItem(storageKey);
       if (currentStored !== serialized) {
         localStorage.setItem(storageKey, serialized);
