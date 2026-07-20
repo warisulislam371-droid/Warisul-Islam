@@ -1881,7 +1881,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
         return (
           <div className="space-y-6 animate-fade-in pb-12">
             {/* Wallet Dashboard Cards */}
-            <div>
+            <div className="hidden">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-base font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
                   <Wallet className="w-5 h-5 text-teal-700" />
