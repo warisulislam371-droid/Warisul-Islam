@@ -437,6 +437,47 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
     onClose();
   };
 
+  const handleAutofillVendor = () => {
+    const randomId = Math.floor(100 + Math.random() * 900);
+    setEmail(`supplier_${randomId}@apexmed.com`);
+    setPassword('123456');
+    setCompanyName('Apex Bio-Medical India Ltd');
+    setOwnerName('Dr. Rajesh Verma');
+    setMobileNumber('+91 98765 43210');
+    setGstNumber('07APEXB1234A1Z1');
+    setPanNumber('APEXB1234A');
+    setAadhaarNumber('9876 5432 1098');
+    setAddress('Industrial Complex Okhla, Phase-III, Plot 45A');
+    setState('Delhi');
+    setDistrict('South Delhi');
+    setPincode('110020');
+    setBankName('HDFC Bank Ltd');
+    setBankAccNumber('50100987654321');
+    setBankIfsc('HDFC0000021');
+
+    setUploadedDocs(prev => ({
+      ...prev,
+      gstCertificate: {
+        name: 'gst_cert_apex_signed.pdf',
+        size: '1.42 MB',
+        url: 'data:text/plain;base64,ZGVtbw==',
+        previewUrl: generateDocumentCanvas('GST Certificate (Form REG-06)', 'gst_cert_apex_signed.pdf', '1.42 MB'),
+        progress: 100,
+        isUploading: false
+      },
+      companyRegCertificate: {
+        name: 'coi_certificate_apex.pdf',
+        size: '2.10 MB',
+        url: 'data:text/plain;base64,ZGVtbw==',
+        previewUrl: generateDocumentCanvas('Company Registration Certificate', 'coi_certificate_apex.pdf', '2.10 MB'),
+        progress: 100,
+        isUploading: false
+      }
+    }));
+
+    addToast('Demo supplier profile and regulatory documents auto-filled! Ready to submit.', 'success');
+  };
+
   const handleRegisterVendor = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -932,6 +973,22 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
             {/* 4. Robust Vendor Onboarding form */}
             {mode === 'register_vendor' && (
               <form onSubmit={handleRegisterVendor} className="space-y-6 font-medium">
+                
+                {/* Autofill helper banner */}
+                <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-teal-950">
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-teal-900">Want to test registration quickly?</p>
+                    <p className="text-slate-600">Populate the entire form & valid documents with 1-click to submit and see the pending approval page.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAutofillVendor}
+                    className="shrink-0 bg-teal-600 hover:bg-teal-700 text-white font-extrabold px-3.5 py-2 rounded-xl transition shadow-xs cursor-pointer flex items-center gap-1 uppercase tracking-wider text-[10px]"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Fill Demo Profile
+                  </button>
+                </div>
                 
                 {/* Account logins */}
                 <div className="space-y-3">
