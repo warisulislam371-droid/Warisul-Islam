@@ -201,6 +201,7 @@ async function syncListToFirestoreWithDeletions<T extends { id: string }>(collNa
 
 // Global active real-time listeners tracker to avoid multiple listener attachments
 const activeListeners = new Set<string>();
+const memoryCache: Record<string, string> = {};
 
 // Real-time collection synchronization
 function listenToCollection<T extends { id: string }>(collName: string, storageKey: string, defaultValue: T[]) {
@@ -219,9 +220,14 @@ function listenToCollection<T extends { id: string }>(collName: string, storageK
     });
     if (items.length > 0) {
       const serialized = JSON.stringify(items);
-      const currentStored = localStorage.getItem(storageKey);
+      const currentStored = localStorage.getItem(storageKey) ?? memoryCache[storageKey];
       if (currentStored !== serialized) {
-        localStorage.setItem(storageKey, serialized);
+        memoryCache[storageKey] = serialized;
+        try {
+          localStorage.setItem(storageKey, serialized);
+        } catch (e: any) {
+          console.warn(`LocalStorage quota exceeded or blocked for ${storageKey}. Operating in memory-only mode.`, e);
+        }
         window.dispatchEvent(new Event('healnex_db_update'));
       }
     }
@@ -622,17 +628,20 @@ const DEFAULT_CLEARANCE_REQUESTS: PaymentClearanceRequest[] = [
 export const dbLocal = {
   get<T>(key: string, defaultValue: T): T {
     try {
-      const data = localStorage.getItem(key);
+      const data = localStorage.getItem(key) ?? memoryCache[key];
       return data ? JSON.parse(data) : defaultValue;
     } catch {
-      return defaultValue;
+      const data = memoryCache[key];
+      return data ? JSON.parse(data) : defaultValue;
     }
   },
   set<T>(key: string, value: T): void {
+    const serialized = JSON.stringify(value);
+    memoryCache[key] = serialized;
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(key, serialized);
     } catch (e) {
-      console.error('Error saving to LocalStorage: ', e);
+      console.warn(`Error saving '${key}' to LocalStorage, saved to memory cache instead:`, e);
     }
   },
 

@@ -742,6 +742,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                 <p className="text-slate-600 leading-relaxed">
                   Before accessing the B2B catalog, receiving clinical orders, or bidding on hospital RFQs, your business credentials (GST, drug licenses, and bank info) must be fully authorized by our compliance administrators.
                 </p>
+                <div className="bg-teal-50/70 border border-teal-200 text-teal-950 rounded-xl p-3.5 mt-3 space-y-1 text-left">
+                  <span className="font-black text-[10px] uppercase tracking-wider text-teal-800 block">Self-Testing Quick Tip:</span>
+                  <p className="text-slate-700 leading-relaxed font-medium text-[11px]">
+                    To approve this vendor account and unlock the workspace instantly, you can sign out and sign in using the Super Admin credentials (<strong className="font-mono text-teal-900">warisulislam371@gmail.com</strong> / <strong className="font-mono text-teal-900">Waris@123</strong>), navigate to the <strong className="text-teal-900">Admin Panel</strong>, click on <strong className="text-teal-900">Vendor Partners</strong>, and click <strong className="text-teal-900">Approve Vendor</strong>.
+                  </p>
+                </div>
                 {vendorProfile.statusReason && (
                   <div className="bg-rose-50/70 border border-rose-200 text-rose-950 rounded-xl p-4 mt-3 space-y-1">
                     <span className="font-black text-[10px] uppercase tracking-wider text-rose-800 block">Message from Compliance Audit Team:</span>
