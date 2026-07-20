@@ -1881,30 +1881,15 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
         return (
           <div className="space-y-6 animate-fade-in pb-12">
             {/* Wallet Dashboard Cards */}
-            <div className="hidden">
+            <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-base font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
                   <Wallet className="w-5 h-5 text-teal-700" />
                   Vendor Earnings & Settlement Wallet
                 </h3>
-                <span className="text-xs bg-slate-100 text-slate-700 font-bold px-3 py-1 rounded-full border border-slate-200">
-                  Platform Commission: <strong className="text-teal-800">{commRate}%</strong>
-                </span>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Sales</span>
-                  <p className="text-xl font-black text-slate-900 mt-1 font-display">₹{totalSales.toLocaleString()}</p>
-                  <span className="text-[9px] text-slate-500 font-medium">{completedOrders.length} completed orders</span>
-                </div>
-
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 block">Commission ({commRate}%)</span>
-                  <p className="text-xl font-black text-rose-600 mt-1 font-display">-₹{totalComm.toLocaleString()}</p>
-                  <span className="text-[9px] text-slate-500 font-medium">Platform fee deducted</span>
-                </div>
-
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 block">Net Earnings</span>
                   <p className="text-xl font-black text-slate-800 mt-1 font-display">₹{netEarnings.toLocaleString()}</p>
