@@ -1,0 +1,39 @@
+HealNex-Medi-Bazar/
+│
+├── public/
+│   ├── robots.txt
+│   ├── sitemap.xml
+│   ├── sitemap-pages.xml
+│   ├── sitemap-products.xml
+│   ├── sitemap-categories.xml
+│   ├── sitemap-brands.xml
+│   ├── sitemap-vendors.xml
+│   ├── sitemap-blog.xml
+│   ├── sitemap-images.xml
+│   ├── sitemap-offers.xml
+│   ├── sitemap-faq.xml
+│   ├── manifest.json
+│   ├── browserconfig.xml
+│   ├── humans.txt
+│   ├── security.txt
+│   ├── ads.txt
+│   └── favicon files
+│
+├── scripts/
+│   ├── generate-sitemap.js
+│   └── generate-robots.js
+│
+├── src/
+│   ├── seo/
+│   │   ├── MetaTags.jsx
+│   │   ├── StructuredData.jsx
+│   │   ├── ProductSchema.jsx
+│   │   ├── OrganizationSchema.jsx
+│   │   ├── BreadcrumbSchema.jsx
+│   │   └── FAQSchema.jsx
+│   │
+│   └── routes/
+│       └── sitemapRoutes.js
+│
+├── package.json
+└── README.md
