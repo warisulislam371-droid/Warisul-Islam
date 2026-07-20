@@ -496,4 +496,9 @@ export interface PromoBanner {
   positionOrder: number;
   isActive: boolean;
   createdAt: string;
+  promoOfferName?: string;
+  promoOfferValue?: string;
+  purchaseProductId?: string;
+  purchaseButtonText?: string;
+  purchaseButtonPrice?: number;
 }

@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Clock,
   FileText,
+  Image as ImageIcon,
   Upload,
   X,
   Layers,
@@ -92,9 +93,12 @@ export default function VendorProductManager({
   const [formWarranty, setFormWarranty] = useState('1 Year Manufacturer Warranty');
   const [formCountry, setFormCountry] = useState('India');
   const [formUnit, setFormUnit] = useState('Piece');
-  const [formImages, setFormImages] = useState<string[]>([]);
+  const [primaryImage, setPrimaryImage] = useState<string>('');
+  const [secondaryImages, setSecondaryImages] = useState<string[]>(['', '', '']);
+  const [uploadTargetSlot, setUploadTargetSlot] = useState<'primary' | number | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [formNewImageUrl, setFormNewImageUrl] = useState('');
+  const [primaryImageUrlInput, setPrimaryImageUrlInput] = useState('');
+  const [secondaryImageUrlInputs, setSecondaryImageUrlInputs] = useState<string[]>(['', '', '']);
   const [formBrochure, setFormBrochure] = useState('');
   const [formVideo, setFormVideo] = useState('');
   const [formCertifications, setFormCertifications] = useState<string[]>([]);
@@ -165,10 +169,34 @@ export default function VendorProductManager({
       }
 
       if (uploadedUrls.length > 0) {
-        setFormImages(prev => [...prev, ...uploadedUrls]);
+        if (uploadTargetSlot === 'primary') {
+          setPrimaryImage(uploadedUrls[0]);
+        } else if (typeof uploadTargetSlot === 'number') {
+          setSecondaryImages(prev => {
+            const next = [...prev];
+            next[uploadTargetSlot] = uploadedUrls[0];
+            return next;
+          });
+        } else {
+          // Fallback if target slot not set
+          let pImg = primaryImage;
+          const sImgs = [...secondaryImages];
+          uploadedUrls.forEach(url => {
+            if (!pImg) {
+              pImg = url;
+            } else {
+              const emptyIdx = sImgs.findIndex(item => !item);
+              if (emptyIdx !== -1) {
+                sImgs[emptyIdx] = url;
+              }
+            }
+          });
+          setPrimaryImage(pImg);
+          setSecondaryImages(sImgs);
+        }
         showToast(uploadedUrls.length === 1 
-          ? 'Image uploaded to Cloudinary successfully!' 
-          : `${uploadedUrls.length} images uploaded to Cloudinary successfully!`
+          ? 'Image uploaded successfully!' 
+          : `${uploadedUrls.length} images uploaded successfully!`
         );
       }
     } catch (err: any) {
@@ -218,7 +246,10 @@ export default function VendorProductManager({
     setFormWarranty('1 Year Comprehensive Warranty');
     setFormCountry('India');
     setFormUnit('Piece');
-    setFormImages(['https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800']);
+    setPrimaryImage('https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800');
+    setSecondaryImages(['', '', '']);
+    setPrimaryImageUrlInput('');
+    setSecondaryImageUrlInputs(['', '', '']);
     setFormBrochure('');
     setFormVideo('');
     setFormCertifications(['ISO 13485:2016', 'CE Certified']);
@@ -250,7 +281,15 @@ export default function VendorProductManager({
     setFormWarranty(p.warranty || '1 Year');
     setFormCountry(p.countryOfOrigin || 'India');
     setFormUnit(p.unit || 'Piece');
-    setFormImages(p.images?.length ? p.images : ['https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800']);
+    const imgs = p.images?.length ? p.images : ['https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800'];
+    setPrimaryImage(imgs[0] || '');
+    const secImgs = imgs.slice(1, 4);
+    while (secImgs.length < 3) {
+      secImgs.push('');
+    }
+    setSecondaryImages(secImgs);
+    setPrimaryImageUrlInput('');
+    setSecondaryImageUrlInputs(['', '', '']);
     setFormBrochure(p.brochureUrl || '');
     setFormVideo(p.videoUrl || '');
     setFormCertifications(p.certifications || []);
@@ -325,7 +364,9 @@ export default function VendorProductManager({
       warranty: formWarranty.trim(),
       countryOfOrigin: formCountry.trim(),
       unit: formUnit,
-      images: formImages.length > 0 ? formImages : ['https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800'],
+      images: [primaryImage, ...secondaryImages].filter(url => url && url.trim() !== '').length > 0
+        ? [primaryImage, ...secondaryImages].filter(url => url && url.trim() !== '')
+        : ['https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800'],
       brochureUrl: formBrochure.trim(),
       videoUrl: formVideo.trim(),
       certifications: formCertifications,
@@ -417,12 +458,7 @@ export default function VendorProductManager({
     }
   };
 
-  const handleAddImage = () => {
-    if (formNewImageUrl.trim() && !formImages.includes(formNewImageUrl.trim())) {
-      setFormImages([...formImages, formNewImageUrl.trim()]);
-      setFormNewImageUrl('');
-    }
-  };
+  // Slots URL & Upload handling is done inline on each individual slot
 
 
   const handleSubmitCategoryRequest = (e: React.FormEvent) => {
@@ -755,6 +791,92 @@ export default function VendorProductManager({
 
     const globalCommissionRate = dbLocal.getPaymentSettings().platformCommissionRate || 10;
     const now = new Date().toISOString();
+
+    // Dynamically create categories or subcategories if they do not exist
+    let currentCategories = [...dbLocal.getCategories()];
+    let categoriesChanged = false;
+
+    validProds.forEach(prod => {
+      const catName = prod.category ? prod.category.trim() : '';
+      const subcatName = prod.subcategory ? prod.subcategory.trim() : '';
+
+      if (catName) {
+        let existingCat = currentCategories.find(
+          c => c.name.toLowerCase() === catName.toLowerCase()
+        );
+
+        if (!existingCat) {
+          existingCat = {
+            id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            name: catName,
+            description: `Automatically created during bulk import of ${prod.name}`,
+            isActive: true,
+            createdAt: now,
+            subcategories: subcatName ? [subcatName] : [],
+            iconName: 'Activity'
+          };
+          currentCategories.push(existingCat);
+          categoriesChanged = true;
+        } else {
+          if (subcatName) {
+            const subcategories = existingCat.subcategories || [];
+            const subcatExists = subcategories.some(
+              s => s.toLowerCase() === subcatName.toLowerCase()
+            );
+            if (!subcatExists) {
+              existingCat.subcategories = [...subcategories, subcatName];
+              categoriesChanged = true;
+            }
+          }
+        }
+
+        // Standardize product fields with EXACT matched casing/values
+        prod.category = existingCat.name;
+        if (subcatName) {
+          const matchedSub = existingCat.subcategories?.find(
+            s => s.toLowerCase() === subcatName.toLowerCase()
+          );
+          if (matchedSub) {
+            prod.subcategory = matchedSub;
+          }
+        }
+      }
+    });
+
+    if (categoriesChanged) {
+      dbLocal.saveCategories(currentCategories);
+    }
+
+    // Dynamically create brands if they do not exist
+    let currentBrands = [...dbLocal.getBrands()];
+    let brandsChanged = false;
+
+    validProds.forEach(prod => {
+      const brandName = prod.brand ? prod.brand.trim() : '';
+      if (brandName) {
+        let existingBrand = currentBrands.find(
+          b => b.name.toLowerCase() === brandName.toLowerCase()
+        );
+        if (!existingBrand) {
+          existingBrand = {
+            id: `brand_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            name: brandName,
+            description: `Automatically created during bulk import of ${prod.name}`,
+            isActive: true,
+            createdAt: now,
+            country: prod.countryOfOrigin || 'India'
+          };
+          currentBrands.push(existingBrand);
+          brandsChanged = true;
+        }
+        // Standardize brand case
+        prod.brand = existingBrand.name;
+      }
+    });
+
+    if (brandsChanged) {
+      dbLocal.saveBrands(currentBrands);
+    }
 
     validProds.forEach(prod => {
       const commissionAmount = Math.round((prod.vendorPrice * globalCommissionRate) / 100 * 100) / 100;
@@ -1967,62 +2089,197 @@ export default function VendorProductManager({
               <div className="space-y-4 bg-slate-50/80 p-5 rounded-2xl border border-slate-200/60">
                 <h4 className="text-sm font-extrabold text-slate-900 border-b border-slate-200 pb-2">5. Product Photos & Datasheets</h4>
                 
-                <div className="space-y-2">
-                  <label className="block text-slate-800 font-bold">Image URLs / Uploads</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      placeholder="Paste high-res image URL (e.g. https://images.unsplash.com/...)"
-                      value={formNewImageUrl}
-                      onChange={(e) => setFormNewImageUrl(e.target.value)}
-                      className="flex-1 bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddImage}
-                      className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 rounded-xl shrink-0"
-                    >
-                      Add URL
-                    </button>
-                    <label className={`bg-teal-700 hover:bg-teal-800 text-white font-bold px-4 py-2.5 rounded-xl shrink-0 flex items-center gap-2 cursor-pointer transition ${isUploadingImage ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                      {isUploadingImage ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          <span>Uploading...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-4 h-4" /> Upload Photos
-                        </>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        disabled={isUploadingImage}
-                        onChange={(e) => handleCloudinaryUpload(e.target.files)}
-                      />
-                    </label>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-slate-800 font-bold">Product Media Presentation</label>
+                    {isUploadingImage && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-teal-700 font-extrabold animate-pulse">
+                        <div className="w-3 h-3 border-2 border-teal-700 border-t-transparent rounded-full animate-spin" />
+                        <span>Uploading media...</span>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex flex-wrap gap-3 pt-2">
-                    {formImages.map((img, idx) => (
-                      <div key={idx} className="relative w-24 h-24 rounded-xl overflow-hidden border border-slate-300 bg-white group">
-                        <img src={img} alt="" className="w-full h-full object-cover" />
-                        {idx === 0 && (
-                          <span className="absolute top-1 left-1 bg-teal-700 text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded">Primary</span>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Primary Image Slot */}
+                    <div className="md:col-span-2 border border-slate-200 rounded-2xl bg-white p-4 flex flex-col justify-between min-h-[220px] relative">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse"></span>
+                            Primary Image *
+                          </span>
+                          {primaryImage && (
+                            <button
+                              type="button"
+                              onClick={() => setPrimaryImage('')}
+                              className="text-rose-600 hover:text-rose-800 font-extrabold text-[10px] uppercase flex items-center gap-1 transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Remove
+                            </button>
+                          )}
+                        </div>
+                        
+                        {primaryImage ? (
+                          <div className="relative w-full h-32 rounded-xl overflow-hidden border border-slate-100 bg-slate-50">
+                            <img src={primaryImage} alt="Primary" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                          </div>
+                        ) : (
+                          <div className="w-full h-32 border border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center bg-slate-50/50 p-4 text-center">
+                            <ImageIcon className="w-8 h-8 text-slate-300 mb-1.5" />
+                            <p className="font-extrabold text-slate-700 text-[10px]">No Primary Image Selected</p>
+                            <p className="text-[9px] text-slate-400 mt-0.5">Paste a URL below or click Upload to select a file</p>
+                          </div>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => setFormImages(formImages.filter((_, i) => i !== idx))}
-                          className="absolute top-1 right-1 bg-rose-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
                       </div>
-                    ))}
+
+                      {!primaryImage && (
+                        <div className="mt-3 flex gap-1.5">
+                          <input
+                            type="url"
+                            placeholder="Paste primary image URL"
+                            value={primaryImageUrlInput}
+                            onChange={(e) => setPrimaryImageUrlInput(e.target.value)}
+                            className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-[10px] font-mono outline-none focus:border-teal-700"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (primaryImageUrlInput.trim()) {
+                                      setPrimaryImage(primaryImageUrlInput.trim());
+                                setPrimaryImageUrlInput('');
+                              }
+                            }}
+                            className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg transition shrink-0"
+                          >
+                            Apply
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUploadTargetSlot('primary');
+                              setTimeout(() => {
+                                      const fileInput = document.getElementById('product-image-file-input');
+                                      if (fileInput) fileInput.click();
+                              }, 50);
+                            }}
+                            className="bg-teal-700 hover:bg-teal-800 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg transition shrink-0 flex items-center gap-1"
+                          >
+                            <Upload className="w-3 h-3" /> Upload
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Secondary Images Slots */}
+                    <div className="md:col-span-2 flex flex-col justify-between">
+                      <div className="text-[10px] font-extrabold text-slate-900 uppercase tracking-wider mb-2">
+                        Secondary Showcase (Up to 3 optional photos)
+                      </div>
+                      <div className="grid grid-cols-3 gap-2.5 h-full">
+                        {[0, 1, 2].map((slotIdx) => {
+                          const img = secondaryImages[slotIdx];
+                          const inputVal = secondaryImageUrlInputs[slotIdx];
+                          return (
+                            <div key={slotIdx} className="border border-slate-200 rounded-2xl bg-white p-3 flex flex-col justify-between min-h-[160px] relative">
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-[9px] font-bold text-slate-500 uppercase">Slot {slotIdx + 1}</span>
+                                {img && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSecondaryImages(prev => {
+                                        const next = [...prev];
+                                        next[slotIdx] = '';
+                                        return next;
+                                      });
+                                    }}
+                                    className="text-rose-600 hover:text-rose-800 transition"
+                                    title="Remove image"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+
+                              {img ? (
+                                <div className="relative w-full h-16 rounded-lg overflow-hidden border border-slate-100 bg-slate-50">
+                                  <img src={img} alt={`Secondary ${slotIdx + 1}`} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                </div>
+                              ) : (
+                                <div className="w-full h-16 border border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center bg-slate-50/50 p-2 text-center flex-1">
+                                  <ImageIcon className="w-5 h-5 text-slate-300" />
+                                  <span className="text-[8px] text-slate-400 mt-1 font-semibold">Empty Slot</span>
+                                </div>
+                              )}
+
+                              {!img && (
+                                <div className="mt-2 space-y-1.5">
+                                  <input
+                                    type="url"
+                                    placeholder="Paste URL"
+                                    value={inputVal}
+                                    onChange={(e) => {
+                                      setSecondaryImageUrlInputs(prev => {
+                                        const next = [...prev];
+                                        next[slotIdx] = e.target.value;
+                                        return next;
+                                      });
+                                    }}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1 text-[8px] font-mono outline-none focus:border-teal-700"
+                                  />
+                                  <div className="flex gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (inputVal.trim()) {
+                                          setSecondaryImages(prev => {
+                                            const next = [...prev];
+                                            next[slotIdx] = inputVal.trim();
+                                            return next;
+                                          });
+                                          setSecondaryImageUrlInputs(prev => {
+                                            const next = [...prev];
+                                            next[slotIdx] = '';
+                                            return next;
+                                          });
+                                        }
+                                      }}
+                                      className="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-bold text-[8px] py-1 rounded transition text-center"
+                                    >
+                                      Apply
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setUploadTargetSlot(slotIdx);
+                                        setTimeout(() => {
+                                                const fileInput = document.getElementById('product-image-file-input');
+                                                if (fileInput) fileInput.click();
+                                        }, 50);
+                                      }}
+                                      className="flex-1 bg-teal-700 hover:bg-teal-800 text-white font-bold text-[8px] py-1 rounded transition flex items-center justify-center gap-0.5"
+                                    >
+                                      <Upload className="w-2.5 h-2.5" /> Upload
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
+
+                  <input
+                    id="product-image-file-input"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={isUploadingImage}
+                    onChange={(e) => handleCloudinaryUpload(e.target.files)}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">

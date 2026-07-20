@@ -227,7 +227,12 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     buttonText: 'Explore Catalog',
     badgeText: 'CLINICAL QUALITY ASSURED • WHOLESALE PRICING',
     positionOrder: 1,
-    isActive: true
+    isActive: true,
+    promoOfferName: '',
+    promoOfferValue: '',
+    purchaseProductId: '',
+    purchaseButtonText: 'Direct Buy Offer',
+    purchaseButtonPrice: 0
   });
 
   const handleSaveNewBanner = () => {
@@ -252,7 +257,12 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       buttonText: 'Explore Catalog',
       badgeText: 'CLINICAL QUALITY ASSURED • WHOLESALE PRICING',
       positionOrder: list.length + 1,
-      isActive: true
+      isActive: true,
+      promoOfferName: '',
+      promoOfferValue: '',
+      purchaseProductId: '',
+      purchaseButtonText: 'Direct Buy Offer',
+      purchaseButtonPrice: 0
     });
     addToast('Promotional banner published successfully!', 'success');
   };
@@ -4976,6 +4986,84 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       />
                     </div>
                   </div>
+
+                  {/* Offer & Direct Purchase Button Configuration */}
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-3">
+                    <h5 className="text-[11px] font-extrabold text-teal-800 uppercase tracking-wider">
+                      🎁 Offer 1 Banner & Direct Purchase Option
+                    </h5>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-600 mb-0.5">Promo Offer Name</label>
+                        <input
+                          type="text"
+                          value={bannerForm.promoOfferName || ''}
+                          onChange={(e) => setBannerForm({ ...bannerForm, promoOfferName: e.target.value })}
+                          placeholder="e.g. Premium Critical Care Deal"
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-600 mb-0.5">Promo Offer Value / Tag</label>
+                        <input
+                          type="text"
+                          value={bannerForm.promoOfferValue || ''}
+                          onChange={(e) => setBannerForm({ ...bannerForm, promoOfferValue: e.target.value })}
+                          placeholder="e.g. 15% OFF or Offer 1 Banner"
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-600 mb-0.5">Direct Purchase Linked Product</label>
+                        <select
+                          value={bannerForm.purchaseProductId || ''}
+                          onChange={(e) => {
+                            const pId = e.target.value;
+                            const matchedProduct = products.find(p => p.id === pId);
+                            setBannerForm({ 
+                              ...bannerForm, 
+                              purchaseProductId: pId,
+                              purchaseButtonPrice: matchedProduct ? matchedProduct.salePrice : 0,
+                              purchaseButtonText: matchedProduct ? `Instant Buy ${matchedProduct.brand}` : 'Direct Buy Offer'
+                            });
+                          }}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold"
+                        >
+                          <option value="">-- No Direct Purchase Linked (General Banner Only) --</option>
+                          {products.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.brand} - Rs. {p.salePrice.toLocaleString()})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {bannerForm.purchaseProductId && (
+                        <div className="grid grid-cols-2 gap-3 animate-fade-in">
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-600 mb-0.5">Purchase Button Text</label>
+                            <input
+                              type="text"
+                              value={bannerForm.purchaseButtonText || ''}
+                              onChange={(e) => setBannerForm({ ...bannerForm, purchaseButtonText: e.target.value })}
+                              placeholder="e.g. Purchase Now"
+                              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-600 mb-0.5">Special Promo Price (Rs.)</label>
+                            <input
+                              type="number"
+                              value={bannerForm.purchaseButtonPrice || 0}
+                              onChange={(e) => setBannerForm({ ...bannerForm, purchaseButtonPrice: Number(e.target.value) })}
+                              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Live Preview Box */}
@@ -5189,6 +5277,84 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         onChange={(e) => setEditingBannerModal({ ...editingBannerModal, linkUrl: e.target.value })}
                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
                       />
+                    </div>
+                  </div>
+
+                  {/* Offer & Direct Purchase Button Configuration */}
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-3">
+                    <h5 className="text-[11px] font-extrabold text-teal-800 uppercase tracking-wider">
+                      🎁 Offer 1 Banner & Direct Purchase Option
+                    </h5>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-600 mb-0.5">Promo Offer Name</label>
+                        <input
+                          type="text"
+                          value={editingBannerModal.promoOfferName || ''}
+                          onChange={(e) => setEditingBannerModal({ ...editingBannerModal, promoOfferName: e.target.value })}
+                          placeholder="e.g. Premium Critical Care Deal"
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-600 mb-0.5">Promo Offer Value / Tag</label>
+                        <input
+                          type="text"
+                          value={editingBannerModal.promoOfferValue || ''}
+                          onChange={(e) => setEditingBannerModal({ ...editingBannerModal, promoOfferValue: e.target.value })}
+                          placeholder="e.g. 15% OFF or Offer 1 Banner"
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-600 mb-0.5">Direct Purchase Linked Product</label>
+                        <select
+                          value={editingBannerModal.purchaseProductId || ''}
+                          onChange={(e) => {
+                            const pId = e.target.value;
+                            const matchedProduct = products.find(p => p.id === pId);
+                            setEditingBannerModal({ 
+                              ...editingBannerModal, 
+                              purchaseProductId: pId,
+                              purchaseButtonPrice: matchedProduct ? matchedProduct.salePrice : 0,
+                              purchaseButtonText: matchedProduct ? `Instant Buy ${matchedProduct.brand}` : 'Direct Buy Offer'
+                            });
+                          }}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold"
+                        >
+                          <option value="">-- No Direct Purchase Linked (General Banner Only) --</option>
+                          {products.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.brand} - Rs. {p.salePrice.toLocaleString()})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {editingBannerModal.purchaseProductId && (
+                        <div className="grid grid-cols-2 gap-3 animate-fade-in">
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-600 mb-0.5">Purchase Button Text</label>
+                            <input
+                              type="text"
+                              value={editingBannerModal.purchaseButtonText || ''}
+                              onChange={(e) => setEditingBannerModal({ ...editingBannerModal, purchaseButtonText: e.target.value })}
+                              placeholder="e.g. Purchase Now"
+                              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-600 mb-0.5">Special Promo Price (Rs.)</label>
+                            <input
+                              type="number"
+                              value={editingBannerModal.purchaseButtonPrice || 0}
+                              onChange={(e) => setEditingBannerModal({ ...editingBannerModal, purchaseButtonPrice: Number(e.target.value) })}
+                              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

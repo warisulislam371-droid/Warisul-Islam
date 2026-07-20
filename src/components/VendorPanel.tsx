@@ -519,6 +519,94 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     }
 
     setBulkStatus('Saving products to catalog catalog...');
+    const now = new Date().toISOString();
+
+    // Dynamically create categories or subcategories if they do not exist
+    let currentCategories = [...dbLocal.getCategories()];
+    let categoriesChanged = false;
+
+    validRows.forEach(row => {
+      const catName = row.category ? row.category.trim() : '';
+      const subcatName = row.subcategory ? row.subcategory.trim() : '';
+
+      if (catName) {
+        let existingCat = currentCategories.find(
+          c => c.name.toLowerCase() === catName.toLowerCase()
+        );
+
+        if (!existingCat) {
+          existingCat = {
+            id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            name: catName,
+            description: `Automatically created during bulk import of ${row.name}`,
+            isActive: true,
+            createdAt: now,
+            subcategories: subcatName ? [subcatName] : [],
+            iconName: 'Activity'
+          };
+          currentCategories.push(existingCat);
+          categoriesChanged = true;
+        } else {
+          if (subcatName) {
+            const subcategories = existingCat.subcategories || [];
+            const subcatExists = subcategories.some(
+              s => s.toLowerCase() === subcatName.toLowerCase()
+            );
+            if (!subcatExists) {
+              existingCat.subcategories = [...subcategories, subcatName];
+              categoriesChanged = true;
+            }
+          }
+        }
+
+        // Standardize fields with exact casing
+        row.category = existingCat.name;
+        if (subcatName) {
+          const matchedSub = existingCat.subcategories?.find(
+            s => s.toLowerCase() === subcatName.toLowerCase()
+          );
+          if (matchedSub) {
+            row.subcategory = matchedSub;
+          }
+        }
+      }
+    });
+
+    if (categoriesChanged) {
+      dbLocal.saveCategories(currentCategories);
+    }
+
+    // Dynamically create brands if they do not exist
+    let currentBrands = [...dbLocal.getBrands()];
+    let brandsChanged = false;
+
+    validRows.forEach(row => {
+      const brandName = row.brand ? row.brand.trim() : '';
+      if (brandName) {
+        let existingBrand = currentBrands.find(
+          b => b.name.toLowerCase() === brandName.toLowerCase()
+        );
+        if (!existingBrand) {
+          existingBrand = {
+            id: `brand_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            name: brandName,
+            description: `Automatically created during bulk import of ${row.name}`,
+            isActive: true,
+            createdAt: now,
+            country: 'India'
+          };
+          currentBrands.push(existingBrand);
+          brandsChanged = true;
+        }
+        // Standardize brand case
+        row.brand = existingBrand.name;
+      }
+    });
+
+    if (brandsChanged) {
+      dbLocal.saveBrands(currentBrands);
+    }
+
     const newProducts: Product[] = validRows.map((r, i) => ({
       id: `prod-blk-${Date.now()}-${i}`,
       vendorId: currentUser.id,
@@ -543,7 +631,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
       countryOfOrigin: 'India',
       images: [r.imageUrl || 'https://images.unsplash.com/photo-1516549655169-df83a0774514'],
       status: asDraft ? 'Draft' : 'Pending',
-      createdAt: new Date().toISOString(),
+      createdAt: now,
       performance: { views: 0, inquiries: 0, sales: 0 }
     }));
 

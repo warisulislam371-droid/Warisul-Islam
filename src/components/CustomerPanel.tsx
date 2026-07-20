@@ -1034,6 +1034,33 @@ export default function CustomerPanel({
                       <span>{promoBanners[activeBannerIdx].buttonText || 'Explore Catalog'}</span>
                       <ArrowRight className="w-4.5 h-4.5 text-white" />
                     </button>
+
+                    {(() => {
+                      const banner = promoBanners[activeBannerIdx];
+                      if (!banner.purchaseProductId) return null;
+                      const linkedProd = dbLocal.getProducts().find(p => p.id === banner.purchaseProductId);
+                      if (!linkedProd) return null;
+                      const promoPrice = banner.purchaseButtonPrice && banner.purchaseButtonPrice > 0 
+                        ? banner.purchaseButtonPrice 
+                        : linkedProd.salePrice;
+                      return (
+                        <button
+                          onClick={() => {
+                            const customProduct = {
+                              ...linkedProd,
+                              salePrice: promoPrice
+                            };
+                            handleAddToCart(customProduct, linkedProd.moq);
+                            onNavigate('cart');
+                          }}
+                          className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white text-xs sm:text-sm font-black px-7 py-4 rounded-xl transition duration-300 shadow-xl flex items-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                        >
+                          <ShoppingCart className="w-4.5 h-4.5 text-white animate-pulse" />
+                          <span>{banner.purchaseButtonText || 'Buy Direct Offer'} (Rs. {promoPrice.toLocaleString()})</span>
+                        </button>
+                      );
+                    })()}
+
                     <button
                       onClick={() => {
                         onNavigate('rfqs');
@@ -1081,9 +1108,54 @@ export default function CustomerPanel({
                         Active Promo
                       </span>
                     </div>
-                    <div className="space-y-1 text-white">
+                    <div className="space-y-1.5 text-white">
                       <h4 className="font-bold text-sm tracking-tight truncate">{promoBanners[activeBannerIdx].title}</h4>
                       <p className="text-[11px] text-teal-300 font-bold uppercase tracking-wider">{promoBanners[activeBannerIdx].badgeText || 'Exclusive Deal'}</p>
+                      
+                      {/* Promo Offer Name & Tag */}
+                      {promoBanners[activeBannerIdx].promoOfferName && (
+                        <div className="bg-teal-500/10 border border-teal-500/20 rounded-xl p-2.5 space-y-0.5 animate-fade-in">
+                          <span className="text-[8px] font-extrabold text-teal-300 uppercase tracking-wider block">🎁 Promo Deal</span>
+                          <h5 className="text-[11px] font-extrabold text-white leading-tight">{promoBanners[activeBannerIdx].promoOfferName}</h5>
+                          {promoBanners[activeBannerIdx].promoOfferValue && (
+                            <p className="text-[10px] font-bold text-emerald-400">{promoBanners[activeBannerIdx].promoOfferValue}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Direct Purchase Button configured by Admin */}
+                      {(() => {
+                        const banner = promoBanners[activeBannerIdx];
+                        if (!banner.purchaseProductId) return null;
+                        const linkedProd = dbLocal.getProducts().find(p => p.id === banner.purchaseProductId);
+                        if (!linkedProd) return null;
+                        const promoPrice = banner.purchaseButtonPrice && banner.purchaseButtonPrice > 0 
+                          ? banner.purchaseButtonPrice 
+                          : linkedProd.salePrice;
+                        return (
+                          <div className="pt-2.5 border-t border-white/10 space-y-1.5 animate-fade-in">
+                            <div className="flex items-center justify-between text-[11px] font-medium text-slate-300">
+                              <span>Special Offer Price:</span>
+                              <span className="font-extrabold text-teal-400">Rs. {promoPrice.toLocaleString()}</span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const customProduct = {
+                                  ...linkedProd,
+                                  salePrice: promoPrice
+                                };
+                                handleAddToCart(customProduct, linkedProd.moq);
+                                onNavigate('cart');
+                              }}
+                              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black py-2.5 px-4 rounded-xl transition duration-300 shadow-lg flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.02] transform"
+                            >
+                              <ShoppingCart className="w-3.5 h-3.5" />
+                              <span>{banner.purchaseButtonText || 'Direct Buy Offer'}</span>
+                            </button>
+                          </div>
+                        );
+                      })()}
+
                       <div className="flex items-center justify-between pt-2 border-t border-white/10 mt-2">
                         <div>
                           <span className="text-[9px] text-slate-400 block uppercase leading-none">B2B Platform</span>
