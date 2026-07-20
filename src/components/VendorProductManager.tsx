@@ -93,6 +93,7 @@ export default function VendorProductManager({
   const [formCountry, setFormCountry] = useState('India');
   const [formUnit, setFormUnit] = useState('Piece');
   const [formImages, setFormImages] = useState<string[]>([]);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [formNewImageUrl, setFormNewImageUrl] = useState('');
   const [formBrochure, setFormBrochure] = useState('');
   const [formVideo, setFormVideo] = useState('');
@@ -121,6 +122,62 @@ export default function VendorProductManager({
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4500);
+  };
+
+  const handleCloudinaryUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setIsUploadingImage(true);
+    setFormError('');
+
+    const cloudName = (import.meta as any).env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'kpb5rcow';
+    const uploadPreset = (import.meta as any).env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'healnex_products';
+
+    const uploadedUrls: string[] = [];
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        if (!file.type.startsWith('image/')) {
+          showToast(`File ${file.name} is not an image and was skipped.`);
+          continue;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', uploadPreset);
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Upload failed for ${file.name}: ${errText || res.statusText}`);
+        }
+
+        const data = await res.json();
+        if (data.secure_url) {
+          uploadedUrls.push(data.secure_url);
+        } else {
+          throw new Error(`No secure URL returned for ${file.name}`);
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        setFormImages(prev => [...prev, ...uploadedUrls]);
+        showToast(uploadedUrls.length === 1 
+          ? 'Image uploaded to Cloudinary successfully!' 
+          : `${uploadedUrls.length} images uploaded to Cloudinary successfully!`
+        );
+      }
+    } catch (err: any) {
+      console.error('Cloudinary upload error:', err);
+      setFormError(`Image upload failed: ${err.message || err}`);
+      showToast('Image upload failed. Please try again.');
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   // Filtered products
@@ -1927,25 +1984,24 @@ export default function VendorProductManager({
                     >
                       Add URL
                     </button>
-                    <label className="bg-teal-700 hover:bg-teal-800 text-white font-bold px-4 py-2.5 rounded-xl shrink-0 flex items-center gap-2 cursor-pointer transition">
-                      <Upload className="w-4 h-4" /> Upload Photo
+                    <label className={`bg-teal-700 hover:bg-teal-800 text-white font-bold px-4 py-2.5 rounded-xl shrink-0 flex items-center gap-2 cursor-pointer transition ${isUploadingImage ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                      {isUploadingImage ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" /> Upload Photos
+                        </>
+                      )}
                       <input
                         type="file"
                         accept="image/*"
+                        multiple
                         className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => {
-                              if (ev.target?.result) {
-                                setFormImages(prev => [...prev, ev.target!.result as string]);
-                                showToast('Image uploaded successfully!');
-                              }
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
+                        disabled={isUploadingImage}
+                        onChange={(e) => handleCloudinaryUpload(e.target.files)}
                       />
                     </label>
                   </div>

@@ -1,6 +1,5 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getStorage } from 'firebase/storage';
 import { 
   getFirestore, 
   doc, 
@@ -21,7 +20,6 @@ try {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-const storage = getStorage(app);
 
 // Enable Offline Persistence for high resilience in browser environments
 if (typeof window !== 'undefined') {
@@ -67,4 +65,4 @@ if (typeof window !== 'undefined') {
   testFirebaseConnection();
 }
 
-export { app, auth, db, storage };
+export { app, auth, db };
