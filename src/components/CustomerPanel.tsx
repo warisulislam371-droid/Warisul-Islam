@@ -421,16 +421,44 @@ export default function CustomerPanel({
       // If we have search query
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
+        const words = q.split(/\s+/).filter(Boolean);
+
+        const checkFlexibleMatch = (fieldVal: string | undefined | null): boolean => {
+          if (!fieldVal) return false;
+          const val = fieldVal.toLowerCase();
+          
+          // 1. Standard exact substring match
+          if (val.includes(q)) return true;
+
+          // 2. Multi-word check (each word/letter chunk found in the field)
+          if (words.length > 1 && words.every(word => val.includes(word))) {
+            return true;
+          }
+
+          // 3. "Any letter" sequential fuzzy match (characters match sequentially)
+          let tIdx = 0;
+          let qIdx = 0;
+          while (tIdx < val.length && qIdx < q.length) {
+            if (val[tIdx] === q[qIdx]) {
+              qIdx++;
+            }
+            tIdx++;
+          }
+          if (qIdx === q.length) return true;
+
+          return false;
+        };
+
         const matchesText = (
-          p.name?.toLowerCase().includes(q) ||
-          p.brand?.toLowerCase().includes(q) ||
-          p.category?.toLowerCase().includes(q) ||
-          p.sku?.toLowerCase().includes(q) ||
-          p.modelNumber?.toLowerCase().includes(q) ||
-          p.subcategory?.toLowerCase().includes(q) ||
-          (p.tags && p.tags.some(t => t.toLowerCase().includes(q))) ||
-          (p.description && p.description.toLowerCase().includes(q)) ||
-          (p.specifications && Object.entries(p.specifications).some(([k, v]) => k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q)))
+          checkFlexibleMatch(p.name) ||
+          checkFlexibleMatch(p.brand) ||
+          checkFlexibleMatch(p.category) ||
+          checkFlexibleMatch(p.sku) ||
+          checkFlexibleMatch(p.modelNumber) ||
+          checkFlexibleMatch(p.subcategory) ||
+          (p.tags && p.tags.some(t => checkFlexibleMatch(t))) ||
+          (p.description && checkFlexibleMatch(p.description)) ||
+          (p.specifications && Object.entries(p.specifications).some(([k, v]) => checkFlexibleMatch(k) || checkFlexibleMatch(String(v))))
         );
 
         const matchesAi = aiSearchResults.some(match => match.productId === p.id);
