@@ -11,7 +11,6 @@ import AuthModal from './components/AuthModal';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import TrustAndSafetyPage from './components/TrustAndSafetyPage';
 import ReviewsPage from './components/ReviewsPage';
-import SitemapPage from './components/SitemapPage';
 import PolicyModal, { PolicyType } from './components/PolicyModal';
 import { 
   LogIn, 
@@ -90,14 +89,11 @@ export default function App() {
     // Initialize Local Database Mock with default credentials & categories
     dbLocal.init();
 
-    // Check SEO sitemap URL deep link hydration
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
       if (path.startsWith('/category/')) {
         const cat = decodeURIComponent(path.replace('/category/', ''));
         if (cat) setSelectedCategoryName(cat);
-      } else if (path === '/sitemap' || path === '/sitemap.html') {
-        setCurrentView('sitemap');
       }
     }
 
@@ -267,16 +263,6 @@ export default function App() {
           {/* Knowledge Blogs */}
           {currentView === 'blogs' && (
             <BlogSection currentUser={currentUser} addToast={addToast} />
-          )}
-
-          {/* Interactive B2B Platform Sitemap */}
-          {currentView === 'sitemap' && (
-            <SitemapPage
-              onNavigate={setCurrentView}
-              onSelectCategory={handleCategorySelect}
-              onOpenPolicy={(policy) => setActivePolicyModal(policy as PolicyType)}
-              isDarkMode={isDarkMode}
-            />
           )}
 
         </main>

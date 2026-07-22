@@ -24,7 +24,6 @@ export async function getSitemapEntries(baseUrl: string = 'https://medbazarhelne
   // 1. Core Platform Pages
   const staticRoutes = [
     { path: '/', priority: 1.0, freq: 'daily' },
-    { path: '/sitemap', priority: 0.9, freq: 'weekly' },
     { path: '/marketplace', priority: 0.9, freq: 'daily' },
     { path: '/rfqs', priority: 0.8, freq: 'daily' },
     { path: '/blogs', priority: 0.8, freq: 'weekly' },
