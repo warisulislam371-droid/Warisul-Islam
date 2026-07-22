@@ -43,7 +43,10 @@ import {
   Percent,
   ShieldCheck,
   FileCheck,
-  BarChart3
+  BarChart3,
+  RefreshCw,
+  RotateCcw,
+  UploadCloud
 } from 'lucide-react';
 
 export interface BulkProductRow {
@@ -165,17 +168,159 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
   const [prodFilterStatus, setProdFilterStatus] = useState<string>('All');
   const [prodFilterCat, setProdFilterCat] = useState<string>('All');
 
+  // Quick Resubmit Modal State
+  const [resubmitModalDoc, setResubmitModalDoc] = useState<{
+    key: string;
+    label: string;
+    currentUrl?: string;
+    currentName?: string;
+    status?: string;
+  } | null>(null);
+  const [selectedResubmitFile, setSelectedResubmitFile] = useState<File | null>(null);
+  const [resubmitFilePreview, setResubmitFilePreview] = useState<string | null>(null);
+  const [resubmitVendorNotes, setResubmitVendorNotes] = useState<string>('');
+  const [isResubmittingFile, setIsResubmittingFile] = useState<boolean>(false);
+
+  const openResubmitModal = (docItem: { key: string; label: string }) => {
+    const docs = vendorProfile?.documents || {};
+    const docUrl = (docs as any)[`${docItem.key}Url`] || '';
+    const docName = (docs as any)[`${docItem.key}Name`] || '';
+    const docStatus = (docs as any)[`${docItem.key}Status`] || (docUrl ? 'Uploaded' : 'Missing');
+    setResubmitModalDoc({
+      key: docItem.key,
+      label: docItem.label,
+      currentUrl: docUrl,
+      currentName: docName,
+      status: docStatus
+    });
+    setSelectedResubmitFile(null);
+    setResubmitFilePreview(null);
+    setResubmitVendorNotes('');
+  };
+
+  const handleConfirmResubmit = async () => {
+    if (!resubmitModalDoc) return;
+    if (!selectedResubmitFile) {
+      addToast('Please select a file to upload before resubmitting.', 'error');
+      return;
+    }
+
+    setIsResubmittingFile(true);
+    let uploadedUrl = '';
+    let uploadedName = selectedResubmitFile.name;
+
+    try {
+      addToast(`Uploading ${resubmitModalDoc.label} to Cloudinary...`, 'info');
+      const cloudRes = await uploadVendorDocumentToCloudinary(selectedResubmitFile);
+      uploadedUrl = cloudRes.url;
+    } catch (err: any) {
+      console.error('Cloudinary Document Upload Failed:', err);
+      addToast('Cloudinary upload failed. Saving file locally...', 'info');
+      await new Promise<void>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          if (ev.target?.result) {
+            uploadedUrl = ev.target.result as string;
+          }
+          resolve();
+        };
+        reader.readAsDataURL(selectedResubmitFile);
+      });
+    }
+
+    if (uploadedUrl) {
+      const targetVendorId = vendorProfile?.id || currentUser?.id;
+      const targetEmail = vendorProfile?.email || currentUser?.email;
+      const currentVendors = dbLocal.getVendors();
+
+      const updatedVendors = currentVendors.map(v => {
+        if (
+          v.id === targetVendorId || 
+          (v.email && targetEmail && v.email.toLowerCase() === targetEmail.toLowerCase())
+        ) {
+          const existingDocs = v.documents || {};
+          return {
+            ...v,
+            documents: {
+              ...existingDocs,
+              [`${resubmitModalDoc.key}Url`]: uploadedUrl,
+              [`${resubmitModalDoc.key}Name`]: uploadedName,
+              [`${resubmitModalDoc.key}Status`]: 'Pending',
+              [`${resubmitModalDoc.key}Notes`]: resubmitVendorNotes,
+              [`${resubmitModalDoc.key}UpdatedAt`]: new Date().toISOString()
+            },
+            status: 'Pending Approval' as const,
+            statusReason: `KYC document (${resubmitModalDoc.label}) resubmitted by vendor for Admin approval.${resubmitVendorNotes ? ' Note: ' + resubmitVendorNotes : ''}`,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return v;
+      });
+
+      dbLocal.saveVendors(updatedVendors);
+
+      dbLocal.addNotification(
+        'admin',
+        '🚨 Vendor Resubmitted KYC Document for Audit',
+        `${vendorProfile?.companyName || currentUser?.name || 'Vendor'} resubmitted ${resubmitModalDoc.label}. Document status set to Pending for Admin review.`,
+        'vendor_registered'
+      );
+
+      addToast(`Document (${resubmitModalDoc.label}) resubmitted & status reset to Pending for Admin review!`, 'success');
+      window.dispatchEvent(new Event('healnex_db_update'));
+      setResubmitModalDoc(null);
+      setSelectedResubmitFile(null);
+      setResubmitFilePreview(null);
+      setResubmitVendorNotes('');
+      loadData();
+    }
+    setIsResubmittingFile(false);
+  };
+
   const loadData = () => {
     if (!currentUser) return;
     const vendorsList = dbLocal.getVendors();
-    const profile = vendorsList.find(v => v.id === currentUser.id) || null;
+    let profile = vendorsList.find(v => 
+      v.id === currentUser.id || 
+      (v.email && currentUser.email && v.email.toLowerCase() === currentUser.email.toLowerCase())
+    ) || null;
+
+    if (!profile && currentUser.role === 'vendor') {
+      profile = {
+        id: currentUser.id,
+        companyName: currentUser.name || 'Medical Equipment Supplier',
+        ownerName: currentUser.name || 'Vendor Owner',
+        email: currentUser.email,
+        mobileNumber: currentUser.mobileNumber || '+91 98765 43210',
+        gstNumber: '27AABCU9603R1ZN',
+        panNumber: 'ABCDE1234F',
+        aadhaarNumber: '123456789012',
+        businessAddress: 'Industrial Complex',
+        state: 'Delhi',
+        district: 'New Delhi',
+        pincode: '110001',
+        bankDetails: {
+          bankName: 'HDFC Bank',
+          accountNumber: '1234567890',
+          ifscCode: 'HDFC0001234'
+        },
+        documents: {},
+        status: 'Pending Approval',
+        createdAt: new Date().toISOString()
+      };
+      vendorsList.push(profile);
+      dbLocal.saveVendors(vendorsList);
+    }
+
     setVendorProfile(profile);
 
-    const prods = dbLocal.getProducts().filter(p => p.vendorId === currentUser.id);
+    const targetVendorId = profile ? profile.id : currentUser.id;
+
+    const prods = dbLocal.getProducts().filter(p => p.vendorId === currentUser.id || p.vendorId === targetVendorId);
     setProducts(prods);
 
     const ords = dbLocal.getOrders().filter(o => 
-      o.vendorId === currentUser.id && 
+      (o.vendorId === currentUser.id || o.vendorId === targetVendorId) && 
       !['Pending Payment', 'Payment Submitted', 'Awaiting Payment Verification'].includes(o.status)
     );
     setOrders(ords);
@@ -184,10 +329,10 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     const openRfqs = dbLocal.getRfqs().filter(r => r.status === 'OPEN_TO_VENDORS' || r.status === 'QUOTED');
     setRfqs(openRfqs);
 
-    const quotes = dbLocal.getQuotations().filter(q => q.vendorId === currentUser.id);
+    const quotes = dbLocal.getQuotations().filter(q => q.vendorId === currentUser.id || q.vendorId === targetVendorId);
     setQuotations(quotes);
 
-    const clrs = dbLocal.getClearanceRequests().filter(c => c.vendorId === currentUser.id);
+    const clrs = dbLocal.getClearanceRequests().filter(c => c.vendorId === currentUser.id || c.vendorId === targetVendorId);
     setClearanceRequests(clrs);
   };
 
@@ -889,15 +1034,63 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
               </div>
             </div>
 
-            {/* Read-Only KYC Document Status Panel */}
+            {/* Interactive KYC Document Upload & Status Panel */}
             <div className="space-y-4 pt-4 border-t border-slate-100">
-              <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <FileCheck className="w-4.5 h-4.5 text-teal-700" />
-                Submitted Regulatory Vault Status
-              </h3>
-              <p className="text-[11px] text-slate-500">
-                All uploaded documents are locked securely and visible only to authorized admin auditors.
-              </p>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileCheck className="w-4.5 h-4.5 text-teal-700" />
+                    Corporate KYC & Regulatory Documents
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Upload missing regulatory files or replace existing files below, then click Resubmit for Admin Audit.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetVendorId = vendorProfile?.id || currentUser.id;
+                    const targetEmail = vendorProfile?.email || currentUser.email;
+                    const currentVendors = dbLocal.getVendors();
+                    const targetV = currentVendors.find(v => v.id === targetVendorId || (v.email && targetEmail && v.email.toLowerCase() === targetEmail.toLowerCase()));
+                    const docs = targetV?.documents || {};
+                    const uploadedCount = Object.keys(docs).filter(k => k.endsWith('Url') && (docs as any)[k]).length;
+
+                    if (uploadedCount === 0) {
+                      addToast('Please upload at least one KYC document file before resubmitting for approval.', 'error');
+                      return;
+                    }
+
+                    const updatedVendors = currentVendors.map(v => {
+                      if (v.id === targetVendorId || (v.email && targetEmail && v.email.toLowerCase() === targetEmail.toLowerCase())) {
+                        return {
+                          ...v,
+                          status: 'Pending Approval' as const,
+                          statusReason: 'KYC documents resubmitted by vendor for Admin approval.',
+                          updatedAt: new Date().toISOString()
+                        };
+                      }
+                      return v;
+                    });
+                    dbLocal.saveVendors(updatedVendors);
+
+                    dbLocal.addNotification(
+                      'admin',
+                      '🚨 Vendor Resubmitted KYC for Approval',
+                      `${vendorProfile?.companyName || currentUser.name} has explicitly resubmitted their KYC documents for Admin approval.`,
+                      'vendor_registered'
+                    );
+
+                    addToast('KYC documents successfully resubmitted to Admin for review and approval!', 'success');
+                    window.dispatchEvent(new Event('healnex_db_update'));
+                    loadData();
+                  }}
+                  className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Resubmit KYC for Approval</span>
+                </button>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 {[
@@ -913,16 +1106,116 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                   const docs = vendorProfile.documents || {};
                   const docUrl = (docs as any)[`${docItem.key}Url`];
                   const docName = (docs as any)[`${docItem.key}Name`] || `${docItem.key}.pdf`;
+                  const rawStatus = (docs as any)[`${docItem.key}Status`];
+                  const isUploaded = Boolean(docUrl);
+                  const docStatus = rawStatus || (isUploaded ? 'Uploaded' : 'Missing');
 
                   return (
-                    <div key={docItem.key} className="border border-slate-100 rounded-xl p-3.5 bg-slate-50 flex items-center justify-between gap-4">
-                      <div className="min-w-0 text-left">
-                        <p className="text-xs font-extrabold text-slate-800 truncate" title={docItem.label}>{docItem.label}</p>
-                        <p className="text-[10px] text-slate-400 truncate mt-0.5" title={docName}>{docName}</p>
+                    <div key={docItem.key} className="border border-slate-200 rounded-xl p-3.5 bg-slate-50 flex flex-col justify-between gap-3 shadow-2xs hover:border-teal-300 transition">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 text-left">
+                          <p className="text-xs font-extrabold text-slate-800 truncate" title={docItem.label}>{docItem.label}</p>
+                          <p className="text-[10px] text-slate-500 font-mono truncate mt-0.5" title={docName}>{isUploaded ? docName : 'No file uploaded yet'}</p>
+                        </div>
+                        <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1 ${
+                          docStatus === 'Pending' ? 'bg-amber-100 text-amber-900 border border-amber-300 animate-pulse' :
+                          docStatus === 'Approved' ? 'bg-emerald-100 text-emerald-800' :
+                          docStatus === 'Rejected' ? 'bg-rose-100 text-rose-800 font-black' :
+                          isUploaded ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800 font-bold'
+                        }`}>
+                          {docStatus === 'Pending' ? <Activity className="w-3 h-3 text-amber-600" /> :
+                           docStatus === 'Approved' ? <CheckCircle className="w-3 h-3 text-emerald-600" /> :
+                           docStatus === 'Rejected' ? <XCircle className="w-3 h-3 text-rose-600" /> :
+                           isUploaded ? <CheckCircle className="w-3 h-3 text-emerald-600" /> : <AlertTriangle className="w-3 h-3 text-rose-600" />}
+                          {docStatus === 'Pending' ? 'Pending Review' :
+                           docStatus === 'Approved' ? 'Verified' :
+                           docStatus === 'Rejected' ? 'Rejected' :
+                           isUploaded ? 'Uploaded' : 'Missing'}
+                        </span>
                       </div>
-                      <span className="bg-teal-50 border border-teal-200 text-teal-800 text-[10px] font-extrabold px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3 text-teal-600" /> Loaded
-                      </span>
+
+                      <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openResubmitModal(docItem)}
+                          className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-1.5 px-2.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow-xs"
+                          title="Open Quick Upload Modal & reset status to Pending for Admin review"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Resubmit</span>
+                        </button>
+
+                        <label className="bg-teal-600 hover:bg-teal-700 text-white py-1.5 px-2.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow-xs" title="Direct file upload">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{isUploaded ? 'Replace' : 'Upload'}</span>
+                          <input
+                            type="file"
+                            accept=".jpg,.jpeg,.png,.webp,.pdf"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                let uploadedUrl = '';
+                                let uploadedName = file.name;
+                                try {
+                                  addToast(`Uploading ${docItem.label} to Cloudinary...`, 'info');
+                                  const cloudRes = await uploadVendorDocumentToCloudinary(file);
+                                  uploadedUrl = cloudRes.url;
+                                } catch (err: any) {
+                                  console.error('Cloudinary Document Upload Failed:', err);
+                                  addToast(`Cloudinary upload failed. Saving locally...`, 'info');
+                                  await new Promise<void>((resolve) => {
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) => {
+                                      if (ev.target?.result) {
+                                        uploadedUrl = ev.target.result as string;
+                                      }
+                                      resolve();
+                                    };
+                                    reader.readAsDataURL(file);
+                                  });
+                                }
+
+                                if (uploadedUrl) {
+                                  const targetVendorId = vendorProfile?.id || currentUser.id;
+                                  const targetEmail = vendorProfile?.email || currentUser.email;
+                                  const currentVendors = dbLocal.getVendors();
+                                  const updatedVendors = currentVendors.map(v => {
+                                    if (v.id === targetVendorId || (v.email && targetEmail && v.email.toLowerCase() === targetEmail.toLowerCase())) {
+                                      const existingDocs = v.documents || {};
+                                      return {
+                                        ...v,
+                                        documents: {
+                                          ...existingDocs,
+                                          [`${docItem.key}Url`]: uploadedUrl,
+                                          [`${docItem.key}Name`]: uploadedName,
+                                          [`${docItem.key}Status`]: 'Pending'
+                                        },
+                                        status: 'Pending Approval' as const,
+                                        statusReason: `KYC document (${docItem.label}) updated and resubmitted for Admin Approval.`,
+                                        updatedAt: new Date().toISOString()
+                                      };
+                                    }
+                                    return v;
+                                  });
+                                  dbLocal.saveVendors(updatedVendors);
+
+                                  dbLocal.addNotification(
+                                    'admin',
+                                    '📄 Vendor Resubmitted KYC Document',
+                                    `${vendorProfile?.companyName || currentUser.name} uploaded new document (${docItem.label}) and resubmitted their account for approval.`,
+                                    'vendor_registered'
+                                  );
+
+                                  addToast(`${docItem.label} uploaded & status set to Pending for Admin review!`, 'success');
+                                  window.dispatchEvent(new Event('healnex_db_update'));
+                                  loadData();
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
                     </div>
                   );
                 })}
@@ -1176,15 +1469,29 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
               const docs = vendorProfile?.documents || {};
               const docUrl = (docs as any)[`${docItem.key}Url`];
               const docName = (docs as any)[`${docItem.key}Name`] || `${docItem.key}.pdf`;
+              const rawStatus = (docs as any)[`${docItem.key}Status`];
               const isUploaded = Boolean(docUrl);
+              const docStatus = rawStatus || (isUploaded ? 'Uploaded' : 'Missing');
 
               return (
-                <div key={docItem.key} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between space-y-3">
+                <div key={docItem.key} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between space-y-3 shadow-2xs hover:border-teal-300 transition">
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-slate-800">{docItem.label}</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isUploaded ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                        {isUploaded ? 'Uploaded' : 'Missing'}
+                    <div className="flex items-center justify-between mb-1 gap-2">
+                      <span className="text-xs font-extrabold text-slate-800 truncate" title={docItem.label}>{docItem.label}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold shrink-0 flex items-center gap-1 ${
+                        docStatus === 'Pending' ? 'bg-amber-100 text-amber-900 border border-amber-300 animate-pulse' :
+                        docStatus === 'Approved' ? 'bg-emerald-100 text-emerald-800' :
+                        docStatus === 'Rejected' ? 'bg-rose-100 text-rose-800 font-black' :
+                        isUploaded ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800 font-bold'
+                      }`}>
+                        {docStatus === 'Pending' ? <Activity className="w-3 h-3 text-amber-600" /> :
+                         docStatus === 'Approved' ? <CheckCircle className="w-3 h-3 text-emerald-600" /> :
+                         docStatus === 'Rejected' ? <XCircle className="w-3 h-3 text-rose-600" /> :
+                         isUploaded ? <CheckCircle className="w-3 h-3 text-emerald-600" /> : <AlertTriangle className="w-3 h-3 text-rose-600" />}
+                        {docStatus === 'Pending' ? 'Pending Review' :
+                         docStatus === 'Approved' ? 'Verified' :
+                         docStatus === 'Rejected' ? 'Rejected' :
+                         isUploaded ? 'Uploaded' : 'Missing'}
                       </span>
                     </div>
                     {isUploaded && (
@@ -1195,9 +1502,19 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                   </div>
 
                   <div className="pt-2 flex items-center justify-between border-t border-slate-200/60 gap-2">
-                    <label className="flex-1 text-center bg-teal-600 hover:bg-teal-700 text-white py-1.5 px-3 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openResubmitModal(docItem)}
+                      className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-1.5 px-2.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow-xs"
+                      title="Open Quick Upload Modal & reset status to Pending for Admin review"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Resubmit</span>
+                    </button>
+
+                    <label className="bg-teal-600 hover:bg-teal-700 text-white py-1.5 px-2.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1 shadow-xs" title="Direct file upload">
                       <Upload className="w-3.5 h-3.5" />
-                      <span>{isUploaded ? 'Replace File' : 'Upload File'}</span>
+                      <span>{isUploaded ? 'Replace' : 'Upload'}</span>
                       <input
                         type="file"
                         accept=".jpg,.jpeg,.png,.webp,.pdf"
@@ -1237,7 +1554,8 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                                     documents: {
                                       ...existingDocs,
                                       [`${docItem.key}Url`]: uploadedUrl,
-                                      [`${docItem.key}Name`]: uploadedName
+                                      [`${docItem.key}Name`]: uploadedName,
+                                      [`${docItem.key}Status`]: 'Pending'
                                     },
                                     status: 'Pending Approval' as const,
                                     statusReason: `KYC document (${docItem.label}) updated and resubmitted for Admin Approval.`,
@@ -1255,7 +1573,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                                 'vendor_registered'
                               );
 
-                              addToast(`${docItem.label} uploaded & resubmitted for Admin Approval!`, 'success');
+                              addToast(`${docItem.label} uploaded & status set to Pending for Admin review!`, 'success');
                               window.dispatchEvent(new Event('healnex_db_update'));
                               loadData();
                             }
@@ -2421,6 +2739,165 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
           </div>
         );
       })()}
+
+      {/* Quick Upload & Resubmit Document Modal */}
+      {resubmitModalDoc && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 text-left">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 relative animate-in fade-in zoom-in duration-200">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-teal-800 to-cyan-900 px-6 py-5 text-white flex justify-between items-center">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider bg-teal-500/30 text-teal-200 px-2.5 py-0.5 rounded-full">
+                  KYC Compliance Quick Upload
+                </span>
+                <h3 className="text-lg font-black mt-1 font-display">
+                  Resubmit {resubmitModalDoc.label}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setResubmitModalDoc(null);
+                  setSelectedResubmitFile(null);
+                  setResubmitFilePreview(null);
+                  setResubmitVendorNotes('');
+                }}
+                className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 text-xs">
+              {/* Status Banner */}
+              <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
+                resubmitModalDoc.status === 'Rejected' ? 'bg-rose-50 border-rose-200 text-rose-950' :
+                resubmitModalDoc.status === 'Pending' ? 'bg-amber-50 border-amber-200 text-amber-950' :
+                'bg-slate-50 border-slate-200 text-slate-800'
+              }`}>
+                <div className="flex items-center gap-2 min-w-0">
+                  {resubmitModalDoc.status === 'Rejected' ? <XCircle className="w-4 h-4 text-rose-600 shrink-0" /> : <Info className="w-4 h-4 text-amber-600 shrink-0" />}
+                  <span className="font-bold truncate">Current Status: {resubmitModalDoc.status || 'Audit Required'}</span>
+                </div>
+                {resubmitModalDoc.currentName && (
+                  <span className="text-[10px] font-mono text-slate-500 truncate max-w-[140px]">
+                    {resubmitModalDoc.currentName}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-slate-600 leading-relaxed text-[11px]">
+                Upload a corrected document below. Submitting this file will automatically update the document status to <strong className="text-amber-700 font-bold">'Pending'</strong> for Admin review and send a priority notification to the compliance team.
+              </p>
+
+              {/* File Drop Area */}
+              <div className="space-y-2">
+                <label className="block font-extrabold text-slate-800 text-xs">Select Document File (.pdf, .jpg, .png)</label>
+                <div className="border-2 border-dashed border-slate-300 hover:border-teal-500 bg-slate-50/50 hover:bg-teal-50/30 rounded-2xl p-5 text-center transition cursor-pointer relative group">
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setSelectedResubmitFile(file);
+                        if (file.type.startsWith('image/')) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            setResubmitFilePreview(ev.target?.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        } else {
+                          setResubmitFilePreview(null);
+                        }
+                      }
+                    }}
+                  />
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="p-3 bg-teal-100 text-teal-700 rounded-full group-hover:scale-110 transition duration-200">
+                      <UploadCloud className="w-6 h-6" />
+                    </div>
+                    {selectedResubmitFile ? (
+                      <div>
+                        <p className="font-bold text-teal-900 text-xs">{selectedResubmitFile.name}</p>
+                        <p className="text-[10px] text-slate-500 font-mono">{(selectedResubmitFile.size / 1024).toFixed(1)} KB • {selectedResubmitFile.type || 'Document'}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="font-bold text-slate-700 text-xs">Click or drag document file here</p>
+                        <p className="text-[10px] text-slate-400">PDF, PNG, JPG or WEBP up to 10MB</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Image Preview */}
+              {resubmitFilePreview && (
+                <div className="p-2.5 bg-slate-100 rounded-xl border border-slate-200 flex items-center gap-3">
+                  <img src={resubmitFilePreview} alt="Preview" className="w-12 h-12 object-cover rounded-lg border border-slate-300 shadow-xs" />
+                  <div>
+                    <p className="font-bold text-slate-800 text-[11px]">Image File Loaded</p>
+                    <p className="text-[10px] text-slate-500 font-mono">Ready for high-res compliance upload</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-700 text-[11px]">Notes for Compliance Auditor (Optional)</label>
+                <textarea
+                  value={resubmitVendorNotes}
+                  onChange={(e) => setResubmitVendorNotes(e.target.value)}
+                  placeholder="e.g. Uploaded revised GST certificate with updated branch address and official seal..."
+                  rows={2}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setResubmitModalDoc(null);
+                  setSelectedResubmitFile(null);
+                  setResubmitFilePreview(null);
+                  setResubmitVendorNotes('');
+                }}
+                className="px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-xl font-bold text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={!selectedResubmitFile || isResubmittingFile}
+                onClick={handleConfirmResubmit}
+                className={`px-5 py-2.5 rounded-xl font-extrabold text-xs text-white shadow-xs flex items-center gap-2 transition cursor-pointer ${
+                  !selectedResubmitFile || isResubmittingFile
+                    ? 'bg-slate-300 cursor-not-allowed'
+                    : 'bg-teal-700 hover:bg-teal-800'
+                }`}
+              >
+                {isResubmittingFile ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Uploading & Resubmitting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>Resubmit for Admin Review</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
