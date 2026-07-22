@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { User, Vendor } from '../types';
+import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
 import {
   Lock,
   Mail,
@@ -198,7 +199,7 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
   const [tempAdminUser, setTempAdminUser] = useState<User | null>(null);
 
   // File Upload processing handler
-  const handleFileUpload = (key: string, file: File) => {
+  const handleFileUpload = async (key: string, file: File) => {
     if (file.size > 10 * 1024 * 1024) {
       addToast('Maximum file size exceeded (10 MB). Please choose a smaller document.', 'error');
       return;
@@ -219,61 +220,63 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
         size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
         url: '',
         previewUrl: '',
-        progress: 10,
+        progress: 20,
         isUploading: true
       }
     }));
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = (ev.target?.result as string) || '';
-      let currentProgress = 10;
-      const timer = setInterval(() => {
-        currentProgress += Math.floor(Math.random() * 20) + 15;
-        if (currentProgress >= 100) {
-          currentProgress = 100;
-          clearInterval(timer);
-
-          const docTitleMap: Record<string, string> = {
-            gstCertificate: 'GST Certificate (Form REG-06)',
-            panCard: 'Permanent Account Number (PAN Card)',
-            aadhaarCard: 'Aadhaar Identification Card',
-            tradeLicense: 'Municipal Trade License',
-            companyRegCertificate: 'Company Registration Certificate',
-            cancelledCheque: 'Cancelled Clearing Cheque Leaf',
-            drugLicense: 'State Drug Control License',
-            fssaiLicense: 'FSSAI Food Safety License'
-          };
-
-          const docTitle = docTitleMap[key] || 'Corporate Document';
-          const formattedSize = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
-          const generatedPreview = generateDocumentCanvas(docTitle, file.name, formattedSize);
-
-          setUploadedDocs(prev => ({
-            ...prev,
-            [key]: {
-              name: file.name,
-              size: formattedSize,
-              url: dataUrl || generatedPreview,
-              previewUrl: dataUrl || generatedPreview,
-              progress: 100,
-              isUploading: false
-            }
-          }));
-
-          addToast(`Uploaded ${file.name} successfully.`, 'success');
-        } else {
-          setUploadedDocs(prev => ({
-            ...prev,
-            [key]: {
-              ...prev[key],
-              progress: currentProgress
-            }
-          }));
-        }
-      }, 120);
+    const docTitleMap: Record<string, string> = {
+      gstCertificate: 'GST Certificate (Form REG-06)',
+      panCard: 'Permanent Account Number (PAN Card)',
+      aadhaarCard: 'Aadhaar Identification Card',
+      tradeLicense: 'Municipal Trade License',
+      companyRegCertificate: 'Company Registration Certificate',
+      cancelledCheque: 'Cancelled Clearing Cheque Leaf',
+      drugLicense: 'State Drug Control License',
+      fssaiLicense: 'FSSAI Food Safety License'
     };
-    reader.readAsDataURL(file);
+
+    const docTitle = docTitleMap[key] || 'Corporate Document';
+    const formattedSize = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+    const generatedPreview = generateDocumentCanvas(docTitle, file.name, formattedSize);
+
+    try {
+      const cloudRes = await uploadVendorDocumentToCloudinary(file);
+      const cUrl = cloudRes.url;
+
+      setUploadedDocs(prev => ({
+        ...prev,
+        [key]: {
+          name: file.name,
+          size: formattedSize,
+          url: cUrl,
+          previewUrl: cUrl || generatedPreview,
+          progress: 100,
+          isUploading: false
+        }
+      }));
+
+      addToast(`Uploaded ${file.name} to Cloudinary successfully!`, 'success');
+    } catch (err) {
+      console.error('Cloudinary document upload failed:', err);
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = (ev.target?.result as string) || '';
+        setUploadedDocs(prev => ({
+          ...prev,
+          [key]: {
+            name: file.name,
+            size: formattedSize,
+            url: dataUrl || generatedPreview,
+            previewUrl: dataUrl || generatedPreview,
+            progress: 100,
+            isUploading: false
+          }
+        }));
+        addToast(`Uploaded ${file.name} locally!`, 'success');
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Camera simulator

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
+import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
 import {
@@ -6725,35 +6726,62 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                               type="file"
                               accept=".jpg,.jpeg,.png,.webp,.pdf"
                               className="hidden"
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const file = e.target.files?.[0];
                                 if (file && selectedVendorDoc) {
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => {
-                                    if (ev.target?.result) {
-                                      const dataUrl = ev.target.result as string;
-                                      const updatedVendors = vendors.map(v => {
-                                        if (v.id === selectedVendorDoc.id) {
-                                          const existingDocs = v.documents || {};
-                                          return {
-                                            ...v,
-                                            documents: {
-                                              ...existingDocs,
-                                              [`${finalKey}Url`]: dataUrl,
-                                              [`${finalKey}Name`]: file.name
-                                            }
-                                          };
-                                        }
-                                        return v;
-                                      });
-                                      dbLocal.saveVendors(updatedVendors);
-                                      loadData();
-                                      const updatedCurrent = updatedVendors.find(v => v.id === selectedVendorDoc.id);
-                                      if (updatedCurrent) setSelectedVendorDoc(updatedCurrent);
-                                      addToast('Vendor original document updated successfully!', 'success');
-                                    }
-                                  };
-                                  reader.readAsDataURL(file);
+                                  try {
+                                    addToast(`Uploading ${file.name} to Cloudinary...`, 'info');
+                                    const cloudRes = await uploadVendorDocumentToCloudinary(file);
+                                    const cUrl = cloudRes.url;
+                                    const updatedVendors = vendors.map(v => {
+                                      if (v.id === selectedVendorDoc.id) {
+                                        const existingDocs = v.documents || {};
+                                        return {
+                                          ...v,
+                                          documents: {
+                                            ...existingDocs,
+                                            [`${finalKey}Url`]: cUrl,
+                                            [`${finalKey}Name`]: file.name
+                                          }
+                                        };
+                                      }
+                                      return v;
+                                    });
+                                    dbLocal.saveVendors(updatedVendors);
+                                    loadData();
+                                    const updatedCurrent = updatedVendors.find(v => v.id === selectedVendorDoc.id);
+                                    if (updatedCurrent) setSelectedVendorDoc(updatedCurrent);
+                                    addToast('Vendor document uploaded to Cloudinary successfully!', 'success');
+                                  } catch (err: any) {
+                                    console.error('Admin Document Cloudinary Upload Failed:', err);
+                                    addToast('Cloudinary upload failed. Saving locally...', 'info');
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) => {
+                                      if (ev.target?.result) {
+                                        const dataUrl = ev.target.result as string;
+                                        const updatedVendors = vendors.map(v => {
+                                          if (v.id === selectedVendorDoc.id) {
+                                            const existingDocs = v.documents || {};
+                                            return {
+                                              ...v,
+                                              documents: {
+                                                ...existingDocs,
+                                                [`${finalKey}Url`]: dataUrl,
+                                                [`${finalKey}Name`]: file.name
+                                              }
+                                            };
+                                          }
+                                          return v;
+                                        });
+                                        dbLocal.saveVendors(updatedVendors);
+                                        loadData();
+                                        const updatedCurrent = updatedVendors.find(v => v.id === selectedVendorDoc.id);
+                                        if (updatedCurrent) setSelectedVendorDoc(updatedCurrent);
+                                        addToast('Vendor document saved locally!', 'success');
+                                      }
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
                                 }
                               }}
                             />

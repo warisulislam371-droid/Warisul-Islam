@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { Vendor, Product, Order, RFQ, Quotation, User, PaymentClearanceRequest } from '../types';
+import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
 import VendorProductManager from './VendorProductManager';
 import VendorAnalytics from './VendorAnalytics';
 import {
@@ -1111,34 +1112,61 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                         type="file"
                         accept=".jpg,.jpeg,.png,.webp,.pdf"
                         className="hidden"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => {
-                              if (ev.target?.result) {
-                                const dataUrl = ev.target.result as string;
-                                const currentVendors = dbLocal.getVendors();
-                                const updatedVendors = currentVendors.map(v => {
-                                  if (v.id === (vendorProfile?.id || currentUser.id)) {
-                                    const existingDocs = v.documents || {};
-                                    return {
-                                      ...v,
-                                      documents: {
-                                        ...existingDocs,
-                                        [`${docItem.key}Url`]: dataUrl,
-                                        [`${docItem.key}Name`]: file.name
-                                      }
-                                    };
-                                  }
-                                  return v;
-                                });
-                                dbLocal.saveVendors(updatedVendors);
-                                addToast(`${docItem.label} original file uploaded successfully!`, 'success');
-                                window.dispatchEvent(new Event('healnex_db_update'));
-                              }
-                            };
-                            reader.readAsDataURL(file);
+                            try {
+                              addToast(`Uploading ${docItem.label} to Cloudinary...`, 'info');
+                              const cloudRes = await uploadVendorDocumentToCloudinary(file);
+                              const cUrl = cloudRes.url;
+                              const currentVendors = dbLocal.getVendors();
+                              const updatedVendors = currentVendors.map(v => {
+                                if (v.id === (vendorProfile?.id || currentUser.id)) {
+                                  const existingDocs = v.documents || {};
+                                  return {
+                                    ...v,
+                                    documents: {
+                                      ...existingDocs,
+                                      [`${docItem.key}Url`]: cUrl,
+                                      [`${docItem.key}Name`]: file.name
+                                    }
+                                  };
+                                }
+                                return v;
+                              });
+                              dbLocal.saveVendors(updatedVendors);
+                              addToast(`${docItem.label} uploaded to Cloudinary successfully!`, 'success');
+                              window.dispatchEvent(new Event('healnex_db_update'));
+                              loadData();
+                            } catch (err: any) {
+                              console.error('Cloudinary Document Upload Failed:', err);
+                              addToast(`Cloudinary upload failed. Saving locally...`, 'info');
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                if (ev.target?.result) {
+                                  const dataUrl = ev.target.result as string;
+                                  const currentVendors = dbLocal.getVendors();
+                                  const updatedVendors = currentVendors.map(v => {
+                                    if (v.id === (vendorProfile?.id || currentUser.id)) {
+                                      const existingDocs = v.documents || {};
+                                      return {
+                                        ...v,
+                                        documents: {
+                                          ...existingDocs,
+                                          [`${docItem.key}Url`]: dataUrl,
+                                          [`${docItem.key}Name`]: file.name
+                                        }
+                                      };
+                                    }
+                                    return v;
+                                  });
+                                  dbLocal.saveVendors(updatedVendors);
+                                  addToast(`${docItem.label} saved locally!`, 'success');
+                                  window.dispatchEvent(new Event('healnex_db_update'));
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
                           }
                         }}
                       />
