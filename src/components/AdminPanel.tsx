@@ -13,6 +13,7 @@ import {
   XCircle,
   Clock,
   Shield,
+  ShieldCheck,
   Search,
   MessageSquare,
   MessageCircle,
@@ -326,6 +327,51 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     setManagingSealVendor(null);
   };
 
+  // Toggle Verified Seller status manually
+  const handleToggleVerifiedSeller = (vendorId: string, forcedValue?: boolean) => {
+    const targetVendor = vendors.find(v => v.id === vendorId);
+    if (!targetVendor) return;
+
+    const currentVal = targetVendor.isVerifiedSeller !== undefined 
+      ? targetVendor.isVerifiedSeller 
+      : (targetVendor.trustSeal || false);
+    
+    const nextVal = forcedValue !== undefined ? forcedValue : !currentVal;
+
+    const updated = vendors.map(v => {
+      if (v.id === vendorId) {
+        return {
+          ...v,
+          isVerifiedSeller: nextVal,
+          trustSeal: nextVal || v.trustSeal
+        };
+      }
+      return v;
+    });
+    dbLocal.saveVendors(updated);
+    setVendors(updated);
+
+    if (selectedVendorDoc && selectedVendorDoc.id === vendorId) {
+      setSelectedVendorDoc({
+        ...selectedVendorDoc,
+        isVerifiedSeller: nextVal,
+        trustSeal: nextVal || selectedVendorDoc.trustSeal
+      });
+    }
+
+    if (nextVal) {
+      dbLocal.addNotification(
+        vendorId,
+        '🛡️ Verified Seller Status Activated!',
+        `Congratulations! Admin has verified your company profile (${targetVendor.companyName}). A Verified Seller shield badge is now active on your profile and marketplace listings.`,
+        'vendor_approved'
+      );
+      addToast(`Verified Seller badge granted to ${targetVendor.companyName}!`, 'success');
+    } else {
+      addToast(`Verified Seller badge removed for ${targetVendor.companyName}.`, 'info');
+    }
+  };
+
   // Vendor Payout Clearance Requests State
   const [clearanceRequests, setClearanceRequests] = useState<PaymentClearanceRequest[]>(dbLocal.getClearanceRequests());
   const [rejectingClearanceId, setRejectingClearanceId] = useState<string | null>(null);
@@ -405,6 +451,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     accountNumber: string;
     ifscCode: string;
     status: 'Approved' | 'Pending' | 'Suspended' | 'Rejected';
+    isVerifiedSeller: boolean;
   }>({
     companyName: '',
     ownerName: '',
@@ -419,7 +466,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     bankName: 'HDFC Bank',
     accountNumber: '',
     ifscCode: 'HDFC0000123',
-    status: 'Approved'
+    status: 'Approved',
+    isVerifiedSeller: true
   });
 
   const loadData = () => {
@@ -855,7 +903,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       bankName: 'HDFC Bank',
       accountNumber: '',
       ifscCode: 'HDFC0000123',
-      status: 'Approved'
+      status: 'Approved',
+      isVerifiedSeller: true
     });
     setEditingVendorModal(null);
     setShowAddVendorModal(true);
@@ -876,7 +925,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       bankName: v.bankDetails?.bankName || 'HDFC Bank',
       accountNumber: v.bankDetails?.accountNumber || '',
       ifscCode: v.bankDetails?.ifscCode || 'HDFC0000123',
-      status: (v.status as any) || 'Approved'
+      status: (v.status as any) || 'Approved',
+      isVerifiedSeller: v.isVerifiedSeller !== undefined ? v.isVerifiedSeller : (v.trustSeal || false)
     });
     setEditingVendorModal(v);
     setShowAddVendorModal(true);
@@ -905,6 +955,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             pincode: vendorForm.pincode,
             customCommissionRate: Number(vendorForm.customCommissionRate),
             status: vendorForm.status,
+            isVerifiedSeller: vendorForm.isVerifiedSeller,
+            trustSeal: vendorForm.isVerifiedSeller || v.trustSeal,
             bankDetails: {
               bankName: vendorForm.bankName,
               accountNumber: vendorForm.accountNumber,
@@ -946,7 +998,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
         pincode: vendorForm.pincode || '400001',
         customCommissionRate: Number(vendorForm.customCommissionRate),
         status: vendorForm.status,
-        trustSeal: true,
+        isVerifiedSeller: vendorForm.isVerifiedSeller,
+        trustSeal: vendorForm.isVerifiedSeller,
         trustSealLevel: 'Verified Clinical Supplier',
         createdAt: new Date().toISOString(),
         bankDetails: {
@@ -2050,10 +2103,16 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         <tr key={v.id} className="hover:bg-slate-50/60 transition">
                           <td className="py-4 px-4">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="font-bold text-slate-900 text-sm">{v.companyName}</p>
-                              {v.trustSeal && (
-                                <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1" title={v.trustSealLevel || 'Verified Clinical Supplier'}>
-                                  🛡️ {v.trustSealLevel || 'Verified Seal'}
+                              <p className="font-bold text-slate-900 text-sm flex items-center gap-1">
+                                <span>{v.companyName}</span>
+                                {(v.isVerifiedSeller || v.trustSeal) && (
+                                  <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0 inline" title="Verified Seller" />
+                                )}
+                              </p>
+                              {(v.isVerifiedSeller || v.trustSeal) && (
+                                <span className="bg-teal-700 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1" title={v.trustSealLevel || 'Verified Seller'}>
+                                  <ShieldCheck className="w-3 h-3 text-white" />
+                                  Verified Seller
                                 </span>
                               )}
                             </div>
@@ -2108,6 +2167,18 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                             </span>
                           </td>
                           <td className="py-4 px-4 text-right space-x-1.5 flex items-center justify-end gap-1 flex-wrap">
+                            <button
+                              onClick={() => handleToggleVerifiedSeller(v.id)}
+                              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition cursor-pointer ${
+                                (v.isVerifiedSeller || v.trustSeal)
+                                  ? 'bg-teal-100 text-teal-800 border border-teal-300 hover:bg-teal-200'
+                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                              }`}
+                              title="Toggle Verified Seller Badge Status"
+                            >
+                              <ShieldCheck className={`w-3.5 h-3.5 ${(v.isVerifiedSeller || v.trustSeal) ? 'text-teal-600' : 'text-slate-400'}`} />
+                              {(v.isVerifiedSeller || v.trustSeal) ? 'Verified' : 'Verify Seller'}
+                            </button>
                             <button
                               onClick={() => handleOpenEditVendor(v)}
                               className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
@@ -2329,6 +2400,53 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         <option value="Suspended">🟡 Suspended</option>
                         <option value="Rejected">🔴 Rejected</option>
                       </select>
+                    </div>
+                  </div>
+
+                  {/* Verification Badge UI Component */}
+                  <div className={`p-4 rounded-2xl border transition ${
+                    vendorForm.isVerifiedSeller
+                      ? 'bg-teal-50/80 border-teal-200'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-xl ${
+                          vendorForm.isVerifiedSeller
+                            ? 'bg-teal-600 text-white shadow-xs'
+                            : 'bg-slate-200 text-slate-500'
+                        }`}>
+                          <ShieldCheck className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-900">Verified Seller Status</span>
+                            {vendorForm.isVerifiedSeller && (
+                              <span className="bg-teal-700 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1">
+                                <ShieldCheck className="w-3 h-3" /> Active Badge
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Displays a verified shield icon next to vendor company name across product cards, seller profiles, and RFQs.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setVendorForm({ ...vendorForm, isVerifiedSeller: !vendorForm.isVerifiedSeller })}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          vendorForm.isVerifiedSeller ? 'bg-teal-600' : 'bg-slate-300'
+                        }`}
+                        title="Toggle Verified Seller Badge"
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                            vendorForm.isVerifiedSeller ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
                     </div>
                   </div>
 
@@ -6318,16 +6436,68 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 {/* Profile Overview */}
                 <div className="p-5 border-b border-slate-100 bg-white space-y-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 bg-teal-50 text-teal-700 rounded-full flex items-center justify-center font-bold text-sm">
+                    <div className="w-10 h-10 bg-teal-50 text-teal-700 rounded-full flex items-center justify-center font-bold text-sm shrink-0">
                       {selectedVendorDoc.companyName.slice(0, 2).toUpperCase()}
                     </div>
-                    <div>
-                      <h4 className="font-bold text-slate-850 text-xs truncate">
-                        {selectedVendorDoc.companyName}
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-bold text-slate-900 text-xs truncate flex items-center gap-1.5">
+                        <span className="truncate">{selectedVendorDoc.companyName}</span>
+                        {(selectedVendorDoc.isVerifiedSeller || selectedVendorDoc.trustSeal) && (
+                          <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0 inline" title="Verified Seller" />
+                        )}
                       </h4>
                       <p className="text-[10px] text-slate-500">
                         Owner: {selectedVendorDoc.ownerName}
                       </p>
+                    </div>
+                  </div>
+
+                  {/* Verification Badge UI Component */}
+                  <div className={`p-3 rounded-xl border transition-all ${
+                    (selectedVendorDoc.isVerifiedSeller || selectedVendorDoc.trustSeal)
+                      ? 'bg-teal-50/80 border-teal-200'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`p-1.5 rounded-lg shrink-0 ${
+                          (selectedVendorDoc.isVerifiedSeller || selectedVendorDoc.trustSeal)
+                            ? 'bg-teal-600 text-white shadow-xs'
+                            : 'bg-slate-200 text-slate-500'
+                        }`}>
+                          <ShieldCheck className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-bold text-slate-900">Verified Seller Status</span>
+                            {(selectedVendorDoc.isVerifiedSeller || selectedVendorDoc.trustSeal) && (
+                              <span className="bg-teal-700 text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-0.5">
+                                <ShieldCheck className="w-2.5 h-2.5" /> Verified
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 truncate">
+                            {(selectedVendorDoc.isVerifiedSeller || selectedVendorDoc.trustSeal)
+                              ? 'Shield icon active on marketplace & listings'
+                              : 'Unverified seller — toggle to activate shield badge'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleVerifiedSeller(selectedVendorDoc.id)}
+                        className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          (selectedVendorDoc.isVerifiedSeller || selectedVendorDoc.trustSeal) ? 'bg-teal-600' : 'bg-slate-300'
+                        }`}
+                        title="Toggle Verified Seller Status"
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                            (selectedVendorDoc.isVerifiedSeller || selectedVendorDoc.trustSeal) ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
                     </div>
                   </div>
 

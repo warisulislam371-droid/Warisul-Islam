@@ -62,6 +62,7 @@ export interface Vendor {
   customCommissionRate?: number; // Optional vendor-specific commission %
   trustSeal?: boolean;
   trustSealLevel?: string;
+  isVerifiedSeller?: boolean;
   createdAt: string;
   updatedAt?: string;
 }

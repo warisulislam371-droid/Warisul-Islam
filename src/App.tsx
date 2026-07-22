@@ -11,6 +11,7 @@ import AuthModal from './components/AuthModal';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import TrustAndSafetyPage from './components/TrustAndSafetyPage';
 import ReviewsPage from './components/ReviewsPage';
+import SitemapPage from './components/SitemapPage';
 import PolicyModal, { PolicyType } from './components/PolicyModal';
 import { 
   LogIn, 
@@ -95,6 +96,8 @@ export default function App() {
       if (path.startsWith('/category/')) {
         const cat = decodeURIComponent(path.replace('/category/', ''));
         if (cat) setSelectedCategoryName(cat);
+      } else if (path === '/sitemap' || path === '/sitemap.html') {
+        setCurrentView('sitemap');
       }
     }
 
@@ -266,6 +269,16 @@ export default function App() {
             <BlogSection currentUser={currentUser} addToast={addToast} />
           )}
 
+          {/* Interactive B2B Platform Sitemap */}
+          {currentView === 'sitemap' && (
+            <SitemapPage
+              onNavigate={setCurrentView}
+              onSelectCategory={handleCategorySelect}
+              onOpenPolicy={(policy) => setActivePolicyModal(policy as PolicyType)}
+              isDarkMode={isDarkMode}
+            />
+          )}
+
         </main>
 
         {/* Clinical Footer */}
@@ -278,6 +291,10 @@ export default function App() {
                 <p className="text-[10px] text-slate-500 font-medium">Al Salam Medical Equipment Centre | WhatsApp Support: +91 9103500592</p>
               </div>
               <div className="flex flex-wrap items-center justify-center md:justify-end gap-x-5 gap-y-2 text-[11px] font-semibold">
+                <button onClick={() => setCurrentView('sitemap')} className="text-teal-400 hover:text-teal-300 font-extrabold transition flex items-center gap-1 bg-teal-950/60 border border-teal-800/80 px-2.5 py-1 rounded-lg shadow-xs">
+                  <Compass className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Sitemap</span>
+                </button>
                 <button onClick={() => setActivePolicyModal('about')} className="hover:text-teal-400 transition">About Us</button>
                 <button onClick={() => setActivePolicyModal('contact')} className="hover:text-teal-400 transition">Contact</button>
                 <button onClick={() => setActivePolicyModal('privacy')} className="hover:text-teal-400 transition">Privacy Policy</button>

@@ -24,7 +24,8 @@ import {
   ShieldCheck,
   Star,
   MapPin,
-  ClipboardList
+  ClipboardList,
+  Compass
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -287,6 +288,18 @@ export default function Navbar({
             >
               <ShieldCheck className="w-5 h-5 text-emerald-600" />
               <span className="hidden lg:inline">Trust & Safety</span>
+            </button>
+
+            {/* Sitemap Trigger */}
+            <button
+              onClick={() => onNavigate('sitemap')}
+              className={`p-2 rounded-xl transition flex items-center gap-1 text-xs font-semibold ${
+                currentView === 'sitemap' ? 'bg-teal-50 text-teal-700 font-bold' : 'text-slate-500 hover:bg-slate-100 hover:text-teal-700'
+              }`}
+              title="Platform Sitemap & Architecture Index"
+            >
+              <Compass className="w-5 h-5 text-teal-600" />
+              <span className="hidden xl:inline">Sitemap</span>
             </button>
 
             {/* Support Tickets Trigger */}

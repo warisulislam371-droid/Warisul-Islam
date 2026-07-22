@@ -21,12 +21,32 @@ export async function getSitemapEntries(baseUrl: string = 'https://medbazarhelne
   const cleanBase = baseUrl.replace(/\/+$/, '');
   const entries: SitemapEntry[] = [];
 
-  // 1. Homepage
-  entries.push({
-    url: `${cleanBase}/`,
-    lastModified: new Date().toISOString(),
-    changeFrequency: 'daily',
-    priority: 1.0,
+  // 1. Core Platform Pages
+  const staticRoutes = [
+    { path: '/', priority: 1.0, freq: 'daily' },
+    { path: '/sitemap', priority: 0.9, freq: 'weekly' },
+    { path: '/marketplace', priority: 0.9, freq: 'daily' },
+    { path: '/rfqs', priority: 0.8, freq: 'daily' },
+    { path: '/blogs', priority: 0.8, freq: 'weekly' },
+    { path: '/reviews', priority: 0.8, freq: 'daily' },
+    { path: '/trust-safety', priority: 0.8, freq: 'monthly' },
+    { path: '/vendor', priority: 0.7, freq: 'monthly' },
+    { path: '/admin', priority: 0.5, freq: 'monthly' },
+    { path: '/policy/about', priority: 0.6, freq: 'monthly' },
+    { path: '/policy/contact', priority: 0.6, freq: 'monthly' },
+    { path: '/policy/privacy', priority: 0.5, freq: 'monthly' },
+    { path: '/policy/terms', priority: 0.5, freq: 'monthly' },
+    { path: '/policy/refund', priority: 0.5, freq: 'monthly' },
+    { path: '/policy/shipping', priority: 0.5, freq: 'monthly' },
+  ];
+
+  staticRoutes.forEach((route) => {
+    entries.push({
+      url: `${cleanBase}${route.path}`,
+      lastModified: new Date().toISOString(),
+      changeFrequency: route.freq as any,
+      priority: route.priority,
+    });
   });
 
   let products: Product[] = [];
@@ -122,7 +142,7 @@ export async function getSitemapEntries(baseUrl: string = 'https://medbazarhelne
     }
   });
 
-  // 4. Vendor Pages
+  // 6. Vendor Pages
   vendors.forEach((v) => {
     if (v.id) {
       entries.push({
@@ -130,18 +150,6 @@ export async function getSitemapEntries(baseUrl: string = 'https://medbazarhelne
         lastModified: v.updatedAt || v.createdAt || new Date().toISOString(),
         changeFrequency: 'weekly',
         priority: 0.8,
-      });
-    }
-  });
-
-  // 5. Brand Pages
-  brandsSet.forEach((brand) => {
-    if (brand.trim()) {
-      entries.push({
-        url: `${cleanBase}/brand/${encodeURIComponent(brand.trim())}`,
-        lastModified: new Date().toISOString(),
-        changeFrequency: 'weekly',
-        priority: 0.7,
       });
     }
   });
