@@ -1072,6 +1072,96 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
             </span>
           </div>
 
+          {/* KYC Status & Resubmit Banner */}
+          <div className={`p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+            (vendorProfile?.status === 'Pending' || vendorProfile?.status === 'Pending Approval')
+              ? 'bg-amber-50 border-amber-200 text-amber-950'
+              : vendorProfile?.status === 'Approved'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+              : vendorProfile?.status === 'MoreInfoRequired'
+              ? 'bg-orange-50 border-orange-200 text-orange-950'
+              : 'bg-rose-50 border-rose-200 text-rose-950'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded-xl text-white font-bold shrink-0 ${
+                (vendorProfile?.status === 'Pending' || vendorProfile?.status === 'Pending Approval')
+                  ? 'bg-amber-500 animate-pulse text-slate-950'
+                  : vendorProfile?.status === 'Approved'
+                  ? 'bg-emerald-600'
+                  : vendorProfile?.status === 'MoreInfoRequired'
+                  ? 'bg-orange-500'
+                  : 'bg-rose-600'
+              }`}>
+                {vendorProfile?.status === 'Approved' ? <ShieldCheck className="w-5 h-5" /> : <FileCheck className="w-5 h-5" />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-black uppercase tracking-wider">
+                    KYC Approval Status: {vendorProfile?.status || 'Pending Audit'}
+                  </h4>
+                  {vendorProfile?.updatedAt && (
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      Updated: {new Date(vendorProfile.updatedAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  {(vendorProfile?.status === 'Pending' || vendorProfile?.status === 'Pending Approval')
+                    ? '⏳ Your KYC documents are submitted to Admin for verification and approval.'
+                    : vendorProfile?.status === 'Approved'
+                    ? '✅ Your corporate account is verified & approved. Any document replacements will automatically resubmit for Admin review.'
+                    : vendorProfile?.status === 'MoreInfoRequired'
+                    ? `⚠️ Audit note: ${vendorProfile?.statusReason || 'Please upload missing documents and click Resubmit.'}`
+                    : `🔴 Audit status: ${vendorProfile?.statusReason || 'Registration details require updated documents.'}`}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const targetVendorId = vendorProfile?.id || currentUser.id;
+                const currentVendors = dbLocal.getVendors();
+                const targetV = currentVendors.find(v => v.id === targetVendorId);
+                const docs = targetV?.documents || {};
+                const uploadedCount = Object.keys(docs).filter(k => k.endsWith('Url') && (docs as any)[k]).length;
+
+                if (uploadedCount === 0) {
+                  addToast('Please upload at least one KYC document file before resubmitting for approval.', 'error');
+                  return;
+                }
+
+                const updatedVendors = currentVendors.map(v => {
+                  if (v.id === targetVendorId) {
+                    return {
+                      ...v,
+                      status: 'Pending Approval' as const,
+                      statusReason: 'KYC documents resubmitted by vendor for Admin approval.',
+                      updatedAt: new Date().toISOString()
+                    };
+                  }
+                  return v;
+                });
+                dbLocal.saveVendors(updatedVendors);
+
+                dbLocal.addNotification(
+                  'admin',
+                  '🚨 Vendor Resubmitted KYC for Approval',
+                  `${vendorProfile?.companyName || currentUser.name} has explicitly resubmitted their KYC documents for Admin approval.`,
+                  'vendor_registered'
+                );
+
+                addToast('KYC documents successfully resubmitted to Admin for review and approval!', 'success');
+                window.dispatchEvent(new Event('healnex_db_update'));
+                loadData();
+              }}
+              className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Resubmit KYC for Approval</span>
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { key: 'gstCertificate', label: 'GST Certificate (REG-06)' },
@@ -1115,57 +1205,59 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
+                            let uploadedUrl = '';
+                            let uploadedName = file.name;
                             try {
                               addToast(`Uploading ${docItem.label} to Cloudinary...`, 'info');
                               const cloudRes = await uploadVendorDocumentToCloudinary(file);
-                              const cUrl = cloudRes.url;
+                              uploadedUrl = cloudRes.url;
+                            } catch (err: any) {
+                              console.error('Cloudinary Document Upload Failed:', err);
+                              addToast(`Cloudinary upload failed. Saving locally...`, 'info');
+                              await new Promise<void>((resolve) => {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                  if (ev.target?.result) {
+                                    uploadedUrl = ev.target.result as string;
+                                  }
+                                  resolve();
+                                };
+                                reader.readAsDataURL(file);
+                              });
+                            }
+
+                            if (uploadedUrl) {
+                              const targetVendorId = vendorProfile?.id || currentUser.id;
                               const currentVendors = dbLocal.getVendors();
                               const updatedVendors = currentVendors.map(v => {
-                                if (v.id === (vendorProfile?.id || currentUser.id)) {
+                                if (v.id === targetVendorId) {
                                   const existingDocs = v.documents || {};
                                   return {
                                     ...v,
                                     documents: {
                                       ...existingDocs,
-                                      [`${docItem.key}Url`]: cUrl,
-                                      [`${docItem.key}Name`]: file.name
-                                    }
+                                      [`${docItem.key}Url`]: uploadedUrl,
+                                      [`${docItem.key}Name`]: uploadedName
+                                    },
+                                    status: 'Pending Approval' as const,
+                                    statusReason: `KYC document (${docItem.label}) updated and resubmitted for Admin Approval.`,
+                                    updatedAt: new Date().toISOString()
                                   };
                                 }
                                 return v;
                               });
                               dbLocal.saveVendors(updatedVendors);
-                              addToast(`${docItem.label} uploaded to Cloudinary successfully!`, 'success');
+
+                              dbLocal.addNotification(
+                                'admin',
+                                '📄 Vendor Resubmitted KYC Document',
+                                `${vendorProfile?.companyName || currentUser.name} uploaded new document (${docItem.label}) and resubmitted their account for approval.`,
+                                'vendor_registered'
+                              );
+
+                              addToast(`${docItem.label} uploaded & resubmitted for Admin Approval!`, 'success');
                               window.dispatchEvent(new Event('healnex_db_update'));
                               loadData();
-                            } catch (err: any) {
-                              console.error('Cloudinary Document Upload Failed:', err);
-                              addToast(`Cloudinary upload failed. Saving locally...`, 'info');
-                              const reader = new FileReader();
-                              reader.onload = (ev) => {
-                                if (ev.target?.result) {
-                                  const dataUrl = ev.target.result as string;
-                                  const currentVendors = dbLocal.getVendors();
-                                  const updatedVendors = currentVendors.map(v => {
-                                    if (v.id === (vendorProfile?.id || currentUser.id)) {
-                                      const existingDocs = v.documents || {};
-                                      return {
-                                        ...v,
-                                        documents: {
-                                          ...existingDocs,
-                                          [`${docItem.key}Url`]: dataUrl,
-                                          [`${docItem.key}Name`]: file.name
-                                        }
-                                      };
-                                    }
-                                    return v;
-                                  });
-                                  dbLocal.saveVendors(updatedVendors);
-                                  addToast(`${docItem.label} saved locally!`, 'success');
-                                  window.dispatchEvent(new Event('healnex_db_update'));
-                                }
-                              };
-                              reader.readAsDataURL(file);
                             }
                           }
                         }}

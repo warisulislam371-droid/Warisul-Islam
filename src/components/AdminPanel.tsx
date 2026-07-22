@@ -57,6 +57,7 @@ import {
   Box,
   Image as ImageIcon,
   Plus,
+  ArrowRight,
   Layers,
   ToggleLeft,
   ToggleRight,
@@ -2028,6 +2029,32 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             </button>
           </div>
 
+          {/* Pending KYC Resubmission Approval Alert Banner */}
+          {pendingVendorsCount > 0 && (
+            <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-950 shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500 text-slate-950 rounded-xl font-bold animate-pulse shrink-0">
+                  <FileCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider text-amber-900">
+                    🚨 {pendingVendorsCount} Vendor{pendingVendorsCount > 1 ? 's' : ''} Awaiting KYC Approval
+                  </p>
+                  <p className="text-[11px] text-amber-800 font-medium">
+                    Medical suppliers have uploaded/resubmitted regulatory KYC documents. Please audit their documents and approve or request information.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setVendorStatusFilter('Pending')}
+                className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs px-4 py-2 rounded-xl transition cursor-pointer shadow-xs flex items-center gap-1.5"
+              >
+                <span>Review Pending ({pendingVendorsCount})</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* Search and Filters Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
             <div className="relative flex-1">
@@ -2138,13 +2165,17 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                           <td className="py-4 px-4 space-y-1">
                             {(() => {
                               const uploadedDocsCount = v.documents ? Object.keys(v.documents).filter(k => k.endsWith('Url') && (v.documents as any)[k]).length : 0;
+                              const isPendingApproval = v.status === 'Pending' || v.status === 'Pending Approval';
                               return (
                                 <button
                                   onClick={() => setSelectedVendorDoc(v)}
-                                  className="text-xs text-teal-700 hover:text-teal-900 font-bold underline flex items-center gap-1 cursor-pointer"
+                                  className={isPendingApproval
+                                    ? "bg-amber-500 hover:bg-amber-600 text-slate-950 px-2.5 py-1 rounded-lg text-xs font-black shadow-xs flex items-center gap-1 cursor-pointer transition animate-pulse"
+                                    : "text-xs text-teal-700 hover:text-teal-900 font-bold underline flex items-center gap-1 cursor-pointer"
+                                  }
                                 >
                                   <FileCheck className="w-3.5 h-3.5" />
-                                  Review docs ({uploadedDocsCount || 8})
+                                  {isPendingApproval ? `Audit KYC (${uploadedDocsCount}/8)` : `Review docs (${uploadedDocsCount || 8})`}
                                 </button>
                               );
                             })()}
