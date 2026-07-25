@@ -101,6 +101,49 @@
         "requestedAt": { "type": "string" }
       },
       "required": ["brandName", "vendorId", "status"]
+    },
+    "vendorDocuments": {
+      "title": "Vendor Verification Documents",
+      "description": "Verification files and license records uploaded by vendors",
+      "type": "object",
+      "properties": {
+        "vendorId": { "type": "string" },
+        "documentType": { "type": "string" },
+        "documentName": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileType": { "type": "string" },
+        "fileSize": { "type": "number" },
+        "status": { "type": "string" },
+        "remarks": { "type": "string" },
+        "expiresAt": { "type": "string" },
+        "uploadedAt": { "type": "string" }
+      },
+      "required": ["vendorId", "documentType", "fileUrl", "status"]
+    },
+    "productImages": {
+      "title": "Product Image Assets",
+      "description": "Cloudinary asset records and metadata for medical products",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "cloudinaryPublicId": { "type": "string" },
+        "secureUrl": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileSize": { "type": "number" },
+        "originalSize": { "type": "number" },
+        "compressedSize": { "type": "number" },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "format": { "type": "string" },
+        "isPrimary": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "status": { "type": "string" },
+        "rejectionReason": { "type": "string" },
+        "uploadedAt": { "type": "string" }
+      },
+      "required": ["productId", "vendorId", "secureUrl", "status"]
     }
   }
 }

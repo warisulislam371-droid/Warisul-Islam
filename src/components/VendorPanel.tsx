@@ -4,6 +4,8 @@ import { Vendor, Product, Order, RFQ, Quotation, User, PaymentClearanceRequest }
 import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
 import VendorProductManager from './VendorProductManager';
 import VendorAnalytics from './VendorAnalytics';
+import { VendorVerificationWizard } from './VendorVerificationWizard';
+import { ProductImageManager } from './ProductImageManager';
 import {
   Store,
   Upload,
@@ -79,7 +81,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [clearanceRequests, setClearanceRequests] = useState<PaymentClearanceRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<'profile' | 'products' | 'bulk' | 'orders' | 'rfqs' | 'payouts' | 'analytics'>('analytics');
+  const [activeTab, setActiveTab] = useState<'profile' | 'products' | 'bulk' | 'orders' | 'rfqs' | 'payouts' | 'analytics' | 'verification' | 'image_assets'>('analytics');
 
   // Payout Clearance Request State
   const [reqAmount, setReqAmount] = useState<number>(0);
@@ -1320,6 +1322,20 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
             B2B Tenders/RFQs ({rfqs.length})
           </button>
           <button
+            onClick={() => setActiveTab('verification')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'verification' ? 'bg-white text-slate-950 shadow-sm font-bold text-emerald-800' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            Verification Wizard
+          </button>
+          <button
+            onClick={() => setActiveTab('image_assets')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'image_assets' ? 'bg-white text-slate-950 shadow-sm font-bold text-emerald-800' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+            Cloudinary Image Manager
+          </button>
+          <button
             onClick={() => setActiveTab('payouts')}
             className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'payouts' ? 'bg-white text-slate-950 shadow-sm font-bold text-teal-800' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -1327,6 +1343,24 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
           </button>
         </div>
       </div>
+
+      {/* Verification Wizard Tab */}
+      {activeTab === 'verification' && vendorProfile && (
+        <VendorVerificationWizard
+          vendor={vendorProfile}
+          onUpdateVendor={(updated) => setVendorProfile(updated)}
+        />
+      )}
+
+      {/* Cloudinary Image Assets Manager Tab */}
+      {activeTab === 'image_assets' && vendorProfile && (
+        <ProductImageManager
+          productId={products[0]?.id || 'prod_default'}
+          vendorId={vendorProfile.id}
+          userRole="vendor"
+          onImagesUpdated={() => loadData()}
+        />
+      )}
 
       {/* Analytics Tab */}
       {activeTab === 'analytics' && (() => {

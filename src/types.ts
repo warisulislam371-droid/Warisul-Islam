@@ -60,11 +60,22 @@ export interface Vendor {
   status: VendorStatus;
   statusReason?: string;
   customCommissionRate?: number; // Optional vendor-specific commission %
-  trustSeal?: boolean;
+  trustSeal?: boolean | string;
   trustSealLevel?: string;
   isVerifiedSeller?: boolean;
   createdAt: string;
   updatedAt?: string;
+  name?: string;
+  vendorType?: string;
+  gstin?: string;
+  pan?: string;
+  cin?: string;
+  address?: string;
+  phone?: string;
+  yearEstablished?: number;
+  verificationSubmittedAt?: string;
+  verifiedAt?: string;
+  rejectionReason?: string;
 }
 
 export type ProductStatus = 'Draft' | 'Pending' | 'Approved' | 'Rejected' | 'Inactive' | 'ChangesRequested';
@@ -524,4 +535,87 @@ export interface PromoBanner {
   purchaseProductId?: string;
   purchaseButtonText?: string;
   purchaseButtonPrice?: number;
+}
+
+export type DocumentTypeKey =
+  | 'gstCertificate'
+  | 'panCard'
+  | 'aadhaarCard'
+  | 'tradeLicense'
+  | 'drugLicense'
+  | 'medicalDeviceLicense'
+  | 'importExportCode'
+  | 'msmeCertificate'
+  | 'addressProof'
+  | 'cancelledCheque';
+
+export type DocumentStatus = 'Pending' | 'Approved' | 'Rejected' | 'ReuploadRequested' | 'Expired';
+
+export interface VendorVerificationDocument {
+  id: string;
+  vendorId: string;
+  documentType: DocumentTypeKey;
+  documentName: string;
+  fileUrl: string;
+  fileType: 'pdf' | 'png' | 'jpg' | 'webp';
+  fileSize: number;
+  status: DocumentStatus;
+  remarks?: string;
+  expiresAt?: string; // for licenses
+  uploadedAt: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  ocrExtractedData?: {
+    gstin?: string;
+    pan?: string;
+    name?: string;
+    address?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+  };
+}
+
+export interface VerificationTimelineEvent {
+  id: string;
+  vendorId: string;
+  status: VendorStatus | 'DocumentUploaded' | 'DocumentApproved' | 'DocumentRejected';
+  title: string;
+  description: string;
+  actorRole: 'vendor' | 'admin' | 'system';
+  actorName: string;
+  timestamp: string;
+}
+
+export interface ProductImageAsset {
+  id: string;
+  productId: string;
+  vendorId: string;
+  cloudinaryPublicId: string;
+  secureUrl: string;
+  thumbnailUrl: string;
+  fileName: string;
+  fileSize: number;
+  originalSize: number;
+  compressedSize: number;
+  width?: number;
+  height?: number;
+  format: 'jpg' | 'png' | 'webp';
+  isPrimary: boolean;
+  sortOrder: number;
+  status: 'Approved' | 'Pending' | 'Rejected';
+  rejectionReason?: string;
+  uploadedAt: string;
+  uploadedBy: string;
+}
+
+export interface ProductImageUploadHistory {
+  id: string;
+  productId: string;
+  vendorId: string;
+  action: 'Uploaded' | 'Reordered' | 'PrimarySet' | 'Approved' | 'Rejected' | 'Replaced' | 'Deleted';
+  imageUrl: string;
+  performedByRole: 'vendor' | 'admin';
+  performedByName: string;
+  timestamp: string;
+  note?: string;
 }

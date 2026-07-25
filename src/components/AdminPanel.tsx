@@ -4,6 +4,7 @@ import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/
 import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
+import { AdminVerificationPanel } from './AdminVerificationPanel';
 import {
   TrendingUp,
   Users,
@@ -216,7 +217,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [pushTarget, setPushTarget] = useState('admin');
   const [pushType, setPushType] = useState('clinical_broadcast');
   
-  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders'>('kpis');
+  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit'>('kpis');
 
   // Promo Banners State
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>(dbLocal.getPromoBanners());
@@ -1386,10 +1387,20 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
           >
             ⚙️ Commission Settings
           </button>
+          <button
+            onClick={() => setActiveTab('verification_audit')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'verification_audit' ? 'bg-white text-emerald-950 shadow-sm font-bold border border-emerald-300' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            Vendor Compliance Audit
+          </button>
         </div>
       </div>
 
       {/* tab view layouts */}
+      {activeTab === 'verification_audit' && (
+        <AdminVerificationPanel />
+      )}
       {activeTab === 'kpis' && (
         <div className="space-y-8 animate-fade-in">
           {/* KPI Cards Grid */}
