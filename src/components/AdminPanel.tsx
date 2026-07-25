@@ -2581,13 +2581,13 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       {vendorProds.map(prod => (
                         <div key={prod.id} className="p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50/50 hover:bg-white transition">
                           <div className="flex items-center gap-3.5">
-                            <img src={prod.images[0]} alt={prod.name} className="w-12 h-12 rounded-xl object-cover bg-white border border-slate-200 shrink-0" />
+                            <img src={prod.images && prod.images.length > 0 && prod.images[0] ? prod.images[0] : 'https://images.unsplash.com/photo-1516549655169-df83a0774514'} alt={prod.name || 'Product'} className="w-12 h-12 rounded-xl object-cover bg-white border border-slate-200 shrink-0" />
                             <div>
                               <div className="flex items-center gap-2">
                                 <h4 className="font-bold text-xs text-slate-900">{prod.name}</h4>
                                 <span className="text-[10px] font-mono bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">SKU: {prod.sku}</span>
                               </div>
-                              <p className="text-[11px] text-slate-500 mt-0.5">{prod.category} • ₹{prod.salePrice.toLocaleString('en-IN')}</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5">{prod.category} • ₹{(prod.salePrice ?? prod.price ?? 0).toLocaleString('en-IN')}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
