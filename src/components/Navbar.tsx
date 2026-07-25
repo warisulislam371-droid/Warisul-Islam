@@ -499,6 +499,16 @@ export default function Navbar({
                       </button>
 
                       <button
+                        onClick={() => { onNavigate('price-alerts'); setShowUserDropdown(false); }}
+                        className={`w-full text-left px-4 py-2 text-xs flex items-center gap-2 transition ${
+                          isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <Bell className="w-4 h-4 text-amber-500" />
+                        My Price &amp; Stock Alerts
+                      </button>
+
+                      <button
                         onClick={() => { onNavigate('reviews'); setShowUserDropdown(false); }}
                         className={`w-full text-left px-4 py-2 text-xs flex items-center gap-2 transition ${
                           isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-50 text-slate-700'

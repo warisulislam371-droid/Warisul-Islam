@@ -486,6 +486,28 @@ export interface PaymentClearanceRequest {
   netPayable?: number;
 }
 
+export type PriceAlertType = 'price_drop' | 'back_in_stock' | 'both';
+export type NotificationChannel = 'email' | 'push' | 'both';
+
+export interface PriceAlert {
+  id: string;
+  userId?: string;
+  userEmail: string;
+  productId: string;
+  productName: string;
+  productImage?: string;
+  vendorName?: string;
+  currentPrice: number;
+  targetPrice: number;
+  alertType: PriceAlertType;
+  channel: NotificationChannel;
+  enablePush: boolean;
+  enableEmail: boolean;
+  createdAt: string;
+  status: 'active' | 'triggered' | 'disabled';
+  lastNotifiedAt?: string;
+}
+
 export interface PromoBanner {
   id: string;
   title: string;

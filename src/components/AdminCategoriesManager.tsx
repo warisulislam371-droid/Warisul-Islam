@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Category, Brand, CategoryRequest, BrandRequest } from '../types';
 import { dbLocal } from '../db';
+import { autoSortAndClassifyProducts, sortCategoriesTaxonomy } from '../utils/categorySorter';
 import {
   Tag,
   Plus,
@@ -15,7 +16,10 @@ import {
   Check,
   Search,
   Box,
-  AlertCircle
+  AlertCircle,
+  FolderTree,
+  Wand2,
+  ArrowUpDown
 } from 'lucide-react';
 
 interface AdminCategoriesManagerProps {
@@ -180,6 +184,23 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
     }
   };
 
+  const handleAutoSortProducts = () => {
+    const currentProds = dbLocal.getProducts();
+    const currentCats = dbLocal.getCategories();
+    const { updatedProducts, autoFixedCount } = autoSortAndClassifyProducts(currentProds, currentCats);
+    dbLocal.saveProducts(updatedProducts);
+    showToast(`⚡ Auto-sorted catalog! ${autoFixedCount} products auto-assigned to matching category & subcategory.`);
+    loadData();
+    if (onRefresh) onRefresh();
+  };
+
+  const handleAutoSortCategories = () => {
+    const sorted = sortCategoriesTaxonomy(categories);
+    dbLocal.saveCategories(sorted);
+    showToast('✨ Categories and subcategories taxonomy sorted alphabetically!');
+    loadData();
+  };
+
   const pendingCatCount = catRequests.filter(r => r.status === 'Pending').length;
   const pendingBrandCount = brandRequests.filter(r => r.status === 'Pending').length;
 
@@ -240,6 +261,40 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
             }`}
           >
             All Brands ({brands.length})
+          </button>
+        </div>
+      </div>
+
+      {/* Auto-Sort Quick Action Bar */}
+      <div className="bg-gradient-to-r from-teal-900 via-teal-800 to-slate-900 text-white p-4 px-6 rounded-2xl shadow-md flex flex-col sm:flex-row items-center justify-between gap-4 border border-teal-700/50">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-amber-400 text-slate-900 rounded-xl font-bold">
+            <Wand2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-amber-300">Intelligent Catalog Taxonomy Engine</h3>
+            <p className="text-[11px] text-teal-100 font-medium mt-0.5">
+              Auto-classify uncategorized products and sort categories &amp; subcategories into clean medical hierarchies.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleAutoSortCategories}
+            className="px-3.5 py-2 bg-teal-800/80 hover:bg-teal-700 text-white font-bold text-xs rounded-xl border border-teal-600/50 flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <FolderTree className="w-4 h-4 text-amber-300" />
+            Sort Categories
+          </button>
+          <button
+            type="button"
+            onClick={handleAutoSortProducts}
+            className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer uppercase tracking-wider"
+          >
+            <Wand2 className="w-4 h-4" />
+            Auto-Sort All Products
           </button>
         </div>
       </div>

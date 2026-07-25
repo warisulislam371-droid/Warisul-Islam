@@ -39,8 +39,15 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.set('trust proxy', true);
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+  const getRequestBaseUrl = (req: express.Request): string => {
+    const host = req.get('x-forwarded-host') || req.get('host') || 'medbazarhelnex.shop';
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+    return `${proto}://${host}`;
+  };
 
   // Local fallback scoring for semantic search
   const runLocalSearch = (searchQuery: string, products: any[]) => {
@@ -291,9 +298,7 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
   // Dynamic SEO Sitemap endpoint (Main / Index)
   app.get('/sitemap.xml', async (req, res) => {
     try {
-      const host = req.get('host') || 'medbazarhelnex.shop';
-      const proto = req.protocol || 'https';
-      const baseUrl = `${proto}://${host}`;
+      const baseUrl = getRequestBaseUrl(req);
       const xml = await generateDynamicSitemap(baseUrl);
       res.header('Content-Type', 'application/xml; charset=utf-8');
       res.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
@@ -307,9 +312,7 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
   // Dynamic SEO Sitemap Index endpoint
   app.get('/sitemap-index.xml', (req, res) => {
     try {
-      const host = req.get('host') || 'medbazarhelnex.shop';
-      const proto = req.protocol || 'https';
-      const baseUrl = `${proto}://${host}`;
+      const baseUrl = getRequestBaseUrl(req);
       const xml = generateSitemapIndexXml(baseUrl);
       res.header('Content-Type', 'application/xml; charset=utf-8');
       res.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
@@ -323,9 +326,7 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
   // Sub-sitemap: Products
   app.get('/sitemap-products.xml', async (req, res) => {
     try {
-      const host = req.get('host') || 'medbazarhelnex.shop';
-      const proto = req.protocol || 'https';
-      const baseUrl = `${proto}://${host}`;
+      const baseUrl = getRequestBaseUrl(req);
       const entries = await getProductEntries(baseUrl);
       const xml = generateSingleSitemapXml(entries);
       res.header('Content-Type', 'application/xml; charset=utf-8');
@@ -340,9 +341,7 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
   // Sub-sitemap: Categories
   app.get('/sitemap-categories.xml', async (req, res) => {
     try {
-      const host = req.get('host') || 'medbazarhelnex.shop';
-      const proto = req.protocol || 'https';
-      const baseUrl = `${proto}://${host}`;
+      const baseUrl = getRequestBaseUrl(req);
       const entries = await getCategoryEntries(baseUrl);
       const xml = generateSingleSitemapXml(entries);
       res.header('Content-Type', 'application/xml; charset=utf-8');
@@ -357,9 +356,7 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
   // Sub-sitemap: Vendors
   app.get('/sitemap-vendors.xml', async (req, res) => {
     try {
-      const host = req.get('host') || 'medbazarhelnex.shop';
-      const proto = req.protocol || 'https';
-      const baseUrl = `${proto}://${host}`;
+      const baseUrl = getRequestBaseUrl(req);
       const entries = await getVendorEntries(baseUrl);
       const xml = generateSingleSitemapXml(entries);
       res.header('Content-Type', 'application/xml; charset=utf-8');
@@ -374,9 +371,7 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
   // Sub-sitemap: Brands
   app.get('/sitemap-brands.xml', async (req, res) => {
     try {
-      const host = req.get('host') || 'medbazarhelnex.shop';
-      const proto = req.protocol || 'https';
-      const baseUrl = `${proto}://${host}`;
+      const baseUrl = getRequestBaseUrl(req);
       const entries = await getBrandEntries(baseUrl);
       const xml = generateSingleSitemapXml(entries);
       res.header('Content-Type', 'application/xml; charset=utf-8');
@@ -391,9 +386,7 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
   // Sub-sitemap: Blog
   app.get('/sitemap-blog.xml', async (req, res) => {
     try {
-      const host = req.get('host') || 'medbazarhelnex.shop';
-      const proto = req.protocol || 'https';
-      const baseUrl = `${proto}://${host}`;
+      const baseUrl = getRequestBaseUrl(req);
       const entries = await getBlogEntries(baseUrl);
       const xml = generateSingleSitemapXml(entries);
       res.header('Content-Type', 'application/xml; charset=utf-8');
@@ -408,9 +401,7 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
   // Sub-sitemap: Static Pages
   app.get('/sitemap-pages.xml', async (req, res) => {
     try {
-      const host = req.get('host') || 'medbazarhelnex.shop';
-      const proto = req.protocol || 'https';
-      const baseUrl = `${proto}://${host}`;
+      const baseUrl = getRequestBaseUrl(req);
       const entries = await getStaticPageEntries(baseUrl);
       const xml = generateSingleSitemapXml(entries);
       res.header('Content-Type', 'application/xml; charset=utf-8');
@@ -425,9 +416,7 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
   // Dynamic SEO Robots.txt endpoint
   app.get('/robots.txt', (req, res) => {
     try {
-      const host = req.get('host') || 'medbazarhelnex.shop';
-      const proto = req.protocol || 'https';
-      const baseUrl = `${proto}://${host}`;
+      const baseUrl = getRequestBaseUrl(req);
       const txt = generateRobotsTxt(`${baseUrl}/sitemap.xml`);
       res.header('Content-Type', 'text/plain; charset=utf-8');
       res.header('Cache-Control', 'public, s-maxage=86400');

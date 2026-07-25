@@ -1,4 +1,4 @@
-import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest } from './types';
+import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, PriceAlert } from './types';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_BLOGS, DEFAULT_SUPER_ADMIN, INITIAL_BRANDS } from './data';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from './utils/sliceQrSvg';
 import { 
@@ -265,7 +265,8 @@ const STORAGE_KEYS = {
   CATEGORIES: 'healnex_categories',
   BRANDS: 'healnex_brands',
   CATEGORY_REQUESTS: 'healnex_category_requests',
-  BRAND_REQUESTS: 'healnex_brand_requests'
+  BRAND_REQUESTS: 'healnex_brand_requests',
+  PRICE_ALERTS: 'healnex_price_alerts'
 };
 
 import { PaymentSettings, PaymentClearanceRequest, PromoBanner } from './types';
@@ -788,8 +789,13 @@ export const dbLocal = {
     this.saveProducts(list);
   },
   updateProduct(id: string, updated: Product) {
-    const list = this.getProducts().map(p => p.id === id ? updated : p);
+    const oldProducts = this.getProducts();
+    const oldProd = oldProducts.find(p => p.id === id);
+    const list = oldProducts.map(p => p.id === id ? updated : p);
     this.saveProducts(list);
+    if (oldProd) {
+      this.checkAndTriggerPriceAlerts(updated, oldProd.salePrice ?? oldProd.price, oldProd.stockQuantity);
+    }
   },
   deleteProduct(id: string) {
     const list = this.getProducts().filter(p => p.id !== id);
@@ -1034,5 +1040,78 @@ export const dbLocal = {
     const list = this.getBrandRequests();
     list.unshift(req);
     this.saveBrandRequests(list);
+  },
+
+  // Price Alerts & Subscriptions
+  getPriceAlerts(): PriceAlert[] {
+    const list = this.get(STORAGE_KEYS.PRICE_ALERTS, []);
+    return Array.isArray(list) ? list : [];
+  },
+  savePriceAlerts(alerts: PriceAlert[]) {
+    const old = this.getPriceAlerts();
+    this.set(STORAGE_KEYS.PRICE_ALERTS, alerts);
+    syncListToFirestoreWithDeletions('price_alerts', alerts, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
+  },
+  addPriceAlert(alert: PriceAlert) {
+    const list = this.getPriceAlerts();
+    // Prevent duplicate active alerts for same user and product
+    const existingIndex = list.findIndex(a => a.productId === alert.productId && (a.userEmail === alert.userEmail || (alert.userId && a.userId === alert.userId)));
+    if (existingIndex >= 0) {
+      list[existingIndex] = { ...alert, createdAt: new Date().toISOString() };
+    } else {
+      list.unshift(alert);
+    }
+    this.savePriceAlerts(list);
+  },
+  removePriceAlert(id: string) {
+    const list = this.getPriceAlerts().filter(a => a.id !== id);
+    this.savePriceAlerts(list);
+  },
+  
+  // Check and trigger price alerts when a product's price drops or returns in stock
+  checkAndTriggerPriceAlerts(product: Product, oldPrice?: number, oldStock?: number) {
+    const alerts = this.getPriceAlerts();
+    if (!alerts || alerts.length === 0) return;
+
+    let updated = false;
+    const currentPrice = product.salePrice ?? product.price;
+    const currentStock = product.stockQuantity ?? 0;
+
+    alerts.forEach(alert => {
+      if (alert.productId !== product.id || alert.status !== 'active') return;
+
+      let triggered = false;
+      let reason = '';
+
+      // Check price drop
+      if ((alert.alertType === 'price_drop' || alert.alertType === 'both') && currentPrice <= alert.targetPrice) {
+        triggered = true;
+        reason = `Price dropped to ₹${currentPrice.toLocaleString('en-IN')} (Target: ₹${alert.targetPrice.toLocaleString('en-IN')})`;
+      }
+
+      // Check back in stock
+      if ((alert.alertType === 'back_in_stock' || alert.alertType === 'both') && (oldStock === undefined || oldStock <= 0) && currentStock > 0) {
+        triggered = true;
+        reason = `Product is back in stock (${currentStock} units available)`;
+      }
+
+      if (triggered) {
+        alert.status = 'triggered';
+        alert.lastNotifiedAt = new Date().toISOString();
+        updated = true;
+
+        // Add user/system notification
+        const notifTitle = `Price Alert: ${product.name}`;
+        const notifMsg = `Great news! ${reason} for ${product.name}. Check it out now.`;
+        
+        // Add to global notifications
+        this.addNotification('customer', notifTitle, notifMsg, 'system');
+      }
+    });
+
+    if (updated) {
+      this.savePriceAlerts(alerts);
+    }
   }
 };

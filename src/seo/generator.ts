@@ -270,12 +270,26 @@ export async function getAllSitemapEntries(baseUrl: string = 'https://medbazarhe
 export const getSitemapEntries = getAllSitemapEntries;
 
 /**
+ * Helper to safely convert date string to ISO string without throwing RangeError
+ */
+export function safeIsoDate(dStr?: string): string {
+  if (!dStr) return new Date().toISOString();
+  try {
+    const parsed = new Date(dStr);
+    if (isNaN(parsed.getTime())) return new Date().toISOString();
+    return parsed.toISOString();
+  } catch {
+    return new Date().toISOString();
+  }
+}
+
+/**
  * Generates standard XML urlset for a set of entries
  */
 export function generateSingleSitemapXml(entries: SitemapEntry[]): string {
   const xmlUrls = entries
     .map((e) => {
-      const lastmod = e.lastModified ? `<lastmod>${new Date(e.lastModified).toISOString()}</lastmod>` : '';
+      const lastmod = `<lastmod>${safeIsoDate(e.lastModified)}</lastmod>`;
       const changefreq = e.changeFrequency ? `<changefreq>${e.changeFrequency}</changefreq>` : '';
       const priority = e.priority !== undefined ? `<priority>${e.priority.toFixed(1)}</priority>` : '';
       return `  <url>

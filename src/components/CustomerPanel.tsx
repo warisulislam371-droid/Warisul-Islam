@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbLocal } from '../db';
-import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderItem, PaymentSettings, PromoBanner, Vendor } from '../types';
+import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderItem, PaymentSettings, PromoBanner, Vendor, PriceAlert } from '../types';
+import PriceAlertModal from './PriceAlertModal';
 import {
   Heart,
   ShoppingCart,
@@ -43,6 +44,13 @@ import {
   ChevronRight,
   Headphones,
   BadgeDollarSign,
+  Bell,
+  BellOff,
+  Mail,
+  Edit,
+  Trash2,
+  TrendingDown,
+  Smartphone,
   ArrowUpDown
 } from 'lucide-react';
 import InvoicePDF from './InvoicePDF';
@@ -110,6 +118,10 @@ export default function CustomerPanel({
 
   // Detailed Modal view of a product
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  // Price Alert state
+  const [priceAlertModalProduct, setPriceAlertModalProduct] = useState<Product | null>(null);
+  const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([]);
 
   // Filters State
   const [filterBrand, setFilterBrand] = useState('');
@@ -260,6 +272,12 @@ export default function CustomerPanel({
     setBrands(prev => {
       if (JSON.stringify(prev) === JSON.stringify(activeBrands)) return prev;
       return activeBrands;
+    });
+
+    const allAlerts = dbLocal.getPriceAlerts();
+    setPriceAlerts(prev => {
+      if (JSON.stringify(prev) === JSON.stringify(allAlerts)) return prev;
+      return allAlerts;
     });
   };
 
@@ -479,6 +497,20 @@ export default function CustomerPanel({
       sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     } else if (sortBy === 'moq_asc') {
       sorted.sort((a, b) => a.moq - b.moq);
+    } else if ((sortBy as string) === 'category_asc') {
+      sorted.sort((a, b) => {
+        const catComp = (a.category || '').localeCompare(b.category || '');
+        if (catComp !== 0) return catComp;
+        const subComp = (a.subcategory || '').localeCompare(b.subcategory || '');
+        if (subComp !== 0) return subComp;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+    } else if ((sortBy as string) === 'subcategory_asc') {
+      sorted.sort((a, b) => {
+        const subComp = (a.subcategory || a.category || '').localeCompare(b.subcategory || b.category || '');
+        if (subComp !== 0) return subComp;
+        return (a.name || '').localeCompare(b.name || '');
+      });
     } else if (searchQuery && aiSearchResults.length > 0) {
       sorted.sort((a, b) => {
         const scoreA = aiSearchResults.find(m => m.productId === a.id)?.relevanceScore || 0;
@@ -1540,6 +1572,8 @@ export default function CustomerPanel({
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none font-semibold text-slate-700 hover:bg-slate-100/50 transition cursor-pointer"
                 >
                   <option value="default">AI Match Relevance</option>
+                  <option value="category_asc">Category &amp; Subcategory (A-Z)</option>
+                  <option value="subcategory_asc">Subcategory / Equipment Type (A-Z)</option>
                   <option value="price_asc">Price: Low to High</option>
                   <option value="price_desc">Price: High to Low</option>
                   <option value="rating_desc">Highest Rated ★</option>
@@ -1828,25 +1862,44 @@ export default function CustomerPanel({
                         </div>
 
                         {/* Card Foot action bars */}
-                        <div className={`px-4 py-3 border-t flex items-center justify-between gap-2 shrink-0 ${
+                        <div className={`px-3 py-2.5 border-t flex items-center justify-between gap-1.5 shrink-0 ${
                           isDarkMode ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-100'
                         }`}>
-                          <button
-                            onClick={() => handleToggleCompare(p)}
-                            className={`flex items-center gap-1 text-[10px] font-bold py-1 px-2.5 rounded transition-colors ${
-                              hasComp 
-                                ? 'bg-orange-500 text-white' 
-                                : isDarkMode 
-                                  ? 'text-slate-400 hover:bg-slate-800' 
-                                  : 'text-slate-500 hover:bg-slate-100'
-                            }`}
-                          >
-                            <Scale className="w-3.5 h-3.5" />
-                            {hasComp ? 'Comparing' : 'Compare'}
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleToggleCompare(p)}
+                              className={`flex items-center gap-1 text-[10px] font-bold py-1 px-2 rounded transition-colors ${
+                                hasComp 
+                                  ? 'bg-orange-500 text-white' 
+                                  : isDarkMode 
+                                    ? 'text-slate-400 hover:bg-slate-800' 
+                                    : 'text-slate-500 hover:bg-slate-100'
+                              }`}
+                            >
+                              <Scale className="w-3.5 h-3.5" />
+                              {hasComp ? 'Comparing' : 'Compare'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setPriceAlertModalProduct(p)}
+                              className={`flex items-center gap-1 text-[10px] font-bold py-1 px-2 rounded transition-colors cursor-pointer ${
+                                priceAlerts.some(a => a.productId === p.id && a.status === 'active')
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
+                                  : isDarkMode
+                                    ? 'text-slate-400 hover:bg-slate-800 hover:text-amber-400'
+                                    : 'text-slate-500 hover:bg-slate-100 hover:text-amber-600'
+                              }`}
+                              title="Set Price & Stock Alert"
+                            >
+                              <Bell className="w-3.5 h-3.5 text-amber-500" />
+                              {priceAlerts.some(a => a.productId === p.id && a.status === 'active') ? 'Alert On' : 'Alert'}
+                            </button>
+                          </div>
+
                           <button
                             onClick={() => handleAddToCart(p)}
-                            className="bg-teal-700 hover:bg-teal-800 text-white font-bold py-1.5 px-3.5 rounded-lg flex items-center gap-1 transition text-[10px] uppercase tracking-wide cursor-pointer"
+                            className="bg-teal-700 hover:bg-teal-800 text-white font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 transition text-[10px] uppercase tracking-wide cursor-pointer"
                           >
                             <ShoppingCart className="w-3.5 h-3.5" />
                             Procure
@@ -3646,6 +3699,194 @@ export default function CustomerPanel({
         </div>
       )}
 
+      {/* Customer Price Alerts & Subscriptions Console */}
+      {currentView === 'price-alerts' && (
+        <div className="space-y-6 animate-fade-in pb-12">
+          {/* Header Title Bar */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div>
+              <h2 className="text-base font-bold text-slate-950 dark:text-white uppercase tracking-wide flex items-center gap-2 font-display">
+                <Bell className="w-5 h-5 text-amber-500 animate-pulse" />
+                My Price &amp; Stock Alerts
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Automated monitoring console for medical equipment price drops and inventory restock notifications
+              </p>
+            </div>
+
+            <button
+              onClick={() => onNavigate('marketplace')}
+              className="bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider flex items-center gap-2 transition shadow-sm cursor-pointer"
+            >
+              <Search className="w-4 h-4" />
+              Explore Equipment Catalog
+            </button>
+          </div>
+
+          {/* Alerts Grid / List */}
+          {priceAlerts.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center space-y-4 max-w-md mx-auto">
+              <div className="w-16 h-16 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl flex items-center justify-center mx-auto text-amber-500">
+                <BellOff className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">No Price Alerts Created Yet</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Never miss price reductions or restocks! Browse our catalog and click "Set Price Alert" on any equipment item.
+                </p>
+              </div>
+              <button
+                onClick={() => onNavigate('marketplace')}
+                className="bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 px-5 rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+              >
+                Browse Equipment
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {priceAlerts.map((alert) => {
+                const matchedProduct = products.find(p => p.id === alert.productId);
+                const currentPrice = matchedProduct ? (matchedProduct.salePrice || matchedProduct.price) : alert.currentPrice;
+
+                return (
+                  <div
+                    key={alert.id}
+                    className={`rounded-2xl border transition-all p-5 flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md ${
+                      alert.status === 'triggered'
+                        ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                    }`}
+                  >
+                    <div>
+                      {/* Status & Date */}
+                      <div className="flex justify-between items-center text-[10px] pb-3 border-b border-slate-100 dark:border-slate-800">
+                        <span className={`px-2.5 py-0.5 rounded-full font-extrabold uppercase tracking-wider ${
+                          alert.status === 'triggered'
+                            ? 'bg-amber-500 text-white animate-pulse'
+                            : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        }`}>
+                          {alert.status === 'triggered' ? '⚡ Triggered (Match Found)' : '🟢 Active Monitoring'}
+                        </span>
+                        <span className="text-slate-400 font-mono">
+                          Created: {new Date(alert.createdAt).toLocaleDateString('en-IN')}
+                        </span>
+                      </div>
+
+                      {/* Product Info */}
+                      <div className="flex items-start gap-3 mt-3">
+                        {alert.productImage && (
+                          <img
+                            src={alert.productImage}
+                            alt={alert.productName}
+                            className="w-14 h-14 object-cover rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 bg-white"
+                          />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <h4
+                            onClick={() => matchedProduct && setSelectedProduct(matchedProduct)}
+                            className="font-bold text-xs text-slate-900 dark:text-white hover:text-teal-600 line-clamp-2 cursor-pointer"
+                          >
+                            {alert.productName}
+                          </h4>
+                          {alert.vendorName && (
+                            <p className="text-[10px] text-slate-400 mt-0.5">Supplier: {alert.vendorName}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Pricing & Targets */}
+                      <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-1.5 border border-slate-100 dark:border-slate-700 text-xs">
+                        <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                          <span>Current Price:</span>
+                          <strong className="font-mono text-slate-900 dark:text-white font-bold">
+                            ₹{currentPrice.toLocaleString('en-IN')}
+                          </strong>
+                        </div>
+                        {alert.alertType !== 'back_in_stock' && (
+                          <div className="flex justify-between items-center text-teal-700 dark:text-teal-400 font-bold">
+                            <span>Target Price:</span>
+                            <strong className="font-mono">
+                              ₹{alert.targetPrice.toLocaleString('en-IN')}
+                            </strong>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center text-[10px] text-slate-400 pt-1 border-t border-slate-200/50 dark:border-slate-700">
+                          <span>Alert Type:</span>
+                          <span className="font-bold uppercase text-slate-700 dark:text-slate-300">
+                            {alert.alertType === 'price_drop' ? 'Price Drop' : alert.alertType === 'back_in_stock' ? 'Back In Stock' : 'Price & Stock'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Subscription Channels */}
+                      <div className="flex items-center gap-2 mt-3 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                        <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                          <Mail className="w-3 h-3 text-teal-600" />
+                          {alert.userEmail}
+                        </span>
+                        <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md uppercase font-bold text-[9px]">
+                          {alert.channel}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions Footer */}
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (matchedProduct) {
+                            setPriceAlertModalProduct(matchedProduct);
+                          } else {
+                            addToast('Product details not available in catalog.', 'error');
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-teal-50 hover:text-teal-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-[10px] uppercase tracking-wider flex items-center gap-1 transition cursor-pointer"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        Edit Settings
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (matchedProduct) {
+                              dbLocal.checkAndTriggerPriceAlerts(
+                                { ...matchedProduct, salePrice: Math.max(100, alert.targetPrice - 500) },
+                                currentPrice,
+                                matchedProduct.stockQuantity
+                              );
+                              addToast(`⚡ Simulated test trigger for ${alert.productName}! Check notifications.`, 'success');
+                            }
+                          }}
+                          className="p-1.5 bg-amber-100 text-amber-800 rounded-xl hover:bg-amber-200 transition cursor-pointer"
+                          title="Simulate Test Trigger"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            dbLocal.removePriceAlert(alert.id);
+                            addToast('Price alert deleted.', 'info');
+                          }}
+                          className="p-1.5 text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/50 rounded-xl transition cursor-pointer"
+                          title="Delete Alert"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Product Detail Modal Popup */}
       {selectedProduct && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4">
@@ -3735,8 +3976,17 @@ export default function CustomerPanel({
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    type="button"
+                    onClick={() => { setPriceAlertModalProduct(selectedProduct); }}
+                    className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold py-2 px-3 rounded-xl transition flex items-center gap-1.5 text-[10px] cursor-pointer"
+                    title="Set Price Drop or Restock Alert"
+                  >
+                    <Bell className="w-3.5 h-3.5 text-amber-500 animate-bounce" />
+                    <span>Set Price Alert</span>
+                  </button>
+                  <button
                     onClick={() => { setSelectedProduct(null); onNavigate('reviews'); }}
-                    className="bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold py-2 px-3 rounded-xl transition flex items-center gap-1 text-[10px]"
+                    className="bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold py-2 px-3 rounded-xl transition flex items-center gap-1 text-[10px]"
                     title="Read Hospital & Doctor Reviews"
                   >
                     ⭐ Reviews
@@ -4013,6 +4263,18 @@ export default function CustomerPanel({
           );
         })}
       </div>
+
+      {/* Price Alert Modal Popup */}
+      {priceAlertModalProduct && (
+        <PriceAlertModal
+          product={priceAlertModalProduct}
+          currentUser={currentUser}
+          onClose={() => setPriceAlertModalProduct(null)}
+          onAlertSaved={() => loadData()}
+          addToast={addToast}
+          isDarkMode={isDarkMode}
+        />
+      )}
 
     </div>
   );

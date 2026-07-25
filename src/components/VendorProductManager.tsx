@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Vendor, Category, Brand, CategoryRequest, BrandRequest, ProductSpecification, User } from '../types';
 import { dbLocal } from '../db';
+import { detectCategoryAndSubcategory, autoSortAndClassifyProducts } from '../utils/categorySorter';
 import {
   Plus,
   Search,
@@ -28,7 +29,9 @@ import {
   TrendingUp,
   Tag,
   Box,
-  Globe
+  Globe,
+  Wand2,
+  FolderTree
 } from 'lucide-react';
 
 interface VendorProductManagerProps {
@@ -296,6 +299,43 @@ export default function VendorProductManager({
     setFormSpecs(p.specifications && p.specifications.length > 0 ? p.specifications : [{ key: 'Specification', value: 'Standard Medical Specification' }]);
     setFormError('');
     setShowProductModal(true);
+  };
+
+  const handleAutoClassifyForm = () => {
+    if (!formName.trim() && !formShortDesc.trim() && !formFullDesc.trim()) {
+      showToast('Please enter a product title or description first to auto-classify.');
+      return;
+    }
+
+    const detected = detectCategoryAndSubcategory({
+      name: formName,
+      description: formShortDesc || formFullDesc,
+      shortDescription: formShortDesc,
+      fullDescription: formFullDesc,
+      specifications: formSpecs
+    }, categories);
+
+    if (detected.confidence > 0) {
+      setFormCategory(detected.category);
+      setFormSubcategory(detected.subcategory);
+      showToast(`✨ Auto-Classified! Matched Category: "${detected.category}" ➔ "${detected.subcategory}" (${detected.confidence}% confidence)`);
+    } else {
+      showToast('Could not automatically determine category. Please select manually.');
+    }
+  };
+
+  const handleAutoSortVendorProducts = () => {
+    const allProds = dbLocal.getProducts();
+    const vendorProds = allProds.filter(p => p.vendorId === vendor.id);
+    const { updatedProducts, autoFixedCount } = autoSortAndClassifyProducts(vendorProds, categories);
+
+    // Merge updated vendor products back into global list
+    const updatedMap = new Map(updatedProducts.map(p => [p.id, p]));
+    const mergedList = allProds.map(p => updatedMap.get(p.id) || p);
+
+    dbLocal.saveProducts(mergedList);
+    showToast(`⚡ Auto-sorted your catalog! ${autoFixedCount} of your products auto-assigned to matching category & subcategory.`);
+    onRefresh();
   };
 
   const handleSaveProduct = (targetStatus: 'Draft' | 'Pending') => {
@@ -1031,6 +1071,15 @@ export default function VendorProductManager({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleAutoSortVendorProducts}
+            className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-extrabold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+            title="Auto-classify and sort all your catalog products into correct Categories and Subcategories"
+          >
+            <Wand2 className="w-4 h-4 text-amber-600" />
+            Auto-Sort My Catalog
+          </button>
           <button
             onClick={handleExportCsv}
             className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-2"
@@ -1796,25 +1845,52 @@ export default function VendorProductManager({
 
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-slate-800 font-bold">Category (Dynamic from Firestore) *</label>
-                      <button
-                        type="button"
-                        onClick={() => setShowCategoryRequestModal(true)}
-                        className="text-[10px] text-teal-700 hover:underline font-extrabold flex items-center gap-1"
-                      >
-                        <Plus className="w-3 h-3" /> Request New
-                      </button>
+                      <label className="text-slate-800 font-bold">Category *</label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleAutoClassifyForm}
+                          className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer transition"
+                          title="Auto-detect Category & Subcategory from Product Title/Specs"
+                        >
+                          <Wand2 className="w-3 h-3 text-amber-600" /> Auto-Detect
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowCategoryRequestModal(true)}
+                          className="text-[10px] text-teal-700 hover:underline font-extrabold flex items-center gap-1"
+                        >
+                          <Plus className="w-3 h-3" /> Request New
+                        </button>
+                      </div>
                     </div>
                     <select
                       value={formCategory}
-                      onChange={(e) => setFormCategory(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-bold text-slate-800"
+                      onChange={(e) => {
+                        setFormCategory(e.target.value);
+                        const matchedCat = categories.find(c => c.name === e.target.value);
+                        if (matchedCat && matchedCat.subcategories && matchedCat.subcategories.length > 0) {
+                          setFormSubcategory(matchedCat.subcategories[0]);
+                        }
+                      }}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-bold text-slate-800 text-xs"
                     >
                       <option value="">Select Category</option>
                       {categories.map(c => (
                         <option key={c.id} value={c.name}>{c.name}</option>
                       ))}
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block mb-1.5 text-slate-800 font-bold">Subcategory / Type</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ECG Machine, Patient Monitor"
+                      value={formSubcategory}
+                      onChange={(e) => setFormSubcategory(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-bold text-slate-800 text-xs"
+                    />
                   </div>
 
                   <div>
