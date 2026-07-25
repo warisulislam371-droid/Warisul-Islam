@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
-import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
+import { uploadAdminQrToFirebase, uploadVendorKycToFirebase } from '../utils/firebaseStorage';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
 import {
@@ -618,37 +618,58 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     addToast('Global Payment Settings synchronized successfully!', 'success');
   };
 
-  const handleUpiQrUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        setUpiQrCode(e.target.result as string);
-        addToast('UPI QR Code uploaded successfully!', 'success');
-      }
-    };
-    reader.readAsDataURL(file);
+  const handleUpiQrUpload = async (file: File) => {
+    addToast('Uploading UPI QR Code to Firebase Storage...', 'info');
+    try {
+      const firebaseUrl = await uploadAdminQrToFirebase(file);
+      setUpiQrCode(firebaseUrl);
+      addToast('UPI QR Code uploaded to Firebase Storage successfully!', 'success');
+    } catch (err) {
+      console.error('Firebase UPI QR upload error:', err);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          setUpiQrCode(e.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  const handleBankQrUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        setBankQrCode(e.target.result as string);
-        addToast('Bank Transfer QR Code uploaded successfully!', 'success');
-      }
-    };
-    reader.readAsDataURL(file);
+  const handleBankQrUpload = async (file: File) => {
+    addToast('Uploading Bank QR Code to Firebase Storage...', 'info');
+    try {
+      const firebaseUrl = await uploadAdminQrToFirebase(file);
+      setBankQrCode(firebaseUrl);
+      addToast('Bank Transfer QR Code uploaded to Firebase Storage successfully!', 'success');
+    } catch (err) {
+      console.error('Firebase Bank QR upload error:', err);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          setBankQrCode(e.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  const handleNetBankingQrUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        setNetBankingQrCode(e.target.result as string);
-        addToast('Net Banking QR Code uploaded successfully!', 'success');
-      }
-    };
-    reader.readAsDataURL(file);
+  const handleNetBankingQrUpload = async (file: File) => {
+    addToast('Uploading Net Banking QR Code to Firebase Storage...', 'info');
+    try {
+      const firebaseUrl = await uploadAdminQrToFirebase(file);
+      setNetBankingQrCode(firebaseUrl);
+      addToast('Net Banking QR Code uploaded to Firebase Storage successfully!', 'success');
+    } catch (err) {
+      console.error('Firebase Net Banking QR upload error:', err);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          setNetBankingQrCode(e.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleVerifyPayment = (orderId: string) => {
@@ -6763,9 +6784,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                 const file = e.target.files?.[0];
                                 if (file && selectedVendorDoc) {
                                   try {
-                                    addToast(`Uploading ${file.name} to Cloudinary...`, 'info');
-                                    const cloudRes = await uploadVendorDocumentToCloudinary(file);
-                                    const cUrl = cloudRes.url;
+                                    addToast(`Uploading ${file.name} to Firebase Storage...`, 'info');
+                                    const cUrl = await uploadVendorKycToFirebase(file);
                                     const updatedVendors = vendors.map(v => {
                                       if (v.id === selectedVendorDoc.id) {
                                         const existingDocs = v.documents || {};
@@ -6784,7 +6804,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                     loadData();
                                     const updatedCurrent = updatedVendors.find(v => v.id === selectedVendorDoc.id);
                                     if (updatedCurrent) setSelectedVendorDoc(updatedCurrent);
-                                    addToast('Vendor document uploaded to Cloudinary successfully!', 'success');
+                                    addToast('Vendor document uploaded to Firebase Storage successfully!', 'success');
                                   } catch (err: any) {
                                     console.error('Admin Document Cloudinary Upload Failed:', err);
                                     addToast('Cloudinary upload failed. Saving locally...', 'info');

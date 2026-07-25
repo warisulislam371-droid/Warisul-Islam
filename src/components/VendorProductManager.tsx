@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Product, Vendor, Category, Brand, CategoryRequest, BrandRequest, ProductSpecification, User } from '../types';
 import { dbLocal } from '../db';
 import { detectCategoryAndSubcategory, detectCategoryWithAI, autoSortAndClassifyProducts } from '../utils/categorySorter';
+import { uploadProductImageToCloudinary, uploadToCloudinary } from '../utils/cloudinary';
 import {
   Plus,
   Search,
@@ -136,9 +137,6 @@ export default function VendorProductManager({
     setIsUploadingImage(true);
     setFormError('');
 
-    const cloudName = (import.meta as any).env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'kpb5rcow';
-    const uploadPreset = (import.meta as any).env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'healnex_products';
-
     const uploadedUrls: string[] = [];
     try {
       for (let i = 0; i < files.length; i++) {
@@ -149,25 +147,11 @@ export default function VendorProductManager({
           continue;
         }
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', uploadPreset);
-
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Upload failed for ${file.name}: ${errText || res.statusText}`);
-        }
-
-        const data = await res.json();
-        if (data.secure_url) {
-          uploadedUrls.push(data.secure_url);
+        const cloudRes = await uploadProductImageToCloudinary(file);
+        if (cloudRes.url) {
+          uploadedUrls.push(cloudRes.url);
         } else {
-          throw new Error(`No secure URL returned for ${file.name}`);
+          throw new Error(`No Cloudinary URL returned for ${file.name}`);
         }
       }
 

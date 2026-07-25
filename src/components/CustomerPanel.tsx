@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { dbLocal } from '../db';
 import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderItem, PaymentSettings, PromoBanner, Vendor, PriceAlert } from '../types';
 import PriceAlertModal from './PriceAlertModal';
+import { uploadPaymentReceiptToFirebase } from '../utils/firebaseStorage';
 import {
   Heart,
   ShoppingCart,
@@ -631,7 +632,7 @@ export default function CustomerPanel({
     }
   };
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
       addToast('File size exceeds the 10MB limit.', 'error');
       return;
@@ -641,15 +642,27 @@ export default function CustomerPanel({
       return;
     }
     setManualProofFileName(file.name);
-    
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result) {
-        setManualProofUrl(reader.result as string);
-        addToast('Payment proof uploaded successfully!', 'success');
+    addToast('Uploading receipt screenshot to Firebase Storage...', 'info');
+
+    try {
+      const firebaseUrl = await uploadPaymentReceiptToFirebase(file);
+      if (firebaseUrl) {
+        setManualProofUrl(firebaseUrl);
+        addToast('Payment proof uploaded to Firebase Storage successfully!', 'success');
+      } else {
+        throw new Error('No URL returned from Firebase');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('Firebase receipt upload error:', err);
+      addToast('Firebase upload error. Attaching file locally...', 'info');
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result) {
+          setManualProofUrl(reader.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

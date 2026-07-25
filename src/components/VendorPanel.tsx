@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { Vendor, Product, Order, RFQ, Quotation, User, PaymentClearanceRequest } from '../types';
-import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
+import { uploadVendorKycToFirebase } from '../utils/firebaseStorage';
 import VendorProductManager from './VendorProductManager';
 import VendorAnalytics from './VendorAnalytics';
 import {
@@ -210,12 +210,11 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     let uploadedName = selectedResubmitFile.name;
 
     try {
-      addToast(`Uploading ${resubmitModalDoc.label} to Cloudinary...`, 'info');
-      const cloudRes = await uploadVendorDocumentToCloudinary(selectedResubmitFile);
-      uploadedUrl = cloudRes.url;
+      addToast(`Uploading ${resubmitModalDoc.label} to Firebase Storage...`, 'info');
+      uploadedUrl = await uploadVendorKycToFirebase(selectedResubmitFile);
     } catch (err: any) {
-      console.error('Cloudinary Document Upload Failed:', err);
-      addToast('Cloudinary upload failed. Saving file locally...', 'info');
+      console.error('Firebase Document Upload Failed:', err);
+      addToast('Firebase upload failed. Saving file locally...', 'info');
       await new Promise<void>((resolve) => {
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -1158,12 +1157,11 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                                 let uploadedUrl = '';
                                 let uploadedName = file.name;
                                 try {
-                                  addToast(`Uploading ${docItem.label} to Cloudinary...`, 'info');
-                                  const cloudRes = await uploadVendorDocumentToCloudinary(file);
-                                  uploadedUrl = cloudRes.url;
+                                  addToast(`Uploading ${docItem.label} to Firebase Storage...`, 'info');
+                                  uploadedUrl = await uploadVendorKycToFirebase(file);
                                 } catch (err: any) {
-                                  console.error('Cloudinary Document Upload Failed:', err);
-                                  addToast(`Cloudinary upload failed. Saving locally...`, 'info');
+                                  console.error('Firebase Document Upload Failed:', err);
+                                  addToast(`Firebase upload failed. Saving locally...`, 'info');
                                   await new Promise<void>((resolve) => {
                                     const reader = new FileReader();
                                     reader.onload = (ev) => {
@@ -1525,12 +1523,11 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                             let uploadedUrl = '';
                             let uploadedName = file.name;
                             try {
-                              addToast(`Uploading ${docItem.label} to Cloudinary...`, 'info');
-                              const cloudRes = await uploadVendorDocumentToCloudinary(file);
-                              uploadedUrl = cloudRes.url;
+                              addToast(`Uploading ${docItem.label} to Firebase Storage...`, 'info');
+                              uploadedUrl = await uploadVendorKycToFirebase(file);
                             } catch (err: any) {
-                              console.error('Cloudinary Document Upload Failed:', err);
-                              addToast(`Cloudinary upload failed. Saving locally...`, 'info');
+                              console.error('Firebase Document Upload Failed:', err);
+                              addToast(`Firebase upload failed. Saving locally...`, 'info');
                               await new Promise<void>((resolve) => {
                                 const reader = new FileReader();
                                 reader.onload = (ev) => {
