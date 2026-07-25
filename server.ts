@@ -3,7 +3,19 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
-import { generateSitemapXml, generateRobotsTxt } from './src/seo/generator';
+import {
+  generateSitemapXml,
+  generateDynamicSitemap,
+  generateSitemapIndexXml,
+  generateSingleSitemapXml,
+  getProductEntries,
+  getCategoryEntries,
+  getVendorEntries,
+  getBrandEntries,
+  getBlogEntries,
+  getStaticPageEntries,
+  generateRobotsTxt
+} from './src/seo/generator';
 
 dotenv.config();
 
@@ -276,19 +288,137 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
     }
   });
 
-  // Dynamic SEO Sitemap endpoint
+  // Dynamic SEO Sitemap endpoint (Main / Index)
   app.get('/sitemap.xml', async (req, res) => {
     try {
       const host = req.get('host') || 'medbazarhelnex.shop';
       const proto = req.protocol || 'https';
       const baseUrl = `${proto}://${host}`;
-      const xml = await generateSitemapXml(baseUrl);
+      const xml = await generateDynamicSitemap(baseUrl);
       res.header('Content-Type', 'application/xml; charset=utf-8');
       res.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
       res.send(xml);
     } catch (err) {
       console.error('Error generating sitemap:', err);
       res.status(500).send('Error generating sitemap');
+    }
+  });
+
+  // Dynamic SEO Sitemap Index endpoint
+  app.get('/sitemap-index.xml', (req, res) => {
+    try {
+      const host = req.get('host') || 'medbazarhelnex.shop';
+      const proto = req.protocol || 'https';
+      const baseUrl = `${proto}://${host}`;
+      const xml = generateSitemapIndexXml(baseUrl);
+      res.header('Content-Type', 'application/xml; charset=utf-8');
+      res.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      res.send(xml);
+    } catch (err) {
+      console.error('Error generating sitemap index:', err);
+      res.status(500).send('Error generating sitemap index');
+    }
+  });
+
+  // Sub-sitemap: Products
+  app.get('/sitemap-products.xml', async (req, res) => {
+    try {
+      const host = req.get('host') || 'medbazarhelnex.shop';
+      const proto = req.protocol || 'https';
+      const baseUrl = `${proto}://${host}`;
+      const entries = await getProductEntries(baseUrl);
+      const xml = generateSingleSitemapXml(entries);
+      res.header('Content-Type', 'application/xml; charset=utf-8');
+      res.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      res.send(xml);
+    } catch (err) {
+      console.error('Error generating products sitemap:', err);
+      res.status(500).send('Error generating products sitemap');
+    }
+  });
+
+  // Sub-sitemap: Categories
+  app.get('/sitemap-categories.xml', async (req, res) => {
+    try {
+      const host = req.get('host') || 'medbazarhelnex.shop';
+      const proto = req.protocol || 'https';
+      const baseUrl = `${proto}://${host}`;
+      const entries = await getCategoryEntries(baseUrl);
+      const xml = generateSingleSitemapXml(entries);
+      res.header('Content-Type', 'application/xml; charset=utf-8');
+      res.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      res.send(xml);
+    } catch (err) {
+      console.error('Error generating categories sitemap:', err);
+      res.status(500).send('Error generating categories sitemap');
+    }
+  });
+
+  // Sub-sitemap: Vendors
+  app.get('/sitemap-vendors.xml', async (req, res) => {
+    try {
+      const host = req.get('host') || 'medbazarhelnex.shop';
+      const proto = req.protocol || 'https';
+      const baseUrl = `${proto}://${host}`;
+      const entries = await getVendorEntries(baseUrl);
+      const xml = generateSingleSitemapXml(entries);
+      res.header('Content-Type', 'application/xml; charset=utf-8');
+      res.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      res.send(xml);
+    } catch (err) {
+      console.error('Error generating vendors sitemap:', err);
+      res.status(500).send('Error generating vendors sitemap');
+    }
+  });
+
+  // Sub-sitemap: Brands
+  app.get('/sitemap-brands.xml', async (req, res) => {
+    try {
+      const host = req.get('host') || 'medbazarhelnex.shop';
+      const proto = req.protocol || 'https';
+      const baseUrl = `${proto}://${host}`;
+      const entries = await getBrandEntries(baseUrl);
+      const xml = generateSingleSitemapXml(entries);
+      res.header('Content-Type', 'application/xml; charset=utf-8');
+      res.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      res.send(xml);
+    } catch (err) {
+      console.error('Error generating brands sitemap:', err);
+      res.status(500).send('Error generating brands sitemap');
+    }
+  });
+
+  // Sub-sitemap: Blog
+  app.get('/sitemap-blog.xml', async (req, res) => {
+    try {
+      const host = req.get('host') || 'medbazarhelnex.shop';
+      const proto = req.protocol || 'https';
+      const baseUrl = `${proto}://${host}`;
+      const entries = await getBlogEntries(baseUrl);
+      const xml = generateSingleSitemapXml(entries);
+      res.header('Content-Type', 'application/xml; charset=utf-8');
+      res.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      res.send(xml);
+    } catch (err) {
+      console.error('Error generating blog sitemap:', err);
+      res.status(500).send('Error generating blog sitemap');
+    }
+  });
+
+  // Sub-sitemap: Static Pages
+  app.get('/sitemap-pages.xml', async (req, res) => {
+    try {
+      const host = req.get('host') || 'medbazarhelnex.shop';
+      const proto = req.protocol || 'https';
+      const baseUrl = `${proto}://${host}`;
+      const entries = await getStaticPageEntries(baseUrl);
+      const xml = generateSingleSitemapXml(entries);
+      res.header('Content-Type', 'application/xml; charset=utf-8');
+      res.header('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      res.send(xml);
+    } catch (err) {
+      console.error('Error generating static pages sitemap:', err);
+      res.status(500).send('Error generating static pages sitemap');
     }
   });
 

@@ -3,6 +3,12 @@ export default function robots() {
     rules: {
       userAgent: '*',
       allow: '/',
+      disallow: [
+        '/admin/',
+        '/dashboard/',
+        '/login/',
+        '/api/private/',
+      ],
     },
     sitemap: 'https://medbazarhelnex.shop/sitemap.xml',
   };
