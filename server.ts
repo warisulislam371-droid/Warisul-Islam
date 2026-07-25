@@ -295,6 +295,62 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
     }
   });
 
+  // AI-Powered Product Category & Subcategory Auto-Classification API
+  app.post('/api/gemini/classify-category', async (req, res) => {
+    try {
+      const { name, description, specifications, categories } = req.body;
+      if (!name) {
+        return res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'Default fallback category assigned.' });
+      }
+
+      if (isQuotaCooldowned()) {
+        return res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'Circuit breaker active. Using local taxonomy.' });
+      }
+
+      const ai = getGeminiClient();
+      if (!ai) {
+        return res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'AI client uninitialized. Using local fallback engine.' });
+      }
+
+      try {
+        const availableCategoriesList = (categories || []).map((c: any) => ({
+          name: c.name,
+          subcategories: c.subcategories || []
+        }));
+
+        const systemPrompt = `You are the HealNex B2B Medical Equipment AI Taxonomy Classification Engine.
+Analyze the medical equipment item details and assign the single most accurate Category and Subcategory.
+If possible, align with the provided available categories taxonomy list, or suggest a standard clinical category/subcategory if none match.
+Return a confidence score (1 to 100) and a concise 1-sentence aiReason.`;
+
+        const userMessage = `Product Name: "${name}"
+Product Description: "${description || ''}"
+Product Specifications: ${JSON.stringify(specifications || [])}
+Available Categories & Subcategories: ${JSON.stringify(availableCategoriesList)}`;
+
+        const schema = {
+          type: Type.OBJECT,
+          properties: {
+            category: { type: Type.STRING, description: 'The assigned main category name.' },
+            subcategory: { type: Type.STRING, description: 'The assigned subcategory name.' },
+            confidence: { type: Type.NUMBER, description: 'Confidence score from 1 to 100.' },
+            aiReason: { type: Type.STRING, description: 'Brief explanation of why this medical product fits this category taxonomy.' }
+          },
+          required: ['category', 'subcategory', 'confidence', 'aiReason']
+        };
+
+        const parsedData = await generateContentResilient(ai, [userMessage], systemPrompt, schema);
+        return res.json(parsedData);
+      } catch (innerError: any) {
+        handleQuotaExceeded(innerError, 'auto-classify category');
+        return res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'Local fallback engine utilized.' });
+      }
+    } catch (error: any) {
+      console.log('Category auto-classify exception handled:', error.message || error);
+      res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'Local fallback engine utilized.' });
+    }
+  });
+
   // Dynamic SEO Sitemap endpoint (Main / Index)
   app.get('/sitemap.xml', async (req, res) => {
     try {

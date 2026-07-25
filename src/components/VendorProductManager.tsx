@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Vendor, Category, Brand, CategoryRequest, BrandRequest, ProductSpecification, User } from '../types';
 import { dbLocal } from '../db';
-import { detectCategoryAndSubcategory, autoSortAndClassifyProducts } from '../utils/categorySorter';
+import { detectCategoryAndSubcategory, detectCategoryWithAI, autoSortAndClassifyProducts } from '../utils/categorySorter';
 import {
   Plus,
   Search,
@@ -301,13 +301,15 @@ export default function VendorProductManager({
     setShowProductModal(true);
   };
 
-  const handleAutoClassifyForm = () => {
+  const handleAutoClassifyForm = async () => {
     if (!formName.trim() && !formShortDesc.trim() && !formFullDesc.trim()) {
       showToast('Please enter a product title or description first to auto-classify.');
       return;
     }
 
-    const detected = detectCategoryAndSubcategory({
+    showToast('🤖 Medical AI analyzing taxonomy classification...');
+
+    const detected = await detectCategoryWithAI({
       name: formName,
       description: formShortDesc || formFullDesc,
       shortDescription: formShortDesc,
@@ -318,7 +320,7 @@ export default function VendorProductManager({
     if (detected.confidence > 0) {
       setFormCategory(detected.category);
       setFormSubcategory(detected.subcategory);
-      showToast(`✨ Auto-Classified! Matched Category: "${detected.category}" ➔ "${detected.subcategory}" (${detected.confidence}% confidence)`);
+      showToast(`✨ AI Auto-Classified! Matched Category: "${detected.category}" ➔ "${detected.subcategory}" (${detected.confidence}% confidence)`);
     } else {
       showToast('Could not automatically determine category. Please select manually.');
     }

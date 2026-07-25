@@ -258,6 +258,46 @@ export function detectCategoryAndSubcategory(
 }
 
 /**
+ * Asynchronously attempts to auto-classify product category and subcategory
+ * using the server-side Gemini AI engine, with instant local fallback.
+ */
+export async function detectCategoryWithAI(
+  product: Partial<Product>,
+  availableCategories: Category[] = INITIAL_CATEGORIES
+): Promise<CategoryDetectionResult & { aiReason?: string }> {
+  try {
+    const response = await fetch('/api/gemini/classify-category', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: product.name,
+        description: product.description || product.shortDescription || product.fullDescription,
+        specifications: product.specifications,
+        categories: availableCategories
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.category && data.subcategory) {
+        return {
+          category: data.category,
+          subcategory: data.subcategory,
+          confidence: data.confidence || 90,
+          matchedKeywords: ['gemini-ai-classification'],
+          aiReason: data.aiReason || 'Classified by Gemini Medical AI Taxonomy Model.'
+        };
+      }
+    }
+  } catch (err) {
+    console.log('AI Category classification endpoint call failed, using local fallback:', err);
+  }
+
+  // Fallback to local keyword-driven taxonomy engine
+  return detectCategoryAndSubcategory(product, availableCategories);
+}
+
+/**
  * Automatically sorts and auto-classifies a list of products.
  * Guarantees proper Category and Subcategory linking and clean sorting.
  */
