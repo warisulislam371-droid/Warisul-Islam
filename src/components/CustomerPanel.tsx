@@ -217,10 +217,13 @@ export default function CustomerPanel({
       return approvedVendors;
     });
 
-    // Only approved, published, and active products are visible to customers
+    // Only approved/published, published flag true, and active products are visible to customers
     const approvedProducts = dbLocal.getProducts().filter(p => {
-      const isApproved = p.status === 'Approved';
-      return isApproved && p.published === true && p.isActive === true;
+      const statusLower = (p.status || '').toLowerCase();
+      const isApprovedOrPublished = statusLower === 'approved' || statusLower === 'published' || p.published === true;
+      const isPublished = p.published === true || (p as any).published === 'true';
+      const isActive = p.isActive !== false;
+      return isApprovedOrPublished && isPublished && isActive;
     });
     setProducts(prev => {
       if (JSON.stringify(prev) === JSON.stringify(approvedProducts)) return prev;

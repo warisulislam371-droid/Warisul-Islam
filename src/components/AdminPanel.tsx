@@ -1054,17 +1054,18 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       if (p.id === productId) {
         dbLocal.addNotification(
           p.vendorId,
-          `Product Approved: ${p.name}`,
-          `Your product "${p.name}" (SKU: ${p.sku}) has been approved by the Admin! It is now ready to be published.`,
+          `Product Approved & Live: ${p.name}`,
+          `Your product "${p.name}" (SKU: ${p.sku}) has been approved and published live on the marketplace! Customers can now view and purchase it.`,
           'product_approved'
         );
         return {
           ...p,
           status: 'Approved' as any,
-          published: false,
-          isActive: false,
+          published: true,
+          isActive: true,
           approvedBy: currentUser?.id || 'admin',
           approvedAt: new Date().toISOString(),
+          publishedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
       }
@@ -1072,7 +1073,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     });
     dbLocal.saveProducts(updated);
     setProducts(updated);
-    addToast('Product approved successfully! (Awaiting publication)', 'success');
+    addToast('Product approved & published live to marketplace!', 'success');
   };
 
   const handlePublishProduct = (productId: string) => {
@@ -1086,6 +1087,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
         );
         return {
           ...p,
+          status: (p.status === 'Pending' || !p.status ? 'Approved' : p.status) as any,
           published: true,
           isActive: true,
           publishedAt: new Date().toISOString(),
@@ -1096,7 +1098,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     });
     dbLocal.saveProducts(updated);
     setProducts(updated);
-    addToast('Product published live!', 'success');
+    addToast('Product published live! Now visible in products catalog.', 'success');
   };
 
   const handleUnpublishProduct = (productId: string) => {
@@ -3026,9 +3028,9 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                             <button
                               onClick={() => handleApproveProduct(p.id)}
                               className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1 shadow-sm"
-                              title="Approve product listing"
+                              title="Approve product listing and make it live in products catalog"
                             >
-                              <CheckCircle className="w-3.5 h-3.5" /> Approve
+                              <CheckCircle className="w-3.5 h-3.5" /> Approve &amp; Publish Live
                             </button>
                           )}
 
