@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { dbLocal } from '../db';
 import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderItem, PaymentSettings, PromoBanner, Vendor, PriceAlert } from '../types';
 import PriceAlertModal from './PriceAlertModal';
-import { uploadPaymentReceiptToFirebase } from '../utils/firebaseStorage';
 import {
   Heart,
   ShoppingCart,
@@ -425,24 +424,15 @@ export default function CustomerPanel({
     // 1. Filter out non-matching products
     const matched = products.filter(p => {
       const matchesCategory = selectedCategoryName
-        ? (p.category || '').toLowerCase() === selectedCategoryName.toLowerCase() ||
-          (p.subcategory || '').toLowerCase() === selectedCategoryName.toLowerCase()
+        ? p.category.toLowerCase() === selectedCategoryName.toLowerCase()
         : true;
 
-      const matchesBrand = filterBrand
-        ? (p.brand || '').toLowerCase().includes(filterBrand.toLowerCase())
-        : true;
-
-      const productPrice = p.salePrice !== undefined && p.salePrice !== null ? p.salePrice : (p.price || 0);
-      const matchesPrice = productPrice <= filterPriceRange;
-
-      const productMoq = p.moq !== undefined && p.moq !== null ? p.moq : 1;
-      const matchesMoq = productMoq <= filterMoq;
-
+      const matchesBrand = filterBrand ? p.brand.toLowerCase() === filterBrand.toLowerCase() || p.brand.toLowerCase().includes(filterBrand.toLowerCase()) : true;
+      const matchesPrice = p.salePrice <= filterPriceRange;
+      const matchesMoq = p.moq <= filterMoq;
       const matchesTrustSeal = filterTrustSealOnly
         ? vendors.some(v => (v.id === p.vendorId || v.companyName === p.vendorName) && v.trustSeal)
         : true;
-
       const matchesRating = filterMinRating > 0 ? (p.rating || 0) >= filterMinRating : true;
       const matchesStock = filterInStockOnly ? (p.stockQuantity !== undefined ? p.stockQuantity > 0 : p.inStock) : true;
       const matchesCountry = filterCountry ? (p.countryOfOrigin || '').toLowerCase().includes(filterCountry.toLowerCase()) : true;
@@ -489,13 +479,7 @@ export default function CustomerPanel({
           checkFlexibleMatch(p.subcategory) ||
           (p.tags && p.tags.some(t => checkFlexibleMatch(t))) ||
           (p.description && checkFlexibleMatch(p.description)) ||
-          (p.specifications && (
-            Array.isArray(p.specifications)
-              ? p.specifications.some(spec => checkFlexibleMatch(spec.key || (spec as any).name) || checkFlexibleMatch(String(spec.value || '')))
-              : typeof p.specifications === 'object'
-                ? Object.entries(p.specifications).some(([k, v]) => checkFlexibleMatch(k) || checkFlexibleMatch(String(v)))
-                : false
-          ))
+          (p.specifications && Object.entries(p.specifications).some(([k, v]) => checkFlexibleMatch(k) || checkFlexibleMatch(String(v))))
         );
 
         const matchesAi = aiSearchResults.some(match => match.productId === p.id);
@@ -509,13 +493,13 @@ export default function CustomerPanel({
     // 2. Sort results dynamically based on chosen criteria
     const sorted = [...matched];
     if (sortBy === 'price_asc') {
-      sorted.sort((a, b) => (a.salePrice ?? a.price ?? 0) - (b.salePrice ?? b.price ?? 0));
+      sorted.sort((a, b) => a.salePrice - b.salePrice);
     } else if (sortBy === 'price_desc') {
-      sorted.sort((a, b) => (b.salePrice ?? b.price ?? 0) - (a.salePrice ?? a.price ?? 0));
+      sorted.sort((a, b) => b.salePrice - a.salePrice);
     } else if (sortBy === 'rating_desc') {
       sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     } else if (sortBy === 'moq_asc') {
-      sorted.sort((a, b) => (a.moq || 1) - (b.moq || 1));
+      sorted.sort((a, b) => a.moq - b.moq);
     } else if ((sortBy as string) === 'category_asc') {
       sorted.sort((a, b) => {
         const catComp = (a.category || '').localeCompare(b.category || '');
@@ -632,7 +616,7 @@ export default function CustomerPanel({
     }
   };
 
-  const processFile = async (file: File) => {
+  const processFile = (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
       addToast('File size exceeds the 10MB limit.', 'error');
       return;
@@ -642,27 +626,15 @@ export default function CustomerPanel({
       return;
     }
     setManualProofFileName(file.name);
-    addToast('Uploading receipt screenshot to Firebase Storage...', 'info');
-
-    try {
-      const firebaseUrl = await uploadPaymentReceiptToFirebase(file);
-      if (firebaseUrl) {
-        setManualProofUrl(firebaseUrl);
-        addToast('Payment proof uploaded to Firebase Storage successfully!', 'success');
-      } else {
-        throw new Error('No URL returned from Firebase');
+    
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result) {
+        setManualProofUrl(reader.result as string);
+        addToast('Payment proof uploaded successfully!', 'success');
       }
-    } catch (err: any) {
-      console.error('Firebase receipt upload error:', err);
-      addToast('Firebase upload error. Attaching file locally...', 'info');
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (reader.result) {
-          setManualProofUrl(reader.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1791,8 +1763,8 @@ export default function CustomerPanel({
                         {/* Image banner */}
                         <div className="relative bg-slate-100 h-44 overflow-hidden shrink-0">
                           <img
-                            src={p.images && p.images.length > 0 && p.images[0] ? p.images[0] : 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&auto=format&fit=crop&q=60'}
-                            alt={p.name || 'Medical Equipment'}
+                            src={p.images[0]}
+                            alt={p.name}
                             className="w-full h-full object-cover transition-transform group-hover:scale-105"
                           />
                           {aiMatch && (
@@ -1821,7 +1793,7 @@ export default function CustomerPanel({
                               <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
                                 isDarkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-500'
                               }`}>
-                                {p.brand || 'Generic'}
+                                {p.brand}
                               </span>
                               {productVendor?.trustSeal && (
                                 <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1 shrink-0" title={productVendor.trustSealLevel || 'Verified Clinical Supplier'}>
@@ -1855,7 +1827,7 @@ export default function CustomerPanel({
                             <p className={`text-[11px] line-clamp-2 mt-1 leading-relaxed ${
                               isDarkMode ? 'text-slate-300' : 'text-slate-500'
                             }`}>
-                              {p.description || 'Certified medical equipment product.'}
+                              {p.description}
                             </p>
 
                             {/* AI Semantic Search Insight */}
@@ -1880,7 +1852,7 @@ export default function CustomerPanel({
                             <div>
                               <span className="text-slate-400 text-[10px] block">Price (Excl Tax)</span>
                               <span className={`text-sm font-bold ${isDarkMode ? 'text-teal-400' : 'text-teal-800'}`}>
-                                ₹{(p.salePrice ?? p.price ?? 0).toLocaleString('en-IN')}
+                                ₹{p.salePrice.toLocaleString('en-IN')}
                               </span>
                             </div>
                             <div className="text-right">
@@ -3924,8 +3896,8 @@ export default function CustomerPanel({
           <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-100 animate-scale-up flex flex-col md:flex-row">
             <div className="w-full md:w-1/2 bg-slate-100 h-64 md:h-auto overflow-hidden relative">
               <img
-                src={selectedProduct.images && selectedProduct.images.length > 0 && selectedProduct.images[0] ? selectedProduct.images[0] : 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&auto=format&fit=crop&q=60'}
-                alt={selectedProduct.name || 'Medical Equipment'}
+                src={selectedProduct.images[0]}
+                alt={selectedProduct.name}
                 className="w-full h-full object-cover"
               />
               <button
@@ -3983,28 +3955,19 @@ export default function CustomerPanel({
                 {/* Spec parameters */}
                 <div className="space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
                   <p className="font-semibold text-slate-700 text-[10px] uppercase mb-1.5">clinical validations</p>
-                  {Array.isArray(selectedProduct.specifications) ? (
-                    selectedProduct.specifications.map((spec, idx) => (
-                      <div key={idx} className="flex justify-between text-slate-600 leading-normal">
-                        <span>{spec.key || (spec as any).name || 'Specification'}:</span>
-                        <strong className="text-slate-800">{spec.value}</strong>
-                      </div>
-                    ))
-                  ) : selectedProduct.specifications && typeof selectedProduct.specifications === 'object' ? (
-                    Object.entries(selectedProduct.specifications).map(([k, v], idx) => (
-                      <div key={idx} className="flex justify-between text-slate-600 leading-normal">
-                        <span>{k}:</span>
-                        <strong className="text-slate-800">{String(v)}</strong>
-                      </div>
-                    ))
-                  ) : null}
+                  {selectedProduct.specifications.map((spec, idx) => (
+                    <div key={idx} className="flex justify-between text-slate-600 leading-normal">
+                      <span>{spec.key}:</span>
+                      <strong className="text-slate-800">{spec.value}</strong>
+                    </div>
+                  ))}
                   <div className="flex justify-between text-slate-600 leading-normal">
                     <span>HSN Code:</span>
-                    <strong className="text-slate-800">{selectedProduct.hsnCode || 'N/A'}</strong>
+                    <strong className="text-slate-800">{selectedProduct.hsnCode}</strong>
                   </div>
                   <div className="flex justify-between text-slate-600 leading-normal">
                     <span>GST Rate:</span>
-                    <strong className="text-slate-800">{selectedProduct.gstRate || 18}% Integrated</strong>
+                    <strong className="text-slate-800">{selectedProduct.gstRate}% Integrated</strong>
                   </div>
                 </div>
               </div>
@@ -4012,7 +3975,7 @@ export default function CustomerPanel({
               <div className="border-t border-slate-100 pt-4 mt-6 flex justify-between items-center gap-2">
                 <div>
                   <span className="text-slate-400 text-[9px] block">Unit Price (INR)</span>
-                  <span className="text-base font-bold text-teal-800">₹{(selectedProduct.salePrice ?? selectedProduct.price ?? 0).toLocaleString('en-IN')}</span>
+                  <span className="text-base font-bold text-teal-800">₹{selectedProduct.salePrice.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { User, Vendor } from '../types';
-import { uploadVendorKycToFirebase } from '../utils/firebaseStorage';
+import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
 import {
   Lock,
   Mail,
@@ -241,23 +241,24 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
     const generatedPreview = generateDocumentCanvas(docTitle, file.name, formattedSize);
 
     try {
-      const firebaseDocUrl = await uploadVendorKycToFirebase(file);
+      const cloudRes = await uploadVendorDocumentToCloudinary(file);
+      const cUrl = cloudRes.url;
 
       setUploadedDocs(prev => ({
         ...prev,
         [key]: {
           name: file.name,
           size: formattedSize,
-          url: firebaseDocUrl,
-          previewUrl: firebaseDocUrl || generatedPreview,
+          url: cUrl,
+          previewUrl: cUrl || generatedPreview,
           progress: 100,
           isUploading: false
         }
       }));
 
-      addToast(`Uploaded ${file.name} to Firebase Storage successfully!`, 'success');
+      addToast(`Uploaded ${file.name} to Cloudinary successfully!`, 'success');
     } catch (err) {
-      console.error('Firebase document upload failed:', err);
+      console.error('Cloudinary document upload failed:', err);
       const reader = new FileReader();
       reader.onload = (ev) => {
         const dataUrl = (ev.target?.result as string) || '';
