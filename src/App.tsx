@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { dbLocal } from './db';
 import { User, Product } from './types';
 import Navbar from './components/Navbar';
@@ -346,6 +347,9 @@ export default function App() {
 
       {/* Global Admin-Managed WhatsApp Support Widget */}
       <WhatsAppWidget currentUser={currentUser} currentView={currentView} />
+
+      {/* Vercel Web Analytics */}
+      <Analytics />
 
     </div>
   );
