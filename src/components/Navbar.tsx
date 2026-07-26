@@ -143,8 +143,8 @@ export default function Navbar({
   return (
     <header className="sticky top-0 z-50 bg-white font-sans text-[#1F2937] shadow-sm border-b border-slate-200">
       
-      {/* Top Value / Utilities Bar */}
-      <div className="bg-[#0077B6] text-white py-1 px-4 text-xs font-medium">
+      {/* Top Value / Utilities Bar (Hidden per user focus request) */}
+      <div className="hidden bg-[#0077B6] text-white py-1 px-4 text-xs font-medium">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 overflow-x-auto scrollbar-none py-0.5">
             <span className="bg-[#0F9D8A] text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">

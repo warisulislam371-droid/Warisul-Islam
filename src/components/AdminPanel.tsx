@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
 import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
-import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation, SocialMediaLinks } from '../types';
+import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation, SocialMediaLinks, DealOfDay } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
 import { AdminVerificationPanel } from './AdminVerificationPanel';
 import { AdminCategorizationPanel } from './AdminCategorizationPanel';

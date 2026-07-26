@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Product, Category, Brand, Review, Vendor } from '../types';
+import { Product, Category, Brand, Review, Vendor, DealOfDay } from '../types';
+import { dbLocal } from '../db';
 import {
   Activity,
   ShieldCheck,
@@ -68,7 +69,35 @@ export default function EnterpriseHomepage({
   const [heroSlide, setHeroSlide] = useState(0);
   const [sidebarExpandedCategory, setSidebarExpandedCategory] = useState<string | null>(null);
   const [emailInput, setEmailInput] = useState('');
-  const [countdown, setCountdown] = useState({ hours: 14, mins: 32, secs: 45 });
+  const [dealOfDay, setDealOfDay] = useState<DealOfDay>(() => dbLocal.getDealOfDay());
+  const [countdown, setCountdown] = useState({
+    hours: dbLocal.getDealOfDay().hours || 14,
+    mins: dbLocal.getDealOfDay().mins || 32,
+    secs: dbLocal.getDealOfDay().secs || 45
+  });
+
+  useEffect(() => {
+    const handleSync = () => {
+      const d = dbLocal.getDealOfDay();
+      setDealOfDay(d);
+      setCountdown({
+        hours: d.hours ?? 14,
+        mins: d.mins ?? 32,
+        secs: d.secs ?? 45
+      });
+    };
+    handleSync();
+    window.addEventListener('healnex_db_update', handleSync);
+    return () => window.removeEventListener('healnex_db_update', handleSync);
+  }, []);
+
+  const handleCategoryClick = (catName: string) => {
+    onCategorySelect(catName);
+    setTimeout(() => {
+      const el = document.getElementById('catalog-anchor');
+      el?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  };
 
   // Countdown timer effect
   useEffect(() => {
@@ -294,7 +323,7 @@ export default function EnterpriseHomepage({
             {sidebarCategories.map((cat) => (
               <li key={cat.name}>
                 <button
-                  onClick={() => onCategorySelect(cat.name)}
+                  onClick={() => handleCategoryClick(cat.name)}
                   className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between hover:bg-[#F5F7FA] ${
                     selectedCategoryName === cat.name ? 'bg-[#0F9D8A]/10 text-[#0F9D8A] font-bold' : 'text-slate-700'
                   }`}
@@ -446,7 +475,7 @@ export default function EnterpriseHomepage({
             <p className="text-xs text-slate-500 mt-1">Explore medical equipment by specialised healthcare departments</p>
           </div>
           <button 
-            onClick={() => onCategorySelect('')}
+            onClick={() => handleCategoryClick('')}
             className="text-xs font-bold text-[#0F9D8A] hover:underline"
           >
             View All Categories
@@ -457,7 +486,7 @@ export default function EnterpriseHomepage({
           {featuredCategoryCards.map((cat) => (
             <button
               key={cat.name}
-              onClick={() => onCategorySelect(cat.name)}
+              onClick={() => handleCategoryClick(cat.name)}
               className="bg-white rounded-2xl border border-slate-200 p-4 text-center hover:shadow-xl hover:border-[#0F9D8A] transition duration-300 group cursor-pointer flex flex-col items-center"
             >
               <div className="w-20 h-20 rounded-2xl overflow-hidden bg-[#F5F7FA] p-2 mb-3 relative group-hover:scale-105 transition-transform">
@@ -480,81 +509,138 @@ export default function EnterpriseHomepage({
         <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">Top Medical Equipment Brands</h3>
         <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
           {brandLogos.map((brd) => (
-            <div 
+            <button 
               key={brd.name}
-              className="bg-[#F5F7FA] hover:bg-white border border-slate-200 hover:border-[#0077B6] rounded-2xl p-3 px-5 shrink-0 flex items-center gap-3 transition cursor-pointer shadow-sm min-w-[200px]"
+              onClick={() => handleCategoryClick(brd.name)}
+              className="bg-[#F5F7FA] hover:bg-white border border-slate-200 hover:border-[#0077B6] rounded-2xl p-3 px-5 shrink-0 flex items-center gap-3 transition cursor-pointer shadow-sm min-w-[200px] text-left"
             >
               <img src={brd.logo} alt={brd.name} className="w-8 h-8 rounded-lg object-cover" />
               <div>
                 <h4 className="text-xs font-bold text-[#1F2937]">{brd.name}</h4>
                 <p className="text-[9px] text-slate-500 font-medium truncate max-w-[120px]">{brd.desc}</p>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </section>
 
       {/* 5. DEAL OF THE DAY / FLASH SALE BANNER */}
-      <section className="max-w-7xl mx-auto px-4 lg:px-6">
-        <div className="bg-gradient-to-r from-[#0077B6] via-[#0F9D8A] to-indigo-900 rounded-3xl p-6 sm:p-10 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="space-y-4 max-w-xl z-10">
-            <span className="bg-rose-500 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">
-              ⚡ DEAL OF THE DAY • LIMITED STOCK
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight">
-              Hospital Grade ICU Monitor &amp; ECG Flash Sale
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-200">
-              Get 40% OFF on 12-Lead ECG Machines &amp; 12.1" Patient Monitors with Direct Factory Warranty.
-            </p>
+      {dealOfDay.isActive && (
+        <section className="max-w-7xl mx-auto px-4 lg:px-6">
+          <div className="bg-gradient-to-r from-[#0077B6] via-[#0F9D8A] to-indigo-900 rounded-3xl p-6 sm:p-10 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="space-y-4 max-w-xl z-10">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="bg-rose-500 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-sm">
+                  {dealOfDay.badgeText || '⚡ DEAL OF THE DAY • LIMITED STOCK'}
+                </span>
+                {dealOfDay.discountText && (
+                  <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-full uppercase font-mono shadow-sm">
+                    {dealOfDay.discountText}
+                  </span>
+                )}
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight">
+                {dealOfDay.title}
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-200">
+                {dealOfDay.subtitle}
+              </p>
 
-            {/* Countdown Timer */}
-            <div className="flex items-center gap-3 text-center pt-2">
-              <div className="bg-white/20 backdrop-blur-md px-3 py-2 rounded-xl font-mono border border-white/20">
-                <span className="text-lg font-bold block">{String(countdown.hours).padStart(2, '0')}</span>
-                <span className="text-[9px] uppercase font-sans text-slate-200">Hours</span>
+              {/* Countdown Timer */}
+              <div className="flex items-center gap-3 text-center pt-2">
+                <div className="bg-white/20 backdrop-blur-md px-3 py-2 rounded-xl font-mono border border-white/20">
+                  <span className="text-lg font-bold block">{String(countdown.hours).padStart(2, '0')}</span>
+                  <span className="text-[9px] uppercase font-sans text-slate-200">Hours</span>
+                </div>
+                <span className="text-xl font-bold">:</span>
+                <div className="bg-white/20 backdrop-blur-md px-3 py-2 rounded-xl font-mono border border-white/20">
+                  <span className="text-lg font-bold block">{String(countdown.mins).padStart(2, '0')}</span>
+                  <span className="text-[9px] uppercase font-sans text-slate-200">Mins</span>
+                </div>
+                <span className="text-xl font-bold">:</span>
+                <div className="bg-white/20 backdrop-blur-md px-3 py-2 rounded-xl font-mono border border-white/20">
+                  <span className="text-lg font-bold block">{String(countdown.secs).padStart(2, '0')}</span>
+                  <span className="text-[9px] uppercase font-sans text-slate-200">Secs</span>
+                </div>
               </div>
-              <span className="text-xl font-bold">:</span>
-              <div className="bg-white/20 backdrop-blur-md px-3 py-2 rounded-xl font-mono border border-white/20">
-                <span className="text-lg font-bold block">{String(countdown.mins).padStart(2, '0')}</span>
-                <span className="text-[9px] uppercase font-sans text-slate-200">Mins</span>
-              </div>
-              <span className="text-xl font-bold">:</span>
-              <div className="bg-white/20 backdrop-blur-md px-3 py-2 rounded-xl font-mono border border-white/20">
-                <span className="text-lg font-bold block">{String(countdown.secs).padStart(2, '0')}</span>
-                <span className="text-[9px] uppercase font-sans text-slate-200">Secs</span>
+
+              {/* Stock Progress Bar */}
+              <div className="space-y-1.5 pt-2 max-w-xs">
+                <div className="flex justify-between text-[10px] font-bold">
+                  <span>Claimed: {dealOfDay.claimedPercentage || 78}%</span>
+                  <span>{dealOfDay.unitsLeft || 12} Units Left</span>
+                </div>
+                <div className="w-full bg-white/20 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-amber-400 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.max(0, dealOfDay.claimedPercentage || 78))}%` }}
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Stock Progress Bar */}
-            <div className="space-y-1.5 pt-2 max-w-xs">
-              <div className="flex justify-between text-[10px] font-bold">
-                <span>Claimed: 78%</span>
-                <span>12 Units Left</span>
-              </div>
-              <div className="w-full bg-white/20 rounded-full h-2 overflow-hidden">
-                <div className="bg-amber-400 h-full w-[78%] rounded-full" />
-              </div>
+            <div className="z-10 shrink-0 text-center">
+              <button
+                onClick={() => {
+                  if (dealOfDay.productId) {
+                    const matchedProd = products.find(p => p.id === dealOfDay.productId);
+                    if (matchedProd) {
+                      onQuickView(matchedProd);
+                      return;
+                    }
+                  }
+                  if (dealOfDay.linkUrl && dealOfDay.linkUrl.startsWith('#')) {
+                    const el = document.getElementById(dealOfDay.linkUrl.substring(1));
+                    el?.scrollIntoView({ behavior: 'smooth' });
+                  } else {
+                    const el = document.getElementById('catalog-anchor');
+                    el?.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="bg-white text-[#1F2937] hover:bg-slate-100 font-extrabold text-sm px-8 py-4 rounded-2xl transition shadow-2xl transform hover:scale-105 cursor-pointer"
+              >
+                {dealOfDay.buttonText || 'Claim Flash Offer Now'}
+              </button>
             </div>
           </div>
-
-          <div className="z-10 shrink-0 text-center">
-            <button
-              onClick={() => {
-                const el = document.getElementById('catalog-anchor');
-                el?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="bg-white text-[#1F2937] hover:bg-slate-100 font-extrabold text-sm px-8 py-4 rounded-2xl transition shadow-2xl transform hover:scale-105"
-            >
-              Claim Flash Offer Now
-            </button>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* 6. CURATED CATEGORY PRODUCT SLIDERS */}
       <div id="catalog-anchor" className="space-y-10">
         
+        {/* Active Category Filter View */}
+        {selectedCategoryName && (
+          <section className="max-w-7xl mx-auto px-4 lg:px-6 space-y-4">
+            <div className="bg-[#0F9D8A]/10 border border-[#0F9D8A]/30 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+              <div>
+                <span className="text-[10px] text-[#0F9D8A] font-extrabold uppercase tracking-widest block">Active Category Filter</span>
+                <h3 className="text-xl font-black text-[#1F2937]">{selectedCategoryName}</h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Showing all verified products matching "{selectedCategoryName}"
+                </p>
+              </div>
+              <button
+                onClick={() => handleCategoryClick('')}
+                className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white text-xs font-bold px-4 py-2 rounded-xl transition cursor-pointer shadow-md"
+              >
+                Clear Filter &amp; Show All
+              </button>
+            </div>
+
+            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
+              {products
+                .filter(p => 
+                  p.category.toLowerCase().includes(selectedCategoryName.toLowerCase()) || 
+                  (p.subcategory && p.subcategory.toLowerCase().includes(selectedCategoryName.toLowerCase())) ||
+                  p.brand.toLowerCase().includes(selectedCategoryName.toLowerCase()) ||
+                  p.name.toLowerCase().includes(selectedCategoryName.toLowerCase())
+                )
+                .map(renderProductCard)}
+            </div>
+          </section>
+        )}
+
         {/* Continue Browsing / Featured Catalog */}
         <section className="max-w-7xl mx-auto px-4 lg:px-6 space-y-4">
           <div className="flex justify-between items-end">
@@ -575,7 +661,7 @@ export default function EnterpriseHomepage({
               <h3 className="text-lg font-black text-[#1F2937]">Diagnostic Equipment</h3>
               <p className="text-xs text-slate-500">ECG, Patient Monitors, Ultrasound &amp; Vital Signs Analyzers</p>
             </div>
-            <button onClick={() => onCategorySelect('Diagnostic Equipment')} className="text-xs font-bold text-[#0077B6] hover:underline">
+            <button onClick={() => handleCategoryClick('Diagnostic Equipment')} className="text-xs font-bold text-[#0077B6] hover:underline cursor-pointer">
               View All
             </button>
           </div>
@@ -591,7 +677,7 @@ export default function EnterpriseHomepage({
               <h3 className="text-lg font-black text-[#1F2937]">Patient Monitoring Systems</h3>
               <p className="text-xs text-slate-500">ICU Multipara Monitors, Capnography, Pulse Oximeters</p>
             </div>
-            <button onClick={() => onCategorySelect('Patient Monitoring')} className="text-xs font-bold text-[#0077B6] hover:underline">
+            <button onClick={() => handleCategoryClick('Patient Monitoring')} className="text-xs font-bold text-[#0077B6] hover:underline cursor-pointer">
               View All
             </button>
           </div>
@@ -617,7 +703,7 @@ export default function EnterpriseHomepage({
               </div>
               <h2 className="text-xl font-black text-[#1F2937] mt-1">Refurbished Imaging &amp; ICU Equipment</h2>
             </div>
-            <button onClick={() => onCategorySelect('Refurbished Equipment')} className="text-xs font-bold text-[#0F9D8A] hover:underline">
+            <button onClick={() => handleCategoryClick('Refurbished Equipment')} className="text-xs font-bold text-[#0F9D8A] hover:underline cursor-pointer">
               Explore Refurbished Catalog
             </button>
           </div>

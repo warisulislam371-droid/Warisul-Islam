@@ -546,6 +546,23 @@ export interface PromoBanner {
   purchaseButtonPrice?: number;
 }
 
+export interface DealOfDay {
+  id?: string;
+  badgeText: string;
+  title: string;
+  subtitle: string;
+  hours: number;
+  mins: number;
+  secs: number;
+  claimedPercentage: number;
+  unitsLeft: number;
+  buttonText: string;
+  linkUrl?: string;
+  isActive: boolean;
+  discountText?: string;
+  productId?: string;
+}
+
 export type DocumentTypeKey =
   | 'gstCertificate'
   | 'panCard'

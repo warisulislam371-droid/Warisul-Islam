@@ -1,4 +1,4 @@
-import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, PriceAlert, SocialMediaLinks } from './types';
+import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, PriceAlert, SocialMediaLinks, DealOfDay } from './types';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_BLOGS, DEFAULT_SUPER_ADMIN, INITIAL_BRANDS } from './data';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from './utils/sliceQrSvg';
 import { 
@@ -267,7 +267,24 @@ const STORAGE_KEYS = {
   CATEGORY_REQUESTS: 'healnex_category_requests',
   BRAND_REQUESTS: 'healnex_brand_requests',
   PRICE_ALERTS: 'healnex_price_alerts',
-  SOCIAL_LINKS: 'healnex_social_links'
+  SOCIAL_LINKS: 'healnex_social_links',
+  DEAL_OF_DAY: 'healnex_deal_of_day'
+};
+
+export const DEFAULT_DEAL_OF_DAY: DealOfDay = {
+  id: 'deal-default',
+  badgeText: '⚡ DEAL OF THE DAY • LIMITED STOCK',
+  title: 'Hospital Grade ICU Monitor & ECG Flash Sale',
+  subtitle: 'Get 40% OFF on 12-Lead ECG Machines & 12.1" Patient Monitors with Direct Factory Warranty.',
+  hours: 14,
+  mins: 32,
+  secs: 45,
+  claimedPercentage: 78,
+  unitsLeft: 12,
+  buttonText: 'Claim Flash Offer Now',
+  linkUrl: '#catalog-anchor',
+  isActive: true,
+  discountText: '40% OFF'
 };
 
 import { PaymentSettings, PaymentClearanceRequest, PromoBanner } from './types';
@@ -1005,6 +1022,18 @@ export const dbLocal = {
     const old = this.getPromoBanners();
     this.set(STORAGE_KEYS.PROMO_BANNERS, banners);
     syncListToFirestoreWithDeletions('promo_banners', banners, old);
+  },
+
+  // Deal of the Day
+  getDealOfDay(): DealOfDay {
+    const data = this.get(STORAGE_KEYS.DEAL_OF_DAY, [DEFAULT_DEAL_OF_DAY]) as DealOfDay[];
+    return (data && data[0]) ? data[0] : DEFAULT_DEAL_OF_DAY;
+  },
+  saveDealOfDay(deal: DealOfDay) {
+    const old = this.get(STORAGE_KEYS.DEAL_OF_DAY, [DEFAULT_DEAL_OF_DAY]) as DealOfDay[];
+    this.set(STORAGE_KEYS.DEAL_OF_DAY, [deal]);
+    syncListToFirestoreWithDeletions('deal_of_day', [deal], old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Dynamic Categories
