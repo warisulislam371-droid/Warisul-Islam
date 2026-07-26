@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { dbLocal } from './db';
 import { User, Product } from './types';
 import Navbar from './components/Navbar';
+import Footer from './components/Footer';
 import CustomerPanel from './components/CustomerPanel';
 import AdminPanel from './components/AdminPanel';
 import VendorPanel from './components/VendorPanel';
@@ -265,35 +266,17 @@ export default function App() {
             <BlogSection currentUser={currentUser} addToast={addToast} />
           )}
 
+          {/* Clinical B2B Footer at bottom of scrollable page */}
+          <Footer
+            onNavigate={setCurrentView}
+            onOpenPolicy={(pol) => setActivePolicyModal(pol)}
+            onCategorySelect={() => {
+              setCurrentView('marketplace');
+            }}
+            isDarkMode={isDarkMode}
+          />
+
         </main>
-
-        {/* Clinical Footer */}
-        <footer className="bg-slate-950 text-slate-400 text-xs py-6 border-t border-slate-800 shrink-0">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="text-center md:text-left space-y-1">
-                <h4 className="text-sm font-bold text-teal-400 font-display">MedBazar Helnex</h4>
-                <p className="text-[11px] text-slate-400">A secure marketplace connecting customers with trusted medical equipment vendors.</p>
-                <p className="text-[10px] text-slate-500 font-medium">Al Salam Medical Equipment Centre | WhatsApp Support: +91 9103500592</p>
-              </div>
-              <div className="flex flex-wrap items-center justify-center md:justify-end gap-x-5 gap-y-2 text-[11px] font-semibold">
-                <button onClick={() => setActivePolicyModal('about')} className="hover:text-teal-400 transition">About Us</button>
-                <button onClick={() => setActivePolicyModal('contact')} className="hover:text-teal-400 transition">Contact</button>
-                <button onClick={() => setActivePolicyModal('privacy')} className="hover:text-teal-400 transition">Privacy Policy</button>
-                <button onClick={() => setActivePolicyModal('terms')} className="hover:text-teal-400 transition">Terms & Conditions</button>
-                <button onClick={() => setActivePolicyModal('refund')} className="hover:text-teal-400 transition">Refund Policy</button>
-                <button onClick={() => setActivePolicyModal('shipping')} className="hover:text-teal-400 transition">Shipping Policy</button>
-                <button onClick={() => setCurrentView('trust-safety')} className="text-teal-400 hover:text-teal-300 font-bold transition">Trust & Safety</button>
-                <button onClick={() => setCurrentView('reviews')} className="text-amber-400 hover:text-amber-300 font-bold transition">Verified Reviews</button>
-              </div>
-            </div>
-            <div className="pt-3 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-500 gap-2">
-              <p>&copy; 2026 MedBazar Helnex | Operated by Al Salam Medical Equipment Centre</p>
-              <p>All clinical equipment orders subject to verified B2B procurement standards.</p>
-            </div>
-          </div>
-        </footer>
-
       </div>
 
       {/* Policy Reader Modal */}

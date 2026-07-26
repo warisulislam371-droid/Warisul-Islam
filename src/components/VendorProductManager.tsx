@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Product, Vendor, Category, Brand, CategoryRequest, BrandRequest, ProductSpecification, User } from '../types';
 import { dbLocal } from '../db';
 import { detectCategoryAndSubcategory, detectCategoryWithAI, autoSortAndClassifyProducts } from '../utils/categorySorter';
+import { AICategorizerCard } from './AICategorizerCard';
 import {
   Plus,
   Search,
@@ -1842,6 +1843,25 @@ export default function VendorProductManager({
                       value={formName}
                       onChange={(e) => setFormName(e.target.value)}
                       className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-bold text-slate-900"
+                    />
+                  </div>
+
+                  {/* AI Automatic Product Categorization Assistant Card */}
+                  <div className="md:col-span-2">
+                    <AICategorizerCard
+                      productData={{
+                        name: formName,
+                        brand: formBrand,
+                        description: formShortDesc || formFullDesc,
+                        specifications: formSpecs,
+                        sku: formSku
+                      }}
+                      initialCategory={formCategory}
+                      initialSubcategory={formSubcategory}
+                      onCategorySelected={(res) => {
+                        setFormCategory(res.category);
+                        setFormSubcategory(res.subcategory);
+                      }}
                     />
                   </div>
 

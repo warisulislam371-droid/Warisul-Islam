@@ -459,6 +459,15 @@ export interface WhatsAppSettings {
   selectedScreens: string[]; // ['Home', 'ProductDetails', 'Cart', 'Checkout', 'Orders', 'Profile', 'HelpSupport']
 }
 
+export interface SocialMediaLinks {
+  id: string; // 'global_social_links'
+  instagram: string;
+  facebook: string;
+  youtube: string;
+  linkedin: string;
+  twitter?: string;
+}
+
 export interface WhatsAppClickLog {
   id: string;
   timestamp: string;

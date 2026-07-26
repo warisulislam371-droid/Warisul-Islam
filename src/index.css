@@ -7,12 +7,12 @@
   --theme-200: #bae6fd;
   --theme-300: #7dd3fc;
   --theme-400: #38bdf8;
-  --theme-500: #0ea5e9;
-  --theme-600: #0284c7;
-  --theme-700: #0369a1;
-  --theme-800: #075985;
-  --theme-900: #0c4a6e;
-  --theme-brand-hex: #0369a1;
+  --theme-500: #0284c7;
+  --theme-600: #0066cc;
+  --theme-700: #0052a3;
+  --theme-800: #003d7a;
+  --theme-900: #002952;
+  --theme-brand-hex: #0066cc;
 }
 
 .theme-sapphire {
@@ -69,6 +69,34 @@
   --theme-800: #9f1239;
   --theme-900: #881337;
   --theme-brand-hex: #be123c;
+}
+
+.theme-medikabazaar {
+  --theme-50: #eff6ff;
+  --theme-100: #dbeafe;
+  --theme-200: #bfdbfe;
+  --theme-300: #93c5fd;
+  --theme-400: #60a5fa;
+  --theme-500: #3b82f6;
+  --theme-600: #2563eb;
+  --theme-700: #1d4ed8;
+  --theme-800: #1e40af;
+  --theme-900: #1e3a8a;
+  --theme-brand-hex: #1d4ed8;
+}
+
+.theme-slate {
+  --theme-50: #f8fafc;
+  --theme-100: #f1f5f9;
+  --theme-200: #e2e8f0;
+  --theme-300: #cbd5e1;
+  --theme-400: #94a3b8;
+  --theme-500: #64748b;
+  --theme-600: #475569;
+  --theme-700: #334155;
+  --theme-800: #1e293b;
+  --theme-900: #0f172a;
+  --theme-brand-hex: #334155;
 }
 
 @theme {

@@ -17,6 +17,9 @@ import {
   generateRobotsTxt
 } from './src/seo/generator';
 
+import { categorizeProductLocally } from './src/utils/medicalCategorizer';
+import { getCategorySeoUrl, getSubcategorySeoUrl, getProductSeoUrl } from './src/utils/seoUrls';
+
 dotenv.config();
 
 // Safe lazy initialization of the Google GenAI SDK with recommended header
@@ -296,58 +299,156 @@ Hospital User Role: ${JSON.stringify(userContext || 'General Clinic')}`;
   });
 
   // AI-Powered Product Category & Subcategory Auto-Classification API
-  app.post('/api/gemini/classify-category', async (req, res) => {
+  app.post('/api/gemini/categorize-product', async (req, res) => {
     try {
-      const { name, description, specifications, categories } = req.body;
-      if (!name) {
-        return res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'Default fallback category assigned.' });
+      const { name, brand, description, keywords, specifications, sku, learnedFeedback } = req.body;
+      const productInput = { name, brand, description, keywords, specifications, sku };
+
+      // Fast local calculation for baseline & fallback
+      const localResult = categorizeProductLocally(productInput);
+
+      if (!name || name.trim().length === 0) {
+        return res.json(localResult);
       }
 
       if (isQuotaCooldowned()) {
-        return res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'Circuit breaker active. Using local taxonomy.' });
+        return res.json(localResult);
       }
 
       const ai = getGeminiClient();
       if (!ai) {
-        return res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'AI client uninitialized. Using local fallback engine.' });
+        return res.json(localResult);
       }
 
       try {
-        const availableCategoriesList = (categories || []).map((c: any) => ({
-          name: c.name,
-          subcategories: c.subcategories || []
-        }));
-
         const systemPrompt = `You are the HealNex B2B Medical Equipment AI Taxonomy Classification Engine.
-Analyze the medical equipment item details and assign the single most accurate Category and Subcategory.
-If possible, align with the provided available categories taxonomy list, or suggest a standard clinical category/subcategory if none match.
-Return a confidence score (1 to 100) and a concise 1-sentence aiReason.`;
+You must analyze the medical device or clinical product details and assign the single most accurate Main Category and Subcategory.
 
-        const userMessage = `Product Name: "${name}"
-Product Description: "${description || ''}"
-Product Specifications: ${JSON.stringify(specifications || [])}
-Available Categories & Subcategories: ${JSON.stringify(availableCategoriesList)}`;
+Medical Dictionary & Synonym Guidelines:
+- ECG, Electrocardiograph, Heart Monitor, Cabrera, EKG -> Main: "Medical Equipment", Sub: "ECG Machine"
+- Patient Monitor, Multipara, Vital Signs, SpO2/NIBP Monitor -> Main: "Medical Equipment", Sub: "Patient Monitor"
+- Defibrillator, AED, Shock Machine, Cardioverter -> Main: "Medical Equipment", Sub: "Defibrillator"
+- Ventilator, ICU Ventilator, Respirator, CPAP, BiPAP -> Main: "Medical Equipment", Sub: "Ventilator"
+- Syringe Pump, Infusion Pump, Volumetric Pump -> Main: "Medical Equipment", Sub: "Infusion Pump"
+- Ultrasound Machine, Sonography, Echo Machine -> Main: "Medical Equipment", Sub: "Ultrasound Machine"
+- X-Ray, C-Arm, Digital Radiography -> Main: "Medical Equipment", Sub: "X-Ray Machine"
+- MRI, CT Scanner -> Main: "Medical Equipment", Sub: "MRI" or "CT Scanner"
+- Hospital Bed, ICU Bed, Fowler Bed, Motorized Bed -> Main: "Hospital Furniture", Sub: "ICU Beds" or "Hospital Beds"
+- Wheelchair, Electric Wheelchair -> Main: "Hospital Furniture", Sub: "Wheelchairs"
+- Stretcher, Patient Transfer Trolley -> Main: "Hospital Furniture", Sub: "Stretchers"
+- Oxygen Concentrator, O2 Generator -> Main: "Homecare Devices", Sub: "Oxygen Concentrator"
+- Nebulizer -> Main: "Homecare Devices", Sub: "Nebulizer"
+- Pulse Oximeter, Oximeter -> Main: "Homecare Devices", Sub: "Pulse Oximeter"
+- BP Monitor, Sphygmomanometer -> Main: "Homecare Devices", Sub: "BP Monitor"
+- Glucometer, Blood Glucose Meter -> Main: "Homecare Devices", Sub: "Glucometer"
+- Forceps, Scissors, Scalpel, Retractor -> Main: "Surgical Instruments", Sub: "Surgical Instruments"
+- Blood Collection Tube, Vacutainer, EDTA Tube -> Main: "Consumables", Sub: "Blood Collection Tube"
+- ECG Cable, SpO2 Sensor, NIBP Cuff, ETCO2 Accessory -> Main: "Consumables", Sub: "Accessories & Cables"
+- Catheter, Foley Catheter -> Main: "Consumables", Sub: "Catheters"
+- Syringe, Needle -> Main: "Consumables", Sub: "Syringes"
+- Gloves, Nitrile Gloves -> Main: "Consumables", Sub: "Gloves"
+- PPE Kit, Gown, Mask, N95 -> Main: "Consumables", Sub: "PPE Kits & Masks"
+- OT Light, OT Table -> Main: "Medical Equipment", Sub: "OT Light & Table"
+- Biochemistry Analyzer, Hematology Analyzer, Microscope, Centrifuge -> Main: "Laboratory Equipment", Sub: "Laboratory Analyzer" / "Microscope" / "Centrifuge"
+
+Rules for Confidence Scoring:
+- If confidence >= 90%: Set status to "AutoSelected", needsAdminReview to false.
+- If confidence is between 60% and 89%: Set status to "Suggested", provide top 3 candidates in suggestions array, needsAdminReview to false.
+- If confidence < 60%: Set status to "NeedsAdminReview", needsAdminReview to true.
+
+Past Admin Learning Feedback Context:
+${JSON.stringify(learnedFeedback || []).slice(0, 500)}`;
+
+        const userMessage = `Product Input Data:
+Name: "${name}"
+Brand: "${brand || ''}"
+Description: "${description || ''}"
+Keywords / Tags: ${JSON.stringify(keywords || [])}
+Specifications: ${JSON.stringify(specifications || [])}
+SKU: "${sku || ''}"`;
 
         const schema = {
           type: Type.OBJECT,
           properties: {
-            category: { type: Type.STRING, description: 'The assigned main category name.' },
+            mainCategory: { type: Type.STRING, description: 'The assigned main category name.' },
             subcategory: { type: Type.STRING, description: 'The assigned subcategory name.' },
-            confidence: { type: Type.NUMBER, description: 'Confidence score from 1 to 100.' },
-            aiReason: { type: Type.STRING, description: 'Brief explanation of why this medical product fits this category taxonomy.' }
+            confidenceScore: { type: Type.NUMBER, description: 'Confidence score between 1 and 100.' },
+            reasoning: { type: Type.STRING, description: 'Clinical reasoning explaining the classification, synonym match, and specifications.' },
+            suggestions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  category: { type: Type.STRING },
+                  subcategory: { type: Type.STRING },
+                  confidence: { type: Type.NUMBER },
+                  reasoning: { type: Type.STRING }
+                },
+                required: ['category', 'subcategory', 'confidence', 'reasoning']
+              }
+            }
           },
-          required: ['category', 'subcategory', 'confidence', 'aiReason']
+          required: ['mainCategory', 'subcategory', 'confidenceScore', 'reasoning', 'suggestions']
         };
 
         const parsedData = await generateContentResilient(ai, [userMessage], systemPrompt, schema);
-        return res.json(parsedData);
+
+        const confidenceScore = Math.min(100, Math.max(1, parsedData.confidenceScore || 85));
+        let status: 'AutoSelected' | 'Suggested' | 'NeedsAdminReview' = 'Suggested';
+        let needsAdminReview = false;
+
+        if (confidenceScore >= 90) {
+          status = 'AutoSelected';
+          needsAdminReview = false;
+        } else if (confidenceScore >= 60) {
+          status = 'Suggested';
+          needsAdminReview = false;
+        } else {
+          status = 'NeedsAdminReview';
+          needsAdminReview = true;
+        }
+
+        const mainCategory = parsedData.mainCategory || localResult.mainCategory;
+        const subcategory = parsedData.subcategory || localResult.subcategory;
+
+        return res.json({
+          mainCategory,
+          subcategory,
+          confidenceScore,
+          status,
+          needsAdminReview,
+          suggestions: (parsedData.suggestions && parsedData.suggestions.length > 0) ? parsedData.suggestions : localResult.suggestions,
+          reasoning: parsedData.reasoning || localResult.reasoning,
+          matchedKeywords: localResult.matchedKeywords,
+          seoCategoryUrl: getCategorySeoUrl(mainCategory),
+          seoSubcategoryUrl: getSubcategorySeoUrl(mainCategory, subcategory),
+          seoProductUrl: getProductSeoUrl(mainCategory, subcategory, name, brand)
+        });
+
       } catch (innerError: any) {
-        handleQuotaExceeded(innerError, 'auto-classify category');
-        return res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'Local fallback engine utilized.' });
+        handleQuotaExceeded(innerError, 'ai categorize product');
+        return res.json(localResult);
       }
     } catch (error: any) {
-      console.log('Category auto-classify exception handled:', error.message || error);
-      res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'Local fallback engine utilized.' });
+      console.log('Product categorization top-level error handled:', error.message || error);
+      const fallback = categorizeProductLocally(req.body);
+      return res.json(fallback);
+    }
+  });
+
+  // Alias endpoint for backward compatibility with classify-category
+  app.post('/api/gemini/classify-category', async (req, res) => {
+    try {
+      const { name, brand, description, specifications, categories } = req.body;
+      const result = categorizeProductLocally({ name, brand, description, specifications });
+      return res.json({
+        category: result.mainCategory,
+        subcategory: result.subcategory,
+        confidence: result.confidenceScore,
+        aiReason: result.reasoning
+      });
+    } catch (err) {
+      return res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'Local taxonomy fallback.' });
     }
   });
 

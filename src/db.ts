@@ -1,4 +1,4 @@
-import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, PriceAlert } from './types';
+import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, PriceAlert, SocialMediaLinks } from './types';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_BLOGS, DEFAULT_SUPER_ADMIN, INITIAL_BRANDS } from './data';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from './utils/sliceQrSvg';
 import { 
@@ -266,7 +266,8 @@ const STORAGE_KEYS = {
   BRANDS: 'healnex_brands',
   CATEGORY_REQUESTS: 'healnex_category_requests',
   BRAND_REQUESTS: 'healnex_brand_requests',
-  PRICE_ALERTS: 'healnex_price_alerts'
+  PRICE_ALERTS: 'healnex_price_alerts',
+  SOCIAL_LINKS: 'healnex_social_links'
 };
 
 import { PaymentSettings, PaymentClearanceRequest, PromoBanner } from './types';
@@ -359,6 +360,15 @@ export const DEFAULT_WHATSAPP_SETTINGS: WhatsAppSettings = {
   buttonText: 'Chat on WhatsApp (9103500592)',
   showOnAllScreens: true,
   selectedScreens: ['Home', 'ProductDetails', 'Cart', 'Checkout', 'Orders', 'Profile', 'HelpSupport']
+};
+
+export const DEFAULT_SOCIAL_LINKS: SocialMediaLinks = {
+  id: 'global_social_links',
+  instagram: 'https://instagram.com/medbazarhelnex',
+  facebook: 'https://facebook.com/medbazarhelnex',
+  youtube: 'https://youtube.com/medbazarhelnex',
+  linkedin: 'https://linkedin.com/company/medbazarhelnex',
+  twitter: 'https://x.com/medbazarhelnex'
 };
 
 
@@ -667,6 +677,7 @@ export const dbLocal = {
     if (!localStorage.getItem(STORAGE_KEYS.BRANDS)) this.set(STORAGE_KEYS.BRANDS, INITIAL_BRANDS);
     if (!localStorage.getItem(STORAGE_KEYS.CATEGORY_REQUESTS)) this.set(STORAGE_KEYS.CATEGORY_REQUESTS, []);
     if (!localStorage.getItem(STORAGE_KEYS.BRAND_REQUESTS)) this.set(STORAGE_KEYS.BRAND_REQUESTS, []);
+    if (!localStorage.getItem(STORAGE_KEYS.SOCIAL_LINKS)) this.set(STORAGE_KEYS.SOCIAL_LINKS, [DEFAULT_SOCIAL_LINKS]);
     
     // Do not auto-login by default to allow showing login screen on startup
     this.set(STORAGE_KEYS.CURRENT_USER, null);
@@ -714,6 +725,7 @@ export const dbLocal = {
       listenToCollection('brands', STORAGE_KEYS.BRANDS, INITIAL_BRANDS);
       listenToCollection('categoryRequests', STORAGE_KEYS.CATEGORY_REQUESTS, []);
       listenToCollection('brandRequests', STORAGE_KEYS.BRAND_REQUESTS, []);
+      listenToCollection('social_links', STORAGE_KEYS.SOCIAL_LINKS, [DEFAULT_SOCIAL_LINKS]);
     } catch (err) {
       console.warn('Firebase sync failed to initialize (possibly offline):', err);
     }
@@ -924,6 +936,17 @@ export const dbLocal = {
     const old = this.get(STORAGE_KEYS.WHATSAPP_SETTINGS, [DEFAULT_WHATSAPP_SETTINGS]) as WhatsAppSettings[];
     this.set(STORAGE_KEYS.WHATSAPP_SETTINGS, [settings]);
     syncListToFirestoreWithDeletions('whatsapp_settings', [settings], old);
+  },
+
+  // Social Media Links
+  getSocialLinks(): SocialMediaLinks {
+    const settings = this.get(STORAGE_KEYS.SOCIAL_LINKS, [DEFAULT_SOCIAL_LINKS]) as SocialMediaLinks[];
+    return settings[0] || DEFAULT_SOCIAL_LINKS;
+  },
+  saveSocialLinks(links: SocialMediaLinks) {
+    const old = this.get(STORAGE_KEYS.SOCIAL_LINKS, [DEFAULT_SOCIAL_LINKS]) as SocialMediaLinks[];
+    this.set(STORAGE_KEYS.SOCIAL_LINKS, [links]);
+    syncListToFirestoreWithDeletions('social_links', [links], old);
   },
 
   // WhatsApp Click Logs

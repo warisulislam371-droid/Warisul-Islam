@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
 import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
-import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation } from '../types';
+import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation, SocialMediaLinks } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
 import { AdminVerificationPanel } from './AdminVerificationPanel';
+import { AdminCategorizationPanel } from './AdminCategorizationPanel';
 import {
   TrendingUp,
   Users,
@@ -16,6 +17,7 @@ import {
   Clock,
   Shield,
   ShieldCheck,
+  Sparkles,
   Search,
   MessageSquare,
   MessageCircle,
@@ -56,6 +58,13 @@ import {
   Eye,
   Tag,
   Box,
+  Instagram,
+  Facebook,
+  Linkedin,
+  Youtube,
+  Twitter,
+  Globe,
+  Link2,
   Image as ImageIcon,
   Plus,
   ArrowRight,
@@ -217,7 +226,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [pushTarget, setPushTarget] = useState('admin');
   const [pushType, setPushType] = useState('clinical_broadcast');
   
-  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit'>('kpis');
+  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit' | 'ai_categorization_audit'>('kpis');
 
   // Promo Banners State
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>(dbLocal.getPromoBanners());
@@ -405,6 +414,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   // WhatsApp Support admin states
   const [whatsappSettings, setWhatsappSettings] = useState<WhatsAppSettings>(dbLocal.getWhatsAppSettings());
   const [whatsappLogs, setWhatsappLogs] = useState<WhatsAppClickLog[]>(dbLocal.getWhatsAppClickLogs());
+  const [socialLinks, setSocialLinks] = useState<SocialMediaLinks>(dbLocal.getSocialLinks());
   
   // States for document modal reviews
   const [selectedVendorDoc, setSelectedVendorDoc] = useState<Vendor | null>(null);
@@ -483,6 +493,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     setPaymentSettings(dbLocal.getPaymentSettings());
     setWhatsappSettings(dbLocal.getWhatsAppSettings());
     setWhatsappLogs(dbLocal.getWhatsAppClickLogs());
+    setSocialLinks(dbLocal.getSocialLinks());
     setClearanceRequests(dbLocal.getClearanceRequests());
     setPromoBanners(dbLocal.getPromoBanners());
     setRfqs(dbLocal.getRfqs());
@@ -1356,7 +1367,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             onClick={() => setActiveTab('whatsapp-support')}
             className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'whatsapp-support' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            WhatsApp Settings
+            WhatsApp &amp; Social Links
           </button>
           <button
             onClick={() => setActiveTab('banners')}
@@ -1394,10 +1405,20 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
             Vendor Compliance Audit
           </button>
+          <button
+            onClick={() => setActiveTab('ai_categorization_audit')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'ai_categorization_audit' ? 'bg-white text-emerald-950 shadow-sm font-bold border border-emerald-300' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Sparkles className="w-4 h-4 text-emerald-600" />
+            AI Categorization Audit
+          </button>
         </div>
       </div>
 
       {/* tab view layouts */}
+      {activeTab === 'ai_categorization_audit' && (
+        <AdminCategorizationPanel />
+      )}
       {activeTab === 'verification_audit' && (
         <AdminVerificationPanel />
       )}
@@ -5013,6 +5034,112 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 </table>
               </div>
             )}
+          </div>
+
+          {/* Social Media Links Management Card */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+            <div className="border-b border-slate-100 pb-4">
+              <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <Globe className="w-5 h-5 text-indigo-600" />
+                Social Media Links Configuration
+              </h2>
+              <p className="text-[10px] text-slate-400 mt-1">Manage official Instagram, Facebook, YouTube, LinkedIn, and Twitter/X profile URLs displayed in the website footer.</p>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              dbLocal.saveSocialLinks(socialLinks);
+              addToast('Social media links updated successfully across website!', 'success');
+            }} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                {/* Instagram */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                    <Instagram className="w-4 h-4 text-rose-600" />
+                    Instagram Link
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://instagram.com/medbazarhelnex"
+                    value={socialLinks.instagram || ''}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, instagram: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:border-indigo-500 focus:bg-white outline-none transition font-mono"
+                  />
+                </div>
+
+                {/* Facebook */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                    <Facebook className="w-4 h-4 text-blue-600" />
+                    Facebook Link
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://facebook.com/medbazarhelnex"
+                    value={socialLinks.facebook || ''}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, facebook: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:border-indigo-500 focus:bg-white outline-none transition font-mono"
+                  />
+                </div>
+
+                {/* YouTube */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                    <Youtube className="w-4 h-4 text-red-600" />
+                    YouTube Link
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://youtube.com/@medbazarhelnex"
+                    value={socialLinks.youtube || ''}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, youtube: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:border-indigo-500 focus:bg-white outline-none transition font-mono"
+                  />
+                </div>
+
+                {/* LinkedIn */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                    <Linkedin className="w-4 h-4 text-blue-700" />
+                    LinkedIn Link
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://linkedin.com/company/medbazarhelnex"
+                    value={socialLinks.linkedin || ''}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, linkedin: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:border-indigo-500 focus:bg-white outline-none transition font-mono"
+                  />
+                </div>
+
+                {/* Twitter / X */}
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                    <Twitter className="w-4 h-4 text-sky-500" />
+                    Twitter / X Link
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://x.com/medbazarhelnex"
+                    value={socialLinks.twitter || ''}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, twitter: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:border-indigo-500 focus:bg-white outline-none transition font-mono"
+                  />
+                </div>
+
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm"
+                >
+                  <Link2 className="w-4 h-4" />
+                  Save Social Media Links
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
