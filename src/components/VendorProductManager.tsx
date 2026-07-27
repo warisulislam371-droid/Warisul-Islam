@@ -543,14 +543,16 @@ export default function VendorProductManager({
   };
 
   const parseCSV = (text: string): string[][] => {
+    // Strip UTF-8 BOM if present
+    const cleanText = text.replace(/^\uFEFF/, '');
     const lines: string[][] = [];
     let row: string[] = [];
     let currentVal = '';
     let insideQuote = false;
 
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      const nextChar = text[i + 1];
+    for (let i = 0; i < cleanText.length; i++) {
+      const char = cleanText[i];
+      const nextChar = cleanText[i + 1];
 
       if (char === '"') {
         if (insideQuote && nextChar === '"') {
@@ -560,13 +562,13 @@ export default function VendorProductManager({
           insideQuote = !insideQuote;
         }
       } else if (char === ',' && !insideQuote) {
-        row.push(currentVal.trim());
+        row.push(currentVal.trim().replace(/^"|"$/g, ''));
         currentVal = '';
       } else if ((char === '\r' || char === '\n') && !insideQuote) {
         if (char === '\r' && nextChar === '\n') {
           i++;
         }
-        row.push(currentVal.trim());
+        row.push(currentVal.trim().replace(/^"|"$/g, ''));
         if (row.length > 0 && row.some(cell => cell !== '')) {
           lines.push(row);
         }
@@ -577,7 +579,7 @@ export default function VendorProductManager({
       }
     }
     if (currentVal || row.length > 0) {
-      row.push(currentVal.trim());
+      row.push(currentVal.trim().replace(/^"|"$/g, ''));
       if (row.length > 0 && row.some(cell => cell !== '')) {
         lines.push(row);
       }
@@ -645,9 +647,21 @@ export default function VendorProductManager({
     document.body.removeChild(link);
   };
 
+  const findColIndex = (headers: string[], candidates: string[]): number => {
+    for (const cand of candidates) {
+      const candNorm = cand.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const idx = headers.findIndex(h => {
+        const hNorm = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return hNorm === candNorm || (candNorm.length >= 3 && hNorm.includes(candNorm));
+      });
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
   const handleCsvFileChange = (file: File) => {
     if (!file) return;
-    if (!file.name.endsWith('.csv')) {
+    if (!file.name.toLowerCase().endsWith('.csv') && !file.type.includes('csv') && !file.type.includes('text')) {
       setImportError('Please upload a valid .csv file.');
       return;
     }
@@ -668,105 +682,139 @@ export default function VendorProductManager({
           return;
         }
 
-        const headers = lines[0].map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+        const headers = lines[0].map(h => h.trim().replace(/^["']|["']$/g, ''));
         
-        // Define expected header mapping
+        // Flexible smart header column mapping
         const colMap: Record<string, number> = {
-          name: headers.indexOf('name'),
-          sku: headers.indexOf('sku'),
-          modelnumber: headers.indexOf('modelnumber'),
-          brand: headers.indexOf('brand'),
-          category: headers.indexOf('category'),
-          subcategory: headers.indexOf('subcategory'),
-          vendorprice: headers.indexOf('vendorprice'),
-          mrp: headers.indexOf('mrp'),
-          wholesaleprice: headers.indexOf('wholesaleprice'),
-          stockquantity: headers.indexOf('stockquantity'),
-          minorderqty: headers.indexOf('minorderqty'),
-          hsncode: headers.indexOf('hsncode'),
-          gstrate: headers.indexOf('gstrate'),
-          warranty: headers.indexOf('warranty'),
-          countryoforigin: headers.indexOf('countryoforigin'),
-          unit: headers.indexOf('unit'),
-          shortdescription: headers.indexOf('shortdescription'),
-          fulldescription: headers.indexOf('fulldescription'),
-          imageurls: headers.indexOf('imageurls'),
-          imagealts: headers.indexOf('imagealts'),
-          pricingtiers: headers.indexOf('pricingtiers')
+          name: findColIndex(headers, ['name', 'productname', 'title', 'itemname', 'product', 'item']),
+          sku: findColIndex(headers, ['sku', 'skucode', 'productcode', 'itemsku', 'code', 'modelnumber', 'id']),
+          modelnumber: findColIndex(headers, ['modelnumber', 'modelno', 'model', 'partnumber', 'modelfamily']),
+          brand: findColIndex(headers, ['brand', 'brandname', 'manufacturer', 'make']),
+          category: findColIndex(headers, ['category', 'cat', 'categoryname', 'department']),
+          subcategory: findColIndex(headers, ['subcategory', 'subcat', 'subcategoryname']),
+          vendorprice: findColIndex(headers, ['vendorprice', 'saleprice', 'price', 'unitprice', 'cost', 'rate', 'ourprice', 'vendorcost', 'priceinr']),
+          mrp: findColIndex(headers, ['mrp', 'msrp', 'listprice', 'originalprice', 'regularprice', 'mrpinr']),
+          wholesaleprice: findColIndex(headers, ['wholesaleprice', 'b2bprice', 'tradeprice', 'bulkprice']),
+          stockquantity: findColIndex(headers, ['stockquantity', 'stock', 'quantity', 'qty', 'inventory', 'count']),
+          minorderqty: findColIndex(headers, ['minorderqty', 'moq', 'minimumorder', 'minqty']),
+          hsncode: findColIndex(headers, ['hsncode', 'hsn', 'saccode', 'sac']),
+          gstrate: findColIndex(headers, ['gstrate', 'gst', 'tax', 'taxrate', 'vat']),
+          warranty: findColIndex(headers, ['warranty', 'guarantee']),
+          countryoforigin: findColIndex(headers, ['countryoforigin', 'origin', 'country', 'madein']),
+          unit: findColIndex(headers, ['unit', 'uom', 'unitofmeasure', 'packunit']),
+          shortdescription: findColIndex(headers, ['shortdescription', 'description', 'summary', 'overview']),
+          fulldescription: findColIndex(headers, ['fulldescription', 'details', 'longdescription', 'specification', 'specs']),
+          imageurls: findColIndex(headers, ['imageurls', 'primaryimageurl', 'imageurl', 'images', 'image', 'photourl', 'photos', 'picture', 'pictureurl', 'allimageurlssemicolonseparated', 'image1']),
+          imagealts: findColIndex(headers, ['imagealts', 'imagealt', 'alttext']),
+          pricingtiers: findColIndex(headers, ['pricingtiers', 'tiers', 'tierpricing', 'bulkdiscount'])
         };
 
-        // Quick verification: Name and SKU column are absolutely mandatory
-        if (colMap.name === -1 || colMap.sku === -1) {
-          setImportError('Invalid CSV structure. Missing "Name" or "SKU" columns.');
-          return;
+        // Fallback: If 'name' column was not matched, use column 0
+        if (colMap.name === -1) {
+          colMap.name = 0;
         }
 
         const dbProducts = dbLocal.getProducts();
         const parsedProducts: any[] = [];
         const seenSkus = new Set<string>();
 
+        const cleanNum = (val: any, fallback: number = 0): number => {
+          if (val === undefined || val === null) return fallback;
+          const cleaned = String(val).replace(/[^0-9.]/g, '');
+          const num = Number(cleaned);
+          return isNaN(num) ? fallback : num;
+        };
+
         for (let idx = 1; idx < lines.length; idx++) {
           const row = lines[idx];
-          if (row.length === 0 || row.every(cell => cell === '')) continue;
+          if (row.length === 0 || row.every(cell => !cell || cell === '')) continue;
 
           const getVal = (colKey: string, defaultValue = '') => {
             const colIdx = colMap[colKey];
             return colIdx !== undefined && colIdx !== -1 && row[colIdx] !== undefined ? row[colIdx] : defaultValue;
           };
 
-          const rawSku = getVal('sku').trim();
-          const rawName = getVal('name').trim();
-          
-          if (!rawSku || !rawName) {
-            parsedProducts.push({
-              rowNumber: idx + 1,
-              isValid: false,
-              errors: ['Product Name and SKU are required.'],
-              name: rawName || '[Empty Name]',
-              sku: rawSku || '[Empty SKU]'
-            });
-            continue;
+          let rawName = getVal('name').trim();
+          if (!rawName) {
+            // Check if column 0 has text
+            rawName = row[0] ? row[0].trim() : `Medical Equipment #${idx}`;
           }
 
-          const errors: string[] = [];
-          const skuLower = rawSku.toLowerCase();
+          let rawSku = getVal('sku').trim();
+          if (!rawSku) {
+            const slug = rawName.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 8) || 'PROD';
+            rawSku = `HN-${slug}-${Math.floor(1000 + Math.random() * 9000)}`;
+          }
 
-          // Check if SKU duplicated in current CSV batch
-          if (seenSkus.has(skuLower)) {
-            errors.push(`SKU "${rawSku}" is duplicated in the uploaded CSV file.`);
+          // Uniquify SKU if duplicate
+          let skuLower = rawSku.toLowerCase();
+          if (seenSkus.has(skuLower) || dbProducts.some(p => p.sku.toLowerCase() === skuLower)) {
+            rawSku = `${rawSku}-${Math.floor(10 + Math.random() * 90)}`;
+            skuLower = rawSku.toLowerCase();
           }
           seenSkus.add(skuLower);
 
-          // Check if SKU duplicated in database
-          const existsInDb = dbProducts.some(p => p.sku.toLowerCase() === skuLower);
-          if (existsInDb) {
-            errors.push(`SKU "${rawSku}" already exists in the catalog database.`);
-          }
+          const errors: string[] = [];
 
           // Fields parsing
-          const brand = getVal('brand', brands[0]?.name || 'SafeShield').trim();
-          const category = getVal('category', categories[0]?.name || 'Diagnostic & Critical Care').trim();
+          const brand = getVal('brand', brands[0]?.name || 'SafeShield').trim() || 'Generic Medical';
+          const category = getVal('category', categories[0]?.name || 'Diagnostic & Critical Care').trim() || 'Medical Equipment';
           const subcategory = getVal('subcategory', category).trim();
           
-          const vendorPriceNum = Number(getVal('vendorprice', '15000').trim().replace(/[^0-9.]/g, ''));
-          if (isNaN(vendorPriceNum) || vendorPriceNum <= 0) {
-            errors.push('Vendor Price (Sale price) must be a positive number.');
+          let vendorPriceNum = cleanNum(getVal('vendorprice'), 0);
+          let mrpNum = cleanNum(getVal('mrp'), 0);
+          let wholesalePriceNum = cleanNum(getVal('wholesaleprice'), 0);
+
+          if (vendorPriceNum <= 0 && mrpNum > 0) {
+            vendorPriceNum = Math.round(mrpNum * 0.8);
+          } else if (vendorPriceNum <= 0) {
+            vendorPriceNum = 1000;
           }
 
-          const mrpNum = Number(getVal('mrp', '').trim().replace(/[^0-9.]/g, '')) || Math.round(vendorPriceNum * 1.25);
-          const wholesalePriceNum = Number(getVal('wholesaleprice', '').trim().replace(/[^0-9.]/g, '')) || Math.round(vendorPriceNum * 0.9);
-          const stockQuantity = Number(getVal('stockquantity', '10').trim().replace(/[^0-9]/g, '')) || 10;
-          const minOrderQty = Number(getVal('minorderqty', '1').trim().replace(/[^0-9]/g, '')) || 1;
-          const gstRate = Number(getVal('gstrate', '12').trim().replace(/[^0-9]/g, '')) || 12;
+          if (mrpNum <= 0) {
+            mrpNum = Math.round(vendorPriceNum * 1.25);
+          }
 
-          // Parse image metadata and URLs
+          if (wholesalePriceNum <= 0) {
+            wholesalePriceNum = Math.round(vendorPriceNum * 0.9);
+          }
+
+          const stockQuantity = Math.max(1, cleanNum(getVal('stockquantity'), 10));
+          const minOrderQty = Math.max(1, cleanNum(getVal('minorderqty'), 1));
+          const gstRate = cleanNum(getVal('gstrate'), 12) || 12;
+
+          // Extract ALL image URLs from imageurls column as well as individual image columns (Image 1, Image 2, Primary Image URL, etc.)
+          const urlsList: string[] = [];
           const imageUrlsStr = getVal('imageurls');
-          const imageAltsStr = getVal('imagealts');
-          const urlsList = imageUrlsStr ? imageUrlsStr.split(';').map(u => u.trim()).filter(Boolean) : [];
+          if (imageUrlsStr) {
+            imageUrlsStr.split(/[,;\n|]/).forEach(u => {
+              const trimmed = u.trim().replace(/^["']|["']$/g, '');
+              if (trimmed && !urlsList.includes(trimmed)) {
+                urlsList.push(trimmed);
+              }
+            });
+          }
+
+          // Scan all other row cells for image headers (Primary Image URL, Image 2 URL, Image 3 URL, etc.)
+          headers.forEach((h, hIdx) => {
+            const hNorm = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if ((hNorm.includes('image') || hNorm.includes('photo') || hNorm.includes('picture') || hNorm.includes('img') || hNorm.includes('pic')) && row[hIdx]) {
+              const cellVal = String(row[hIdx]).trim();
+              cellVal.split(/[,;\n|]/).forEach(u => {
+                const trimmed = u.trim().replace(/^["']|["']$/g, '');
+                if (trimmed && !urlsList.includes(trimmed)) {
+                  urlsList.push(trimmed);
+                }
+              });
+            }
+          });
+
           if (urlsList.length === 0) {
             urlsList.push('https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800');
           }
-          const altsList = imageAltsStr ? imageAltsStr.split(';').map(a => a.trim()) : [];
+
+          const imageAltsStr = getVal('imagealts');
+          const altsList = imageAltsStr ? imageAltsStr.split(/[,;\n|]/).map(a => a.trim().replace(/^["']|["']$/g, '')) : [];
           const imageMetadata = urlsList.map((url, i) => ({
             url,
             alt: altsList[i] || `${rawName} Image ${i + 1}`,
@@ -780,9 +828,9 @@ export default function VendorProductManager({
             const tiersList = pricingTiersStr.split(';').map(t => t.trim()).filter(Boolean);
             tiersList.forEach(tierItem => {
               const [qtyPart, pricePart] = tierItem.split(':');
-              const qtyVal = Number(qtyPart?.trim());
-              const priceVal = Number(pricePart?.trim());
-              if (!isNaN(qtyVal) && !isNaN(priceVal)) {
+              const qtyVal = cleanNum(qtyPart, 0);
+              const priceVal = cleanNum(pricePart, 0);
+              if (qtyVal > 0 && priceVal > 0) {
                 parsedTiers.push({ minQty: qtyVal, price: priceVal });
               }
             });
@@ -794,7 +842,7 @@ export default function VendorProductManager({
             errors,
             name: rawName,
             sku: rawSku,
-            modelNumber: getVal('modelnumber').trim(),
+            modelNumber: getVal('modelnumber').trim() || `MOD-${Math.floor(1000 + Math.random() * 9000)}`,
             brand,
             category,
             subcategory,
@@ -803,13 +851,13 @@ export default function VendorProductManager({
             wholesalePrice: wholesalePriceNum,
             stockQuantity,
             minOrderQty,
-            hsnCode: getVal('hsncode', '9018').trim(),
+            hsnCode: getVal('hsncode', '9018').trim() || '9018',
             gstRate,
-            warranty: getVal('warranty', '1 Year Warranty').trim(),
-            countryOfOrigin: getVal('countryoforigin', 'India').trim(),
-            unit: getVal('unit', 'Piece').trim(),
-            shortDescription: getVal('shortdescription', rawName).trim(),
-            fullDescription: getVal('fulldescription', rawName).trim(),
+            warranty: getVal('warranty', '1 Year Warranty').trim() || '1 Year Warranty',
+            countryOfOrigin: getVal('countryoforigin', 'India').trim() || 'India',
+            unit: getVal('unit', 'Piece').trim() || 'Piece',
+            shortDescription: getVal('shortdescription', rawName).trim() || rawName,
+            fullDescription: getVal('fulldescription', rawName).trim() || rawName,
             images: urlsList,
             imageMetadata,
             pricingTiers: parsedTiers

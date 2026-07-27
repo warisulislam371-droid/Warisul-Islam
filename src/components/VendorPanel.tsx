@@ -599,6 +599,50 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
 
   const [isDragging, setIsDragging] = useState(false);
 
+  const parseCSVLines = (text: string): string[][] => {
+    const cleanText = text.replace(/^\uFEFF/, '');
+    const lines: string[][] = [];
+    let row: string[] = [];
+    let currentVal = '';
+    let insideQuote = false;
+
+    for (let i = 0; i < cleanText.length; i++) {
+      const char = cleanText[i];
+      const nextChar = cleanText[i + 1];
+
+      if (char === '"') {
+        if (insideQuote && nextChar === '"') {
+          currentVal += '"';
+          i++;
+        } else {
+          insideQuote = !insideQuote;
+        }
+      } else if (char === ',' && !insideQuote) {
+        row.push(currentVal.trim().replace(/^"|"$/g, ''));
+        currentVal = '';
+      } else if ((char === '\r' || char === '\n') && !insideQuote) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        row.push(currentVal.trim().replace(/^"|"$/g, ''));
+        if (row.length > 0 && row.some(cell => cell !== '')) {
+          lines.push(row);
+        }
+        row = [];
+        currentVal = '';
+      } else {
+        currentVal += char;
+      }
+    }
+    if (currentVal || row.length > 0) {
+      row.push(currentVal.trim().replace(/^"|"$/g, ''));
+      if (row.length > 0 && row.some(cell => cell !== '')) {
+        lines.push(row);
+      }
+    }
+    return lines;
+  };
+
   const processFile = (file: File) => {
     setBulkFile(file);
     setBulkStatus('Parsing spreadsheet rows...');
@@ -609,35 +653,89 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
         setBulkStatus('Failed to read file content.');
         return;
       }
-      const lines = text.split(/\r\n|\n/).filter(l => l.trim() !== '');
+      const lines = parseCSVLines(text);
       if (lines.length <= 1) {
         addToast('Spreadsheet appears to have only headers or is empty.', 'info');
         setBulkStatus('File empty or header-only.');
         return;
       }
+
+      const headers = lines[0].map(h => h.trim().replace(/^["']|["']$/g, ''));
+      const findIndex = (candidates: string[]) => {
+        for (const cand of candidates) {
+          const candNorm = cand.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const idx = headers.findIndex(h => {
+            const hNorm = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return hNorm === candNorm || (candNorm.length >= 3 && hNorm.includes(candNorm));
+          });
+          if (idx !== -1) return idx;
+        }
+        return -1;
+      };
+
+      const nameIdx = findIndex(['name', 'productname', 'title', 'itemname', 'product']);
+      const skuIdx = findIndex(['sku', 'skucode', 'productcode', 'code']);
+      const brandIdx = findIndex(['brand', 'brandname', 'manufacturer']);
+      const catIdx = findIndex(['category', 'cat', 'categoryname']);
+      const subcatIdx = findIndex(['subcategory', 'subcat']);
+      const priceIdx = findIndex(['price', 'vendorprice', 'saleprice', 'cost', 'unitprice']);
+      const mrpIdx = findIndex(['mrp', 'listprice', 'msrp']);
+      const moqIdx = findIndex(['moq', 'minorderqty', 'minimumorder']);
+      const stockIdx = findIndex(['stockquantity', 'stock', 'qty', 'quantity']);
+      const hsnIdx = findIndex(['hsncode', 'hsn', 'sac']);
+      const gstIdx = findIndex(['gstrate', 'gst', 'tax']);
+      const descIdx = findIndex(['description', 'shortdescription', 'fulldescription']);
+      const imgIdx = findIndex(['imageurl', 'imageurls', 'images', 'image', 'picture', 'primaryimageurl']);
+
+      const cleanNum = (val: any, fallback: number) => {
+        if (!val) return fallback;
+        const n = Number(String(val).replace(/[^0-9.]/g, ''));
+        return isNaN(n) || n <= 0 ? fallback : n;
+      };
+
       const parsed: BulkProductRow[] = [];
       for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-        if (cols.length >= 1 && cols[0]) {
-          parsed.push({
-            id: `parsed-${i}-${Date.now()}`,
-            name: cols[0] || 'Untitled Medical Product',
-            sku: cols[1] || `SKU-BLK-${Math.floor(Math.random() * 90000 + 10000)}`,
-            brand: cols[2] || vendorProfile?.companyName || 'Generic Medical',
-            category: cols[3] || 'Medical Equipment',
-            subcategory: cols[4] || 'General Equipment',
-            price: Number(cols[5]) || 1000,
-            salePrice: Number(cols[6]) || Number(cols[5]) || 900,
-            mrp: Number(cols[7]) || Math.round((Number(cols[5]) || 1000) * 1.25),
-            moq: Number(cols[8]) || 1,
-            stockQuantity: Number(cols[9]) || 10,
-            hsnCode: cols[10] || '90189019',
-            gstRate: Number(cols[11]) || 12,
-            description: cols[12] || 'High quality clinical hospital grade medical product.',
-            imageUrl: cols[13] || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400'
-          });
+        const cols = lines[i];
+        if (cols.length === 0 || cols.every(c => !c || c === '')) continue;
+
+        const nameVal = (nameIdx !== -1 && cols[nameIdx]) ? cols[nameIdx].trim() : (cols[0] || `Medical Product #${i}`);
+        const skuVal = (skuIdx !== -1 && cols[skuIdx]) ? cols[skuIdx].trim() : `SKU-BLK-${Math.floor(Math.random() * 90000 + 10000)}`;
+        const brandVal = (brandIdx !== -1 && cols[brandIdx]) ? cols[brandIdx].trim() : (vendorProfile?.companyName || 'Generic Medical');
+        const catVal = (catIdx !== -1 && cols[catIdx]) ? cols[catIdx].trim() : 'Medical Equipment';
+        const subcatVal = (subcatIdx !== -1 && cols[subcatIdx]) ? cols[subcatIdx].trim() : 'General Equipment';
+        const rawPrice = priceIdx !== -1 ? cols[priceIdx] : cols[5];
+        const priceVal = cleanNum(rawPrice, 1000);
+        const mrpVal = cleanNum(mrpIdx !== -1 ? cols[mrpIdx] : cols[7], Math.round(priceVal * 1.25));
+        const moqVal = cleanNum(moqIdx !== -1 ? cols[moqIdx] : cols[8], 1);
+        const stockVal = cleanNum(stockIdx !== -1 ? cols[stockIdx] : cols[9], 10);
+        const hsnVal = (hsnIdx !== -1 && cols[hsnIdx]) ? cols[hsnIdx].trim() : '90189019';
+        const gstVal = cleanNum(gstIdx !== -1 ? cols[gstIdx] : cols[11], 12);
+        const descVal = (descIdx !== -1 && cols[descIdx]) ? cols[descIdx].trim() : `${nameVal} - High quality hospital grade clinical equipment.`;
+        
+        let imgVal = (imgIdx !== -1 && cols[imgIdx]) ? cols[imgIdx].trim() : 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400';
+        if (imgVal.includes(';')) {
+          imgVal = imgVal.split(';')[0].trim();
         }
+
+        parsed.push({
+          id: `parsed-${i}-${Date.now()}`,
+          name: nameVal,
+          sku: skuVal,
+          brand: brandVal,
+          category: catVal,
+          subcategory: subcatVal,
+          price: priceVal,
+          salePrice: priceVal,
+          mrp: mrpVal,
+          moq: moqVal,
+          stockQuantity: stockVal,
+          hsnCode: hsnVal,
+          gstRate: gstVal,
+          description: descVal,
+          imageUrl: imgVal
+        });
       }
+
       if (parsed.length > 0) {
         setParsedRows(parsed);
         setBulkStatus(`Loaded ${parsed.length} catalog items ready for verification & upload!`);
