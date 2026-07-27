@@ -18,6 +18,7 @@ import {
   Shield,
   ShieldCheck,
   Sparkles,
+  Zap,
   Search,
   MessageSquare,
   MessageCircle,

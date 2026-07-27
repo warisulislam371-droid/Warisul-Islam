@@ -229,18 +229,145 @@ export default function EnterpriseHomepage({
     { name: "Spare Parts & Accessories", icon: "⚙️" }
   ];
 
-  const featuredCategoryCards = [
-    { name: "Diagnostic Equipment", displayName: "Diagnostic Equipment", count: "150+ Products", image: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=400", icon: "🔬" },
-    { name: "ECG Machines", displayName: "ECG Machines", count: "45+ Products", image: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=400", icon: "📈" },
-    { name: "Ultrasound", displayName: "Ultrasound", count: "60+ Products", image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400", icon: "🖥️" },
-    { name: "Patient Monitoring", displayName: "Patient Monitoring", count: "85+ Products", image: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=400", icon: "📊" },
-    { name: "Laboratory Equipment", displayName: "Lab Equipment", count: "120+ Products", image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&q=80&w=400", icon: "🧪" },
-    { name: "Hospital Furniture", displayName: "Hospital Furniture", count: "90+ Products", image: "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&q=80&w=400", icon: "🛏️" },
-    { name: "Surgical Instruments", displayName: "Surgical", count: "250+ Products", image: "https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&q=80&w=400", icon: "✂️" },
-    { name: "Medical Consumables", displayName: "Consumables", count: "500+ Products", image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&q=80&w=400", icon: "📦" },
-    { name: "Dental Equipment", displayName: "Dental", count: "40+ Products", image: "https://images.unsplash.com/photo-1606811841689-23dfddce3e95?auto=format&fit=crop&q=80&w=400", icon: "🦷" },
-    { name: "Home Healthcare", displayName: "Home Care", count: "110+ Products", image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=400", icon: "🏠" }
-  ];
+  const allCategoryCards = useMemo(() => {
+    const list: { name: string; displayName: string; count: string; image: string; icon: string }[] = [];
+    const seen = new Set<string>();
+
+    const defaultPresetMap: Record<string, { image: string; icon: string }> = {
+      'diagnostic equipment': { image: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=400", icon: "🔬" },
+      'ecg machines': { image: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=400", icon: "📈" },
+      'ultrasound': { image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400", icon: "🖥️" },
+      'patient monitoring': { image: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=400", icon: "📊" },
+      'laboratory equipment': { image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&q=80&w=400", icon: "🧪" },
+      'hospital furniture': { image: "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&q=80&w=400", icon: "🛏️" },
+      'surgical instruments': { image: "https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&q=80&w=400", icon: "✂️" },
+      'medical consumables': { image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&q=80&w=400", icon: "📦" },
+      'dental equipment': { image: "https://images.unsplash.com/photo-1606811841689-23dfddce3e95?auto=format&fit=crop&q=80&w=400", icon: "🦷" },
+      'home healthcare': { image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=400", icon: "🏠" }
+    };
+
+    if (categories && categories.length > 0) {
+      categories.forEach(cat => {
+        if (!cat.name || cat.isActive === false) return;
+        const key = cat.name.trim().toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+
+        const count = products.filter(p =>
+          p.category.toLowerCase() === key ||
+          p.category.toLowerCase().includes(key) ||
+          (p.subcategory && p.subcategory.toLowerCase().includes(key))
+        ).length;
+
+        const preset = defaultPresetMap[key];
+        list.push({
+          name: cat.name.trim(),
+          displayName: cat.name.trim(),
+          count: `${count} Products`,
+          image: cat.image || preset?.image || 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=400',
+          icon: cat.icon || preset?.icon || '🩺'
+        });
+      });
+    }
+
+    products.forEach(p => {
+      if (!p.category) return;
+      const key = p.category.trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        const count = products.filter(item => item.category.trim().toLowerCase() === key).length;
+        const preset = defaultPresetMap[key];
+        list.push({
+          name: p.category.trim(),
+          displayName: p.category.trim(),
+          count: `${count} Products`,
+          image: preset?.image || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400',
+          icon: preset?.icon || '🔬'
+        });
+      }
+    });
+
+    return list;
+  }, [categories, products]);
+
+  // Static Category Sliders for all core medical domains
+  const staticCategorySections = useMemo(() => {
+    const staticDefs = [
+      {
+        name: "Diagnostic Equipment",
+        description: "ECG, Patient Monitors, Ultrasound & Vital Signs Analyzers",
+        icon: "🔬",
+        keywords: ['diagnostic', 'ultrasound', 'ecg', 'x-ray', 'scanner', 'analyzer', 'vital']
+      },
+      {
+        name: "ECG Machines & Cardiology",
+        description: "12-Lead ECG, Holter Monitors, Cardiac Analyzers & Defibrillators",
+        icon: "📈",
+        keywords: ['ecg', 'cardio', 'defibrillator', 'holter', 'cardiac', 'heart']
+      },
+      {
+        name: "Patient Monitoring Systems",
+        description: "ICU Multipara Monitors, Capnographs, NIBP & Pulse Oximeters",
+        icon: "📊",
+        keywords: ['monitor', 'patient', 'multipara', 'oximeter', 'capnography', 'icu']
+      },
+      {
+        name: "Laboratory Equipment",
+        description: "Centrifuges, Hematology Analyzers, Microscopes & Reagents",
+        icon: "🧪",
+        keywords: ['lab', 'laboratory', 'centrifuge', 'microscope', 'analyzer', 'hematology', 'biochemistry']
+      },
+      {
+        name: "Hospital Furniture & ICU Beds",
+        description: "Motorized Electric Beds, OT Tables, Wheelchairs & Trolleys",
+        icon: "🛏️",
+        keywords: ['furniture', 'bed', 'table', 'trolley', 'wheelchair', 'chair', 'stretcher']
+      },
+      {
+        name: "Surgical Instruments & OT Gear",
+        description: "Electrosurgical Units, OT Lights, Autoclaves & Scissors",
+        icon: "✂️",
+        keywords: ['surgical', 'surgery', 'ot', 'autoclave', 'scissors', 'forceps', 'cautery', 'light']
+      },
+      {
+        name: "Medical Consumables & Supplies",
+        description: "Syringes, Catheters, Gloves, PPE Kits & Disposables",
+        icon: "📦",
+        keywords: ['consumable', 'glove', 'syringe', 'catheter', 'mask', 'ppe', 'bandage', 'cotton', 'disposable']
+      },
+      {
+        name: "Home Healthcare & Respiratory",
+        description: "Oxygen Concentrators, CPAP/BiPAP, Nebulizers & BP Monitors",
+        icon: "🏠",
+        keywords: ['home', 'oxygen', 'cpap', 'bipap', 'nebulizer', 'respiratory', 'suction', 'ventilator']
+      }
+    ];
+
+    return staticDefs.map(def => {
+      // Find matching products
+      const matched = products.filter(p => {
+        const catLower = (p.category || '').toLowerCase();
+        const subcatLower = (p.subcategory || '').toLowerCase();
+        const nameLower = (p.name || '').toLowerCase();
+        const descLower = (p.shortDescription || '').toLowerCase();
+
+        return def.keywords.some(kw => 
+          catLower.includes(kw) || 
+          subcatLower.includes(kw) || 
+          nameLower.includes(kw) || 
+          descLower.includes(kw)
+        );
+      });
+
+      // Fallback if matched count is small, take general products to keep slider full
+      const itemsToDisplay = matched.length >= 2 ? matched : (matched.concat(products.filter(p => !matched.includes(p))).slice(0, 8));
+
+      return {
+        ...def,
+        products: itemsToDisplay
+      };
+    });
+  }, [products]);
 
   const brandLogos = [
     { name: "Mindray", logo: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=200", desc: "Leading Patient Monitors & Ultrasound" },
@@ -668,7 +795,7 @@ export default function EnterpriseHomepage({
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-          {featuredCategoryCards.map((cat) => (
+          {allCategoryCards.map((cat) => (
             <button
               key={cat.name}
               onClick={() => handleCategoryClick(cat.name)}
@@ -826,50 +953,45 @@ export default function EnterpriseHomepage({
           </section>
         )}
 
-        {/* Continue Browsing / Featured Catalog */}
-        <section className="max-w-7xl mx-auto px-4 lg:px-6 space-y-4">
-          <div className="flex justify-between items-end">
-            <div>
-              <h3 className="text-lg font-black text-[#1F2937]">Featured Medical Equipment</h3>
-              <p className="text-xs text-slate-500">Handpicked high-demand hospital and diagnostic machinery</p>
-            </div>
-          </div>
-          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
-            {products.slice(0, 8).map(renderProductCard)}
-          </div>
-        </section>
-
-        {/* Diagnostic Equipment Slider */}
+        {/* All Products Overview */}
         <section className="max-w-7xl mx-auto px-4 lg:px-6 space-y-4">
           <div className="flex justify-between items-end border-b border-slate-200 pb-2">
             <div>
-              <h3 className="text-lg font-black text-[#1F2937]">Diagnostic Equipment</h3>
-              <p className="text-xs text-slate-500">ECG, Patient Monitors, Ultrasound &amp; Vital Signs Analyzers</p>
+              <h3 className="text-lg font-black text-[#1F2937]">Featured Medical Equipment &amp; Overview</h3>
+              <p className="text-xs text-slate-500">Handpicked high-demand hospital and diagnostic machinery ({products.length} total active items)</p>
             </div>
-            <button onClick={() => handleCategoryClick('Diagnostic Equipment')} className="text-xs font-bold text-[#0077B6] hover:underline cursor-pointer">
-              View All
+            <button onClick={() => handleCategoryClick('')} className="text-xs font-bold text-[#0077B6] hover:underline cursor-pointer">
+              Browse All ({products.length})
             </button>
           </div>
           <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
-            {products.filter(p => p.category.includes('Diagnostic') || p.category.includes('Homecare') || p.category.includes('Medical')).slice(0, 8).map(renderProductCard)}
+            {products.map(renderProductCard)}
           </div>
         </section>
 
-        {/* Patient Monitoring Slider */}
-        <section className="max-w-7xl mx-auto px-4 lg:px-6 space-y-4">
-          <div className="flex justify-between items-end border-b border-slate-200 pb-2">
-            <div>
-              <h3 className="text-lg font-black text-[#1F2937]">Patient Monitoring Systems</h3>
-              <p className="text-xs text-slate-500">ICU Multipara Monitors, Capnography, Pulse Oximeters</p>
+        {/* Static Category Sliders for Core Medical Domains */}
+        {staticCategorySections.map((section) => (
+          <section key={section.name} className="max-w-7xl mx-auto px-4 lg:px-6 space-y-4">
+            <div className="flex justify-between items-end border-b border-slate-200 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{section.icon}</span>
+                <div>
+                  <h3 className="text-lg font-black text-[#1F2937]">{section.name}</h3>
+                  <p className="text-xs text-slate-500 font-medium">{section.description} ({section.products.length} items)</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => handleCategoryClick(section.name)} 
+                className="text-xs font-bold text-[#0077B6] hover:underline cursor-pointer flex items-center gap-1"
+              >
+                View All {section.name} ({section.products.length}) &rarr;
+              </button>
             </div>
-            <button onClick={() => handleCategoryClick('Patient Monitoring')} className="text-xs font-bold text-[#0077B6] hover:underline cursor-pointer">
-              View All
-            </button>
-          </div>
-          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
-            {products.slice(2, 10).map(renderProductCard)}
-          </div>
-        </section>
+            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
+              {section.products.map(renderProductCard)}
+            </div>
+          </section>
+        ))}
 
       </div>
 
