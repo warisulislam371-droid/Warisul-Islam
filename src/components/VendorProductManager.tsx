@@ -78,6 +78,9 @@ export default function VendorProductManager({
   const [reqBrandCountry, setReqBrandCountry] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Draft Multi-Select & Batch Actions
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+
   // Product Form State
   const [formName, setFormName] = useState('');
   const [formSku, setFormSku] = useState('');
@@ -499,6 +502,88 @@ export default function VendorProductManager({
       showToast(`Deleted product: ${p.name}`);
       onRefresh();
     }
+  };
+
+  // Draft Batch & Single Selection Handlers
+  const draftProducts = products.filter(p => p.status === 'Draft');
+  const selectedDraftProducts = products.filter(p => selectedProductIds.includes(p.id) && p.status === 'Draft');
+
+  const toggleSelectProduct = (id: string) => {
+    setSelectedProductIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllDrafts = () => {
+    const draftIds = draftProducts.map(p => p.id);
+    if (draftIds.length === 0) {
+      showToast('No drafted products available to select.');
+      return;
+    }
+    const allSelected = draftIds.every(id => selectedProductIds.includes(id));
+    if (allSelected) {
+      setSelectedProductIds(prev => prev.filter(id => !draftIds.includes(id)));
+    } else {
+      setSelectedProductIds(prev => Array.from(new Set([...prev, ...draftIds])));
+    }
+  };
+
+  const handleSubmitSingleDraft = (p: Product) => {
+    if (p.status !== 'Draft') return;
+    const now = new Date().toISOString();
+    const updated: Product = {
+      ...p,
+      status: 'Pending',
+      updatedAt: now
+    };
+    dbLocal.updateProduct(p.id, updated);
+    dbLocal.addNotification(
+      'admin',
+      `Draft Product Submitted: ${p.name}`,
+      `Vendor "${vendor.companyName}" submitted draft product "${p.name}" (SKU: ${p.sku}) for quality audit & approval.`,
+      'info'
+    );
+    dbLocal.addNotification(
+      vendor.id,
+      `Draft Submitted: ${p.name}`,
+      `Your draft product "${p.name}" has been submitted for Admin review.`,
+      'info'
+    );
+    showToast(`Submitted "${p.name}" for Admin approval!`);
+    onRefresh();
+  };
+
+  const handleSubmitSelectedDrafts = () => {
+    if (selectedDraftProducts.length === 0) {
+      showToast('Please select at least one drafted product to submit.');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    selectedDraftProducts.forEach(p => {
+      dbLocal.updateProduct(p.id, {
+        ...p,
+        status: 'Pending',
+        updatedAt: now
+      });
+    });
+
+    dbLocal.addNotification(
+      'admin',
+      `Batch Draft Submission: ${selectedDraftProducts.length} Items`,
+      `Vendor "${vendor.companyName}" submitted ${selectedDraftProducts.length} drafted products in bulk for quality audit & approval.`,
+      'info'
+    );
+    dbLocal.addNotification(
+      vendor.id,
+      `Drafts Submitted (${selectedDraftProducts.length})`,
+      `You have successfully submitted ${selectedDraftProducts.length} drafted products for Admin approval.`,
+      'info'
+    );
+
+    showToast(`Successfully submitted ${selectedDraftProducts.length} draft product(s) for Admin approval!`);
+    setSelectedProductIds([]);
+    onRefresh();
   };
 
   // Slots URL & Upload handling is done inline on each individual slot
@@ -1207,6 +1292,52 @@ export default function VendorProductManager({
         </div>
       </div>
 
+      {/* Draft Products Banner & Batch Select Control */}
+      {draftProducts.length > 0 && (
+        <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0">
+              <FileText className="w-5 h-5 text-amber-700" />
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-amber-900 flex items-center gap-2">
+                <span>Draft Catalog Queue ({draftProducts.length} items)</span>
+                <span className="text-[10px] bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full font-mono font-bold">
+                  {selectedDraftProducts.length} selected
+                </span>
+              </h4>
+              <p className="text-xs text-amber-700 font-medium mt-0.5">
+                Select drafted products to submit in bulk for Admin quality review &amp; live publication.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleSelectAllDrafts}
+              className="bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs px-3.5 py-2 rounded-xl transition border border-amber-300 flex items-center gap-1.5 cursor-pointer"
+            >
+              <Check className="w-3.5 h-3.5" />
+              {draftProducts.every(d => selectedProductIds.includes(d.id)) ? 'Deselect All Drafts' : 'Select All Drafts'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmitSelectedDrafts}
+              disabled={selectedDraftProducts.length === 0}
+              className={`font-extrabold text-xs px-4 py-2 rounded-xl transition shadow-sm flex items-center gap-2 cursor-pointer ${
+                selectedDraftProducts.length > 0
+                  ? 'bg-teal-700 hover:bg-teal-800 text-white'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              Submit Selected ({selectedDraftProducts.length}) for Approval
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tabs & Search / Filter Controls */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
@@ -1301,6 +1432,7 @@ export default function VendorProductManager({
               const isChangesRequested = p.status === 'ChangesRequested';
               const isInactive = p.status === 'Inactive';
 
+              const isSelected = selectedProductIds.includes(p.id);
               const stock = p.stockQuantity !== undefined ? p.stockQuantity : 10;
               const isLowStock = stock < 5;
 
@@ -1337,8 +1469,10 @@ export default function VendorProductManager({
               return (
                 <div 
                   key={p.id} 
-                  className={`rounded-2xl border transition flex flex-col overflow-hidden ${
-                    isLowStock 
+                  className={`rounded-2xl border transition flex flex-col overflow-hidden relative ${
+                    isSelected
+                      ? 'ring-2 ring-teal-500 border-teal-500 bg-teal-50/20 shadow-md'
+                      : isLowStock 
                       ? 'border-red-300 bg-red-50/20 shadow-sm hover:shadow-red-100/50' 
                       : 'bg-white border-slate-200/80 shadow-sm hover:shadow-md'
                   }`}
@@ -1404,10 +1538,19 @@ export default function VendorProductManager({
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}`}>
-                          <BadgeIcon className="w-3 h-3" />
-                          {badgeLabel}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectProduct(p.id)}
+                            className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 cursor-pointer accent-teal-600"
+                            title="Select product for bulk approval submission"
+                          />
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}`}>
+                            <BadgeIcon className="w-3 h-3" />
+                            {badgeLabel}
+                          </span>
+                        </div>
                         <span className="text-[10px] font-mono text-slate-400 font-semibold">{p.sku}</span>
                       </div>
 
@@ -1483,6 +1626,16 @@ export default function VendorProductManager({
                     </button>
 
                     <div className="flex items-center gap-1.5">
+                      {isDraft && (
+                        <button
+                          onClick={() => handleSubmitSingleDraft(p)}
+                          className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-lg transition flex items-center gap-1 shadow-xs cursor-pointer shrink-0"
+                          title="Submit this drafted product for Admin approval"
+                        >
+                          <Upload className="w-3 h-3" />
+                          Submit
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDuplicateProduct(p)}
                         title="Duplicate Product"
@@ -1512,6 +1665,41 @@ export default function VendorProductManager({
           </div>
         )}
       </div>
+
+      {/* Floating Bulk Action Bar */}
+      {selectedProductIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3.5 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-4 max-w-xl w-11/12 justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-400 border border-teal-500/30 flex items-center justify-center font-bold text-xs">
+              {selectedProductIds.length}
+            </div>
+            <div className="text-xs">
+              <span className="font-extrabold block text-white">{selectedProductIds.length} Product(s) Selected</span>
+              <span className="text-[10px] text-slate-400">({selectedDraftProducts.length} drafted items ready for audit)</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {selectedDraftProducts.length > 0 && (
+              <button
+                type="button"
+                onClick={handleSubmitSelectedDrafts}
+                className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5 stroke-[2.5]" />
+                Submit {selectedDraftProducts.length} Draft(s)
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setSelectedProductIds([])}
+              className="text-xs font-bold text-slate-400 hover:text-white px-2 py-1 transition cursor-pointer"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Analytics Modal */}
       {analyticsModalProduct && (
