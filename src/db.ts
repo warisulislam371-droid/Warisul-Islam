@@ -385,7 +385,10 @@ export const DEFAULT_SOCIAL_LINKS: SocialMediaLinks = {
   facebook: 'https://facebook.com/medbazarhelnex',
   youtube: 'https://youtube.com/medbazarhelnex',
   linkedin: 'https://linkedin.com/company/medbazarhelnex',
-  twitter: 'https://x.com/medbazarhelnex'
+  twitter: 'https://x.com/medbazarhelnex',
+  appDownloadLink: 'https://play.google.com/store/apps/details?id=com.healnex.medibazar',
+  playStoreUrl: 'https://play.google.com/store/apps/details?id=com.healnex.medibazar',
+  appStoreUrl: 'https://apps.apple.com/app/healnex-medi-bazar/id123456789'
 };
 
 
@@ -1022,6 +1025,7 @@ export const dbLocal = {
     const old = this.getPromoBanners();
     this.set(STORAGE_KEYS.PROMO_BANNERS, banners);
     syncListToFirestoreWithDeletions('promo_banners', banners, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
 
   // Deal of the Day

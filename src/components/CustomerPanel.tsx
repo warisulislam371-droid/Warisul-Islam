@@ -421,9 +421,12 @@ export default function CustomerPanel({
 
   // Filters calculation & Semantic AI ranking integration
   const filteredProducts = React.useMemo(() => {
+    const hasSearch = Boolean(searchQuery && searchQuery.trim());
+
     // 1. Filter out non-matching products
     const matched = products.filter(p => {
-      const matchesCategory = selectedCategoryName
+      // Searching scans ALL categories regardless of category selection
+      const matchesCategory = (selectedCategoryName && !hasSearch)
         ? p.category.toLowerCase() === selectedCategoryName.toLowerCase()
         : true;
 
@@ -440,7 +443,7 @@ export default function CustomerPanel({
       if (!matchesCategory || !matchesBrand || !matchesPrice || !matchesMoq || !matchesTrustSeal || !matchesRating || !matchesStock || !matchesCountry) return false;
 
       // If we have search query
-      if (searchQuery.trim()) {
+      if (hasSearch) {
         const q = searchQuery.trim().toLowerCase();
         const words = q.split(/\s+/).filter(Boolean);
 
@@ -451,12 +454,17 @@ export default function CustomerPanel({
           // 1. Standard exact substring match
           if (val.includes(q)) return true;
 
-          // 2. Multi-word check (each word/letter chunk found in the field)
+          // 2. Multi-word match (all words present)
           if (words.length > 1 && words.every(word => val.includes(word))) {
             return true;
           }
 
-          // 3. "Any letter" sequential fuzzy match (characters match sequentially)
+          // 3. Any-word match (matches any word in the search query)
+          if (words.some(word => word.length >= 2 && val.includes(word))) {
+            return true;
+          }
+
+          // 4. Sequential fuzzy match
           let tIdx = 0;
           let qIdx = 0;
           while (tIdx < val.length && qIdx < q.length) {
@@ -490,7 +498,7 @@ export default function CustomerPanel({
       return true;
     });
 
-    // 2. Sort results dynamically based on chosen criteria
+    // 2. Sort results dynamically based on chosen criteria or relevance
     const sorted = [...matched];
     if (sortBy === 'price_asc') {
       sorted.sort((a, b) => a.salePrice - b.salePrice);
@@ -500,6 +508,32 @@ export default function CustomerPanel({
       sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     } else if (sortBy === 'moq_asc') {
       sorted.sort((a, b) => a.moq - b.moq);
+    } else if (hasSearch) {
+      // Relevance sorting: products matching search query in product name come first
+      const q = searchQuery.trim().toLowerCase();
+      const words = q.split(/\s+/).filter(Boolean);
+
+      const getRelevanceScore = (p: Product) => {
+        const nameLower = p.name.toLowerCase();
+        let score = 0;
+        if (nameLower === q) score += 100;
+        else if (nameLower.startsWith(q)) score += 80;
+        else if (nameLower.includes(q)) score += 60;
+        
+        words.forEach(w => {
+          if (w.length >= 2 && nameLower.includes(w)) score += 20;
+        });
+
+        if (p.category.toLowerCase().includes(q)) score += 15;
+        if (p.brand.toLowerCase().includes(q)) score += 10;
+
+        const aiMatch = aiSearchResults.find(m => m.productId === p.id);
+        if (aiMatch) score += (aiMatch.relevanceScore || 0) * 10;
+
+        return score;
+      };
+
+      sorted.sort((a, b) => getRelevanceScore(b) - getRelevanceScore(a));
     } else if ((sortBy as string) === 'category_asc') {
       sorted.sort((a, b) => {
         const catComp = (a.category || '').localeCompare(b.category || '');

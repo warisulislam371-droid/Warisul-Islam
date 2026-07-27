@@ -19,7 +19,8 @@ import {
   AlertCircle,
   FolderTree,
   Wand2,
-  ArrowUpDown
+  ArrowUpDown,
+  Upload
 } from 'lucide-react';
 
 interface AdminCategoriesManagerProps {
@@ -37,8 +38,18 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
   // New Category / Brand direct creation states
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
+  const [newCatImage, setNewCatImage] = useState('');
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatImage, setEditingCatImage] = useState('');
+
   const [newBrandName, setNewBrandName] = useState('');
   const [newBrandCountry, setNewBrandCountry] = useState('India');
+  const [newBrandLogo, setNewBrandLogo] = useState('');
+  const [newBrandDesc, setNewBrandDesc] = useState('');
+
+  // Modals for editing category / brand
+  const [editingCatModal, setEditingCatModal] = useState<Category | null>(null);
+  const [editingBrandModal, setEditingBrandModal] = useState<Brand | null>(null);
 
   const loadData = () => {
     setCategories(dbLocal.getCategories());
@@ -135,13 +146,36 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
       id: `cat_${Date.now()}`,
       name: newCatName.trim(),
       description: newCatDesc.trim(),
+      image: newCatImage.trim() || undefined,
       isActive: true,
       createdAt: new Date().toISOString()
     };
     dbLocal.saveCategories([...existing, newCat]);
     setNewCatName('');
     setNewCatDesc('');
+    setNewCatImage('');
     showToast(`Category "${newCat.name}" created and synced globally.`);
+    loadData();
+  };
+
+  const handleSaveCatImage = (catId: string) => {
+    const existing = dbLocal.getCategories();
+    const updated = existing.map(c => c.id === catId ? { ...c, image: editingCatImage.trim() } : c);
+    dbLocal.saveCategories(updated);
+    showToast('Category image updated successfully!');
+    setEditingCatId(null);
+    setEditingCatImage('');
+    loadData();
+  };
+
+  const handleSaveCategoryModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCatModal) return;
+    const existing = dbLocal.getCategories();
+    const updated = existing.map(c => c.id === editingCatModal.id ? editingCatModal : c);
+    dbLocal.saveCategories(updated);
+    showToast(`Category "${editingCatModal.name}" updated successfully.`);
+    setEditingCatModal(null);
     loadData();
   };
 
@@ -158,13 +192,28 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
       id: `brand_${Date.now()}`,
       name: newBrandName.trim(),
       country: newBrandCountry.trim() || 'India',
+      logo: newBrandLogo.trim() || undefined,
+      description: newBrandDesc.trim() || undefined,
       isActive: true,
       createdAt: new Date().toISOString()
     };
     dbLocal.saveBrands([...existing, newBrand]);
     setNewBrandName('');
     setNewBrandCountry('India');
+    setNewBrandLogo('');
+    setNewBrandDesc('');
     showToast(`Brand "${newBrand.name}" created and synced globally.`);
+    loadData();
+  };
+
+  const handleSaveBrandModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBrandModal) return;
+    const existing = dbLocal.getBrands();
+    const updated = existing.map(b => b.id === editingBrandModal.id ? editingBrandModal : b);
+    dbLocal.saveBrands(updated);
+    showToast(`Brand "${editingBrandModal.name}" updated successfully.`);
+    setEditingBrandModal(null);
     loadData();
   };
 
@@ -458,6 +507,41 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700"
                 />
               </div>
+              <div>
+                <label className="block text-slate-700 mb-1">Category Image URL or Upload</label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/..."
+                    value={newCatImage}
+                    onChange={(e) => setNewCatImage(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs outline-none focus:border-teal-700 font-mono"
+                  />
+                  <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-center shrink-0">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) setNewCatImage(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                {newCatImage && (
+                  <div className="mt-2 relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200">
+                    <img src={newCatImage} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
               <button
                 type="submit"
                 className="w-full bg-teal-700 hover:bg-teal-800 text-white font-extrabold py-3 rounded-xl shadow-md transition"
@@ -472,17 +556,101 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
             <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-100 pb-3">Active Categories ({categories.length})</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
               {categories.map(c => (
-                <div key={c.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3">
-                  <div>
-                    <h4 className="text-xs font-extrabold text-slate-900">{c.name}</h4>
-                    {c.description && <p className="text-[11px] text-slate-500 mt-0.5">{c.description}</p>}
+                <div key={c.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      {c.image ? (
+                        <img src={c.image} alt={c.name} className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-teal-50 border border-teal-100 text-teal-700 flex items-center justify-center font-bold text-xs shrink-0">
+                          {c.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="text-xs font-extrabold text-slate-900">{c.name}</h4>
+                        {c.description && <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{c.description}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEditingCatModal(c)}
+                        className="text-slate-500 hover:text-teal-700 p-1.5 rounded-lg hover:bg-teal-50 transition shrink-0"
+                        title="Edit Category Details"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategory(c.id, c.name)}
+                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition shrink-0"
+                        title="Delete Category"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteCategory(c.id, c.name)}
-                    className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+
+                  {/* Image Edit Section */}
+                  {editingCatId === c.id ? (
+                    <div className="mt-2 p-2 bg-white rounded-xl border border-teal-300 space-y-2">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">Update Category Image</p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Image URL or Base64"
+                          value={editingCatImage}
+                          onChange={(e) => setEditingCatImage(e.target.value)}
+                          className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-mono outline-none focus:border-teal-600"
+                        />
+                        <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1.5 rounded-lg text-xs font-bold cursor-pointer shrink-0">
+                          File
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  if (reader.result) setEditingCatImage(reader.result as string);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => { setEditingCatId(null); setEditingCatImage(''); }}
+                          className="px-2.5 py-1 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveCatImage(c.id)}
+                          className="px-3 py-1 text-xs font-bold bg-teal-700 text-white rounded-lg hover:bg-teal-800"
+                        >
+                          Save Image
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-end pt-1 border-t border-slate-200/60">
+                      <button
+                        onClick={() => {
+                          setEditingCatId(c.id);
+                          setEditingCatImage(c.image || '');
+                        }}
+                        className="text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline flex items-center gap-1"
+                      >
+                        <Edit className="w-3 h-3" />
+                        {c.image ? 'Change Category Image' : '+ Add Category Image'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -518,6 +686,51 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700"
                 />
               </div>
+              <div>
+                <label className="block text-slate-700 mb-1">Description (Optional)</label>
+                <textarea
+                  rows={2}
+                  placeholder="Clinical imaging & diagnostic tools..."
+                  value={newBrandDesc}
+                  onChange={(e) => setNewBrandDesc(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-700 mb-1">Brand Logo (File Upload or URL)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="https://... or upload logo"
+                    value={newBrandLogo}
+                    onChange={(e) => setNewBrandLogo(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs outline-none focus:border-teal-700 font-mono"
+                  />
+                  <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-center shrink-0">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) setNewBrandLogo(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                {newBrandLogo && (
+                  <div className="mt-2 relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 bg-white p-1">
+                    <img src={newBrandLogo} alt="Logo Preview" className="w-full h-full object-contain" />
+                  </div>
+                )}
+              </div>
               <button
                 type="submit"
                 className="w-full bg-teal-700 hover:bg-teal-800 text-white font-extrabold py-3 rounded-xl shadow-md transition"
@@ -532,20 +745,257 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
             <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-100 pb-3">Active Brands ({brands.length})</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
               {brands.map(b => (
-                <div key={b.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3">
-                  <div>
-                    <h4 className="text-xs font-extrabold text-slate-900">{b.name}</h4>
-                    {b.country && <p className="text-[11px] text-slate-500 mt-0.5">Country: <strong className="text-slate-700">{b.country}</strong></p>}
+                <div key={b.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      {b.logo ? (
+                        <img src={b.logo} alt={b.name} className="w-12 h-12 rounded-xl object-contain bg-white border border-slate-200 p-1 shrink-0" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs shrink-0">
+                          {b.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="text-xs font-extrabold text-slate-900">{b.name}</h4>
+                        {b.country && <p className="text-[11px] text-slate-500 mt-0.5">Country: <strong className="text-slate-700">{b.country}</strong></p>}
+                        {b.description && <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{b.description}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEditingBrandModal(b)}
+                        className="text-slate-500 hover:text-teal-700 p-1.5 rounded-lg hover:bg-teal-50 transition shrink-0"
+                        title="Edit Brand"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBrand(b.id, b.name)}
+                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition shrink-0"
+                        title="Delete Brand"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteBrand(b.id, b.name)}
-                    className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex justify-end pt-2 border-t border-slate-200/60">
+                    <button
+                      onClick={() => setEditingBrandModal(b)}
+                      className="text-[11px] font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
+                    >
+                      <Edit className="w-3 h-3" />
+                      Edit Brand &amp; Logo
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Category */}
+      {editingCatModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex justify-center items-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-5 font-sans animate-scale-up">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <Edit className="w-4 h-4 text-teal-600" />
+                Edit Category: {editingCatModal.name}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingCatModal(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold p-1 text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCategoryModal} className="space-y-4 text-xs font-semibold">
+              <div>
+                <label className="block text-slate-700 mb-1">Category Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCatModal.name}
+                  onChange={(e) => setEditingCatModal({ ...editingCatModal, name: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-bold text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={editingCatModal.description || ''}
+                  onChange={(e) => setEditingCatModal({ ...editingCatModal, description: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">Category Image (Upload or URL)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editingCatModal.image || ''}
+                    onChange={(e) => setEditingCatModal({ ...editingCatModal, image: e.target.value })}
+                    placeholder="https://... or upload file"
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs outline-none focus:border-teal-700 font-mono"
+                  />
+                  <label className="bg-teal-700 hover:bg-teal-800 text-white px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-center shrink-0 shadow-sm">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) {
+                              setEditingCatModal({ ...editingCatModal, image: reader.result as string });
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                {editingCatModal.image && (
+                  <div className="mt-2 relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200">
+                    <img src={editingCatModal.image} alt="Category Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingCatModal(null)}
+                  className="px-4 py-2.5 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-extrabold rounded-xl shadow-md"
+                >
+                  Save Category
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Brand */}
+      {editingBrandModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex justify-center items-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-5 font-sans animate-scale-up">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <Edit className="w-4 h-4 text-teal-600" />
+                Edit Brand: {editingBrandModal.name}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingBrandModal(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold p-1 text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBrandModal} className="space-y-4 text-xs font-semibold">
+              <div>
+                <label className="block text-slate-700 mb-1">Brand Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingBrandModal.name}
+                  onChange={(e) => setEditingBrandModal({ ...editingBrandModal, name: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-bold text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">Country of Origin</label>
+                <input
+                  type="text"
+                  value={editingBrandModal.country || ''}
+                  onChange={(e) => setEditingBrandModal({ ...editingBrandModal, country: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={editingBrandModal.description || ''}
+                  onChange={(e) => setEditingBrandModal({ ...editingBrandModal, description: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">Brand Logo (Upload or URL)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editingBrandModal.logo || ''}
+                    onChange={(e) => setEditingBrandModal({ ...editingBrandModal, logo: e.target.value })}
+                    placeholder="https://... or upload logo image"
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs outline-none focus:border-teal-700 font-mono"
+                  />
+                  <label className="bg-teal-700 hover:bg-teal-800 text-white px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-center shrink-0 shadow-sm">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) {
+                              setEditingBrandModal({ ...editingBrandModal, logo: reader.result as string });
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                {editingBrandModal.logo && (
+                  <div className="mt-2 relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 bg-white p-1">
+                    <img src={editingBrandModal.logo} alt="Brand Logo Preview" className="w-full h-full object-contain" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingBrandModal(null)}
+                  className="px-4 py-2.5 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-extrabold rounded-xl shadow-md"
+                >
+                  Save Brand
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Product, Category, Brand, Review, Vendor, DealOfDay } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Product, Category, Brand, Review, Vendor, DealOfDay, PromoBanner } from '../types';
 import { dbLocal } from '../db';
 import {
   Activity,
@@ -30,7 +30,9 @@ import {
   Layers,
   ChevronDown,
   Percent,
-  Check
+  Check,
+  Download,
+  QrCode
 } from 'lucide-react';
 
 interface EnterpriseHomepageProps {
@@ -76,6 +78,9 @@ export default function EnterpriseHomepage({
     secs: dbLocal.getDealOfDay().secs || 45
   });
 
+  const [socialLinks, setSocialLinks] = useState(() => dbLocal.getSocialLinks());
+  const [promoBanners, setPromoBanners] = useState<PromoBanner[]>(() => dbLocal.getPromoBanners());
+
   useEffect(() => {
     const handleSync = () => {
       const d = dbLocal.getDealOfDay();
@@ -85,6 +90,8 @@ export default function EnterpriseHomepage({
         mins: d.mins ?? 32,
         secs: d.secs ?? 45
       });
+      setSocialLinks(dbLocal.getSocialLinks());
+      setPromoBanners(dbLocal.getPromoBanners());
     };
     handleSync();
     window.addEventListener('healnex_db_update', handleSync);
@@ -113,33 +120,91 @@ export default function EnterpriseHomepage({
   }, []);
 
   // Auto-play hero slider
-  useEffect(() => {
-    const slideTimer = setInterval(() => {
-      setHeroSlide(prev => (prev + 1) % 3);
-    }, 5000);
-    return () => clearInterval(slideTimer);
-  }, []);
+  const activeBanners = useMemo(() => {
+    return promoBanners
+      .filter(b => b.isActive)
+      .sort((a, b) => (a.positionOrder || 0) - (b.positionOrder || 0));
+  }, [promoBanners]);
 
-  const heroSlides = [
+  const defaultHeroSlides = [
     {
+      id: 'default-1',
       headline: "India's Trusted Medical Equipment Marketplace",
       subtitle: "Buy directly from verified manufacturers and distributors with GST invoices and PAN India installation support.",
       bgImage: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=1200",
+      badgeText: "⚡ INDIA'S #1 B2B MEDICAL MARKETPLACE",
+      buttonText: "Shop Catalog",
+      linkUrl: "#catalog-anchor",
+      promoOfferName: undefined,
+      promoOfferValue: undefined,
+      purchaseProductId: undefined,
+      purchaseButtonText: undefined,
+      purchaseButtonPrice: undefined,
       featuredItems: ["ECG Machine", "Patient Monitor", "Ultrasound", "Ventilator", "Defibrillator"]
     },
     {
+      id: 'default-2',
       headline: "Enterprise Hospital Procurement & RFQ Tenders",
       subtitle: "Streamline bulk ICU setups, OT equipment, and laboratory supplies with direct factory wholesale prices.",
       bgImage: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=1200",
+      badgeText: "FACTORY DIRECT DISPATCH",
+      buttonText: "Request Quote",
+      linkUrl: "#catalog-anchor",
+      promoOfferName: undefined,
+      promoOfferValue: undefined,
+      purchaseProductId: undefined,
+      purchaseButtonText: undefined,
+      purchaseButtonPrice: undefined,
       featuredItems: ["ICU Beds", "Anaesthesia Workstation", "C-Arm Image Intensifier", "Multipara Monitor"]
     },
     {
+      id: 'default-3',
       headline: "Certified Refurbished & Warranted Medical Equipment",
       subtitle: "Save up to 50% on premium MRI, CT Scans, and Ultrasound systems backed by 1-Year Pan-India Warranty.",
       bgImage: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=1200",
+      badgeText: "REFURBISHED CLINICAL GRADE",
+      buttonText: "View Systems",
+      linkUrl: "#catalog-anchor",
+      promoOfferName: undefined,
+      promoOfferValue: undefined,
+      purchaseProductId: undefined,
+      purchaseButtonText: undefined,
+      purchaseButtonPrice: undefined,
       featuredItems: ["1.5T MRI Machine", "64-Slice CT Scanner", "3D/4D Ultrasound", "High-Flow Oxygen Concentrator"]
     }
   ];
+
+  const slidesToDisplay = useMemo(() => {
+    if (activeBanners.length > 0) {
+      return activeBanners.map(b => ({
+        id: b.id,
+        headline: b.title,
+        subtitle: b.subtitle || "Direct factory medical equipment marketplace with instant clinical warranty.",
+        bgImage: b.imageUrl,
+        badgeText: b.badgeText || "PROMOTIONAL OFFER",
+        buttonText: b.buttonText || "Shop Catalog",
+        linkUrl: b.linkUrl || "#catalog-anchor",
+        promoOfferName: b.promoOfferName,
+        promoOfferValue: b.promoOfferValue,
+        purchaseProductId: b.purchaseProductId,
+        purchaseButtonText: b.purchaseButtonText,
+        purchaseButtonPrice: b.purchaseButtonPrice,
+        featuredItems: ["ECG Machine", "ICU Monitor", "Ultrasound", "Ventilator", "Syringe Pump"]
+      }));
+    }
+    return defaultHeroSlides;
+  }, [activeBanners]);
+
+  const currentSlideIdx = heroSlide % (slidesToDisplay.length || 1);
+  const currentSlide = slidesToDisplay[currentSlideIdx] || slidesToDisplay[0];
+
+  useEffect(() => {
+    const total = slidesToDisplay.length || 1;
+    const slideTimer = setInterval(() => {
+      setHeroSlide(prev => (prev + 1) % total);
+    }, 5000);
+    return () => clearInterval(slideTimer);
+  }, [slidesToDisplay.length]);
 
   const sidebarCategories = [
     { name: "Diagnostic Equipment", icon: "🔬" },
@@ -342,38 +407,68 @@ export default function EnterpriseHomepage({
         {/* Large Hero Banner Slider (550px) */}
         <div className="lg:col-span-3 h-[550px] rounded-2xl overflow-hidden relative shadow-lg border border-slate-200 group">
           <img
-            src={heroSlides[heroSlide].bgImage}
-            alt="Hero Banner"
+            src={currentSlide.bgImage}
+            alt={currentSlide.headline}
+            referrerPolicy="no-referrer"
             className="w-full h-full object-cover transition-all duration-700"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-[#1F2937]/90 via-[#1F2937]/75 to-transparent flex items-center px-8 sm:px-14">
             <div className="max-w-xl text-white space-y-6">
-              <span className="inline-block bg-[#0F9D8A] text-white text-[11px] font-black px-3.5 py-1.5 rounded-full uppercase tracking-widest shadow-md">
-                ⚡ INDIA'S #1 B2B MEDICAL MARKETPLACE
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-block bg-[#0F9D8A] text-white text-[11px] font-black px-3.5 py-1.5 rounded-full uppercase tracking-widest shadow-md">
+                  {currentSlide.badgeText}
+                </span>
+                {currentSlide.promoOfferValue && (
+                  <span className="inline-block bg-amber-400 text-slate-950 text-[11px] font-black px-3 py-1 rounded-full uppercase font-mono shadow-md">
+                    {currentSlide.promoOfferValue}
+                  </span>
+                )}
+              </div>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight">
-                {heroSlides[heroSlide].headline}
+                {currentSlide.headline}
               </h1>
               <p className="text-sm sm:text-base text-slate-200 leading-relaxed font-medium">
-                {heroSlides[heroSlide].subtitle}
+                {currentSlide.subtitle}
               </p>
-              <div className="flex flex-wrap gap-4 pt-2">
+              <div className="flex flex-wrap gap-3 pt-2">
                 <button
                   onClick={() => {
-                    const el = document.getElementById('catalog-anchor');
-                    el?.scrollIntoView({ behavior: 'smooth' });
+                    if (currentSlide.linkUrl && currentSlide.linkUrl.startsWith('#')) {
+                      const el = document.getElementById(currentSlide.linkUrl.substring(1));
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                    } else {
+                      const el = document.getElementById('catalog-anchor');
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                    }
                   }}
                   className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white font-bold text-xs sm:text-sm px-8 py-3.5 rounded-xl transition shadow-xl flex items-center gap-2 cursor-pointer"
                 >
-                  <span>Shop Now</span>
+                  <span>{currentSlide.buttonText}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
+
+                {currentSlide.purchaseProductId && (
+                  <button
+                    onClick={() => {
+                      const p = products.find(prod => prod.id === currentSlide.purchaseProductId);
+                      if (p) {
+                        onAddToCart(p, p.moq || 1);
+                        onNavigate('cart');
+                      }
+                    }}
+                    className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs sm:text-sm px-6 py-3.5 rounded-xl transition shadow-xl flex items-center gap-2 cursor-pointer"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    <span>{currentSlide.purchaseButtonText || 'Buy Promo Deal'} {currentSlide.purchaseButtonPrice ? `(₹${currentSlide.purchaseButtonPrice.toLocaleString()})` : ''}</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => {
                     if (onBecomeSeller) onBecomeSeller();
                     else onNavigate('register_vendor');
                   }}
-                  className="bg-white text-[#1F2937] hover:bg-slate-100 font-bold text-xs sm:text-sm px-8 py-3.5 rounded-xl transition shadow-md flex items-center gap-2 cursor-pointer"
+                  className="bg-white text-[#1F2937] hover:bg-slate-100 font-bold text-xs sm:text-sm px-6 py-3.5 rounded-xl transition shadow-md flex items-center gap-2 cursor-pointer"
                 >
                   <Store className="w-4 h-4 text-[#0077B6]" />
                   <span>Become Vendor</span>
@@ -383,7 +478,7 @@ export default function EnterpriseHomepage({
               {/* Featured Equipment List */}
               <div className="flex flex-wrap gap-2 pt-4 border-t border-white/10 text-[11px] text-slate-300">
                 <span className="font-bold text-white">Popular:</span>
-                {heroSlides[heroSlide].featuredItems.map(item => (
+                {currentSlide.featuredItems.map(item => (
                   <span key={item} className="bg-white/10 px-2.5 py-0.5 rounded-md backdrop-blur-sm border border-white/10 font-medium">
                     {item}
                   </span>
@@ -393,31 +488,121 @@ export default function EnterpriseHomepage({
           </div>
 
           {/* Controls */}
-          <button
-            onClick={() => setHeroSlide((prev) => (prev - 1 + 3) % 3)}
-            className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-3 rounded-full backdrop-blur-md opacity-0 group-hover:opacity-100 transition"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => setHeroSlide((prev) => (prev + 1) % 3)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-3 rounded-full backdrop-blur-md opacity-0 group-hover:opacity-100 transition"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-
-          {/* Indicators */}
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-2">
-            {[0, 1, 2].map((idx) => (
+          {slidesToDisplay.length > 1 && (
+            <>
               <button
-                key={idx}
-                onClick={() => setHeroSlide(idx)}
-                className={`h-2.5 rounded-full transition-all ${idx === heroSlide ? 'w-8 bg-[#0F9D8A]' : 'w-2.5 bg-white/50'}`}
-              />
-            ))}
-          </div>
+                onClick={() => setHeroSlide((prev) => (prev - 1 + slidesToDisplay.length) % slidesToDisplay.length)}
+                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-3 rounded-full backdrop-blur-md opacity-0 group-hover:opacity-100 transition cursor-pointer"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setHeroSlide((prev) => (prev + 1) % slidesToDisplay.length)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-3 rounded-full backdrop-blur-md opacity-0 group-hover:opacity-100 transition cursor-pointer"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+
+              {/* Indicators */}
+              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-2">
+                {slidesToDisplay.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setHeroSlide(idx)}
+                    className={`h-2.5 rounded-full transition-all cursor-pointer ${idx === currentSlideIdx ? 'w-8 bg-[#0F9D8A]' : 'w-2.5 bg-white/50'}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </section>
+
+      {/* Active Promo Banners Showcase Grid */}
+      {activeBanners.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 lg:px-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <h3 className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#0F9D8A]" />
+                Active Promotional Offers &amp; Banners
+              </h3>
+              <span className="text-[10px] font-extrabold text-[#0F9D8A] bg-[#0F9D8A]/10 px-2.5 py-1 rounded-full border border-[#0F9D8A]/20">
+                {activeBanners.length} Live Banners
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {activeBanners.map(b => (
+                <div
+                  key={b.id}
+                  className="bg-slate-900 rounded-2xl overflow-hidden shadow-md border border-slate-800 text-white relative min-h-[180px] flex flex-col justify-between p-5 group hover:border-[#0F9D8A] transition"
+                >
+                  <img
+                    src={b.imageUrl}
+                    alt={b.title}
+                    referrerPolicy="no-referrer"
+                    className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-50 group-hover:scale-105 transition-all duration-500 pointer-events-none"
+                  />
+                  <div className="relative z-10 space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {b.badgeText && (
+                        <span className="bg-[#0F9D8A]/20 text-teal-300 border border-[#0F9D8A]/40 text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase">
+                          {b.badgeText}
+                        </span>
+                      )}
+                      {b.promoOfferValue && (
+                        <span className="bg-amber-400 text-slate-950 font-mono text-[9px] font-black px-2 py-0.5 rounded-full">
+                          {b.promoOfferValue}
+                        </span>
+                      )}
+                    </div>
+                    <h4 className="text-base font-black tracking-tight leading-snug line-clamp-2">
+                      {b.title}
+                    </h4>
+                    {b.subtitle && (
+                      <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed font-medium">
+                        {b.subtitle}
+                      </p>
+                    )}
+                  </div>
+                  <div className="relative z-10 pt-4 flex items-center justify-between gap-3 border-t border-white/10 mt-2">
+                    <button
+                      onClick={() => {
+                        if (b.linkUrl && b.linkUrl.startsWith('#')) {
+                          const el = document.getElementById(b.linkUrl.substring(1));
+                          el?.scrollIntoView({ behavior: 'smooth' });
+                        } else {
+                          const el = document.getElementById('catalog-anchor');
+                          el?.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                      className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>{b.buttonText || 'Explore Offer'}</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    {b.purchaseProductId && (
+                      <button
+                        onClick={() => {
+                          const p = products.find(prod => prod.id === b.purchaseProductId);
+                          if (p) {
+                            onAddToCart(p, p.moq || 1);
+                            onNavigate('cart');
+                          }
+                        }}
+                        className="bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black px-3.5 py-2 rounded-xl transition shadow flex items-center gap-1 cursor-pointer"
+                      >
+                        <ShoppingCart className="w-3.5 h-3.5" />
+                        <span>Buy {b.purchaseButtonPrice ? `₹${b.purchaseButtonPrice.toLocaleString()}` : 'Now'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 2. TRUST BADGES STRIP */}
       <section className="max-w-7xl mx-auto px-4 lg:px-6">
@@ -904,17 +1089,52 @@ export default function EnterpriseHomepage({
               Download the HealNex Medi Bazar app on Android and iOS to track orders, submit RFQs, and get instant price drop alerts directly on your phone.
             </p>
             <div className="flex items-center gap-3 pt-2">
-              <button onClick={() => addToast("App download link sent to phone", "info")} className="bg-[#1F2937] text-white px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-800 transition">
-                📱 Google Play
-              </button>
-              <button onClick={() => addToast("App download link sent to phone", "info")} className="bg-[#1F2937] text-white px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-800 transition">
-                🍎 App Store
-              </button>
+              <a 
+                href={socialLinks.playStoreUrl || socialLinks.appDownloadLink || '#'} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="bg-[#1F2937] text-white px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-800 transition inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>📱 Google Play</span>
+              </a>
+              <a 
+                href={socialLinks.appStoreUrl || socialLinks.appDownloadLink || '#'} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="bg-[#1F2937] text-white px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-800 transition inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🍎 App Store</span>
+              </a>
             </div>
           </div>
-          <div className="w-32 h-32 bg-white p-3 rounded-2xl border border-slate-200 shadow-md text-center flex flex-col items-center justify-center">
-            <Smartphone className="w-10 h-10 text-[#0F9D8A] mb-1" />
-            <span className="text-[10px] font-bold text-[#1F2937]">Scan QR to App</span>
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-36 h-36 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-md text-center flex flex-col items-center justify-center relative group">
+              {socialLinks.appQrCodeUrl ? (
+                <img src={socialLinks.appQrCodeUrl} alt="App QR Code" className="w-full h-full object-contain rounded-xl" />
+              ) : (
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(socialLinks.appDownloadLink || socialLinks.playStoreUrl || 'https://play.google.com/store/apps/details?id=com.healnex.medibazar')}`} 
+                  alt="Download HealNex App QR Code" 
+                  className="w-full h-full object-contain rounded-xl"
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-extrabold text-[#1F2937] uppercase flex items-center gap-1">
+                <QrCode className="w-3 h-3 text-teal-600" />
+                Scan QR to Download App
+              </span>
+              {socialLinks.appQrCodeUrl && (
+                <a
+                  href={socialLinks.appQrCodeUrl}
+                  download="HealNex-App-QR.png"
+                  title="Download QR Code Image"
+                  className="p-1 text-slate-500 hover:text-teal-700 hover:bg-slate-100 rounded-md transition"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </section>

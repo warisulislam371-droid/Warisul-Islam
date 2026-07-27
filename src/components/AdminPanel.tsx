@@ -72,7 +72,8 @@ import {
   ToggleLeft,
   ToggleRight,
   Link as LinkIcon,
-  Upload
+  Upload,
+  Smartphone
 } from 'lucide-react';
 
 // Global helper for generating a beautiful high-fidelity scanned document preview
@@ -442,6 +443,64 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [productRejectReasonText, setProductRejectReasonText] = useState('');
   const [isRequestChangesAction, setIsRequestChangesAction] = useState<boolean>(false);
   const [previewingProduct, setPreviewingProduct] = useState<Product | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [dealOfDay, setDealOfDay] = useState<DealOfDay>(dbLocal.getDealOfDay());
+  const [offersSubTab, setOffersSubTab] = useState<'deal_of_day' | 'banners'>('deal_of_day');
+
+  const handleSaveDealOfDay = (e: React.FormEvent) => {
+    e.preventDefault();
+    dbLocal.saveDealOfDay(dealOfDay);
+    addToast('⚡ Deal of the Day & Flash Offer updated successfully!', 'success');
+  };
+
+  const handleExportProductsCSV = (productsToExport: Product[]) => {
+    if (productsToExport.length === 0) {
+      addToast('No products available to export.', 'info');
+      return;
+    }
+    const headers = ['ID', 'Name', 'SKU', 'Category', 'Brand', 'Vendor Name', 'Price (INR)', 'MRP (INR)', 'Stock', 'Status', 'Published', 'Created At'];
+    const escapeCsv = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+
+    const rows = productsToExport.map(p => [
+      escapeCsv(p.id),
+      escapeCsv(p.name),
+      escapeCsv(p.sku),
+      escapeCsv(p.category),
+      escapeCsv(p.brand || ''),
+      escapeCsv(p.vendorName || ''),
+      escapeCsv(p.price),
+      escapeCsv(p.mrp || p.price),
+      escapeCsv(p.stockQuantity ?? (p.outOfStock ? 0 : 10)),
+      escapeCsv(p.status || 'Pending'),
+      escapeCsv(p.published ? 'Yes' : 'No'),
+      escapeCsv(p.createdAt || '')
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `products_catalog_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addToast(`Exported ${productsToExport.length} products to CSV!`, 'success');
+  };
+
+  const handleBulkDeleteProducts = () => {
+    if (selectedProductIds.length === 0) {
+      addToast('Please select products to delete.', 'info');
+      return;
+    }
+    if (!confirm(`Are you sure you want to permanently delete ${selectedProductIds.length} selected product(s)?`)) return;
+
+    const remaining = products.filter(p => !selectedProductIds.includes(p.id));
+    dbLocal.saveProducts(remaining);
+    setProducts(remaining);
+    addToast(`Successfully deleted ${selectedProductIds.length} product(s).`, 'success');
+    setSelectedProductIds([]);
+  };
 
   // Admin Vendor Directory Management states
   const [vendorSearchText, setVendorSearchText] = useState('');
@@ -496,6 +555,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     setSocialLinks(dbLocal.getSocialLinks());
     setClearanceRequests(dbLocal.getClearanceRequests());
     setPromoBanners(dbLocal.getPromoBanners());
+    setDealOfDay(dbLocal.getDealOfDay());
     setRfqs(dbLocal.getRfqs());
     setQuotations(dbLocal.getQuotations());
   };
@@ -1373,8 +1433,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             onClick={() => setActiveTab('banners')}
             className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'banners' ? 'bg-white text-teal-900 shadow-sm font-bold border border-teal-200' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            <ImageIcon className="w-4 h-4 text-teal-600" />
-            Promo Banners
+            <Tag className="w-4 h-4 text-teal-600" />
+            Offers &amp; Banners
             {promoBanners.filter(b => b.isActive).length > 0 && (
               <span className="bg-teal-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">{promoBanners.filter(b => b.isActive).length}</span>
             )}
@@ -2947,52 +3007,119 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             </div>
 
             {/* Products Catalog Table / List */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Showing {filteredProducts.length} Product(s)</span>
-              </div>
+            {(() => {
+              const isAllFilteredSelected = filteredProducts.length > 0 && filteredProducts.every(p => selectedProductIds.includes(p.id));
+              const handleToggleSelectAll = () => {
+                if (isAllFilteredSelected) {
+                  const filteredSet = new Set(filteredProducts.map(p => p.id));
+                  setSelectedProductIds(selectedProductIds.filter(id => !filteredSet.has(id)));
+                } else {
+                  const newSelected = Array.from(new Set([...selectedProductIds, ...filteredProducts.map(p => p.id)]));
+                  setSelectedProductIds(newSelected);
+                }
+              };
 
-              {filteredProducts.length === 0 ? (
-                <div className="p-12 text-center text-slate-400">
-                  <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-bold text-slate-600">No matching vendor products found.</p>
-                  <p className="text-xs text-slate-400 mt-1">Try adjusting your search criteria or filter selection.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {filteredProducts.map((p) => {
-                    const uploadDate = p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric'
-                    }) : 'Unknown Date';
+              const selectedProducts = products.filter(p => selectedProductIds.includes(p.id));
 
-                    const isApproved = p.status?.toLowerCase() === 'approved';
-                    const isPending = p.status?.toLowerCase() === 'pending';
-                    const isRejected = p.status?.toLowerCase() === 'rejected';
-                    const isChangesRequested = p.status?.toLowerCase() === 'changesrequested' || p.status?.toLowerCase() === 'needs_changes';
-                    const isDraft = p.status?.toLowerCase() === 'draft';
+              return (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex flex-wrap justify-between items-center gap-3">
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isAllFilteredSelected}
+                          onChange={handleToggleSelectAll}
+                          className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-extrabold text-slate-800">
+                          Select All ({filteredProducts.length})
+                        </span>
+                      </label>
+                      {selectedProductIds.length > 0 && (
+                        <span className="text-xs font-bold bg-teal-100 text-teal-800 px-2.5 py-0.5 rounded-full">
+                          {selectedProductIds.length} Selected
+                        </span>
+                      )}
+                    </div>
 
-                    return (
-                      <div key={p.id} className="p-5 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 hover:bg-slate-50/50 transition">
-                        {/* Product Thumbnail & Details */}
-                        <div className="flex gap-4 flex-1">
-                          <div className="relative">
-                            <img
-                              src={p.images && p.images[0] ? p.images[0] : 'https://images.unsplash.com/photo-1516549655169-df83a0774514'}
-                              alt={p.name}
-                              className="w-20 h-20 object-cover rounded-xl border border-slate-200 shrink-0 shadow-sm bg-white"
-                            />
-                            {p.published ? (
-                              <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
-                                Live
-                              </span>
-                            ) : (
-                              <span className="absolute -top-1.5 -right-1.5 bg-slate-400 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
-                                Hidden
-                              </span>
-                            )}
-                          </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => handleExportProductsCSV(selectedProducts.length > 0 ? selectedProducts : filteredProducts)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-1.5"
+                        title="Export products to CSV"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Export {selectedProducts.length > 0 ? `Selected (${selectedProducts.length})` : 'Filtered'} CSV
+                      </button>
+
+                      {selectedProducts.length > 0 && (
+                        <button
+                          onClick={handleBulkDeleteProducts}
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-1.5 animate-scale-up"
+                          title="Delete selected products"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete Selected ({selectedProducts.length})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {filteredProducts.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400">
+                      <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-bold text-slate-600">No matching vendor products found.</p>
+                      <p className="text-xs text-slate-400 mt-1">Try adjusting your search criteria or filter selection.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {filteredProducts.map((p) => {
+                        const uploadDate = p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        }) : 'Unknown Date';
+
+                        const isApproved = p.status?.toLowerCase() === 'approved';
+                        const isPending = p.status?.toLowerCase() === 'pending';
+                        const isRejected = p.status?.toLowerCase() === 'rejected';
+                        const isChangesRequested = p.status?.toLowerCase() === 'changesrequested' || p.status?.toLowerCase() === 'needs_changes';
+                        const isDraft = p.status?.toLowerCase() === 'draft';
+                        const isSelected = selectedProductIds.includes(p.id);
+
+                        return (
+                          <div key={p.id} className={`p-5 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 transition ${isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}`}>
+                            {/* Checkbox & Product Thumbnail & Details */}
+                            <div className="flex gap-4 flex-1 items-start">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  if (isSelected) {
+                                    setSelectedProductIds(selectedProductIds.filter(id => id !== p.id));
+                                  } else {
+                                    setSelectedProductIds([...selectedProductIds, p.id]);
+                                  }
+                                }}
+                                className="w-4 h-4 mt-2 text-teal-600 rounded border-slate-300 focus:ring-teal-500 cursor-pointer shrink-0"
+                              />
+                              <div className="relative">
+                                <img
+                                  src={p.images && p.images[0] ? p.images[0] : 'https://images.unsplash.com/photo-1516549655169-df83a0774514'}
+                                  alt={p.name}
+                                  className="w-20 h-20 object-cover rounded-xl border border-slate-200 shrink-0 shadow-sm bg-white"
+                                />
+                                {p.published ? (
+                                  <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                                    Live
+                                  </span>
+                                ) : (
+                                  <span className="absolute -top-1.5 -right-1.5 bg-slate-400 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                                    Hidden
+                                  </span>
+                                )}
+                              </div>
                           <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="text-[9px] bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded font-extrabold uppercase tracking-wider">
@@ -3151,6 +3278,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 </div>
               )}
             </div>
+            );
+          })()}
 
             {/* A. Rejection or Request Changes Input Dialog Modal */}
             {rejectingProduct && (
@@ -5114,7 +5243,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 </div>
 
                 {/* Twitter / X */}
-                <div className="space-y-1 md:col-span-2">
+                <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
                     <Twitter className="w-4 h-4 text-sky-500" />
                     Twitter / X Link
@@ -5128,6 +5257,103 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                   />
                 </div>
 
+                {/* Mobile App Download Link (General/APK) */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-emerald-600" />
+                    Mobile App Download Link / APK URL
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://play.google.com/store/apps/details?id=com.healnex.medibazar"
+                    value={socialLinks.appDownloadLink || ''}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, appDownloadLink: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:border-indigo-500 focus:bg-white outline-none transition font-mono"
+                  />
+                </div>
+
+                {/* Google Play Store URL */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-teal-600" />
+                    Google Play Store App URL
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://play.google.com/store/apps/details?id=com.healnex.medibazar"
+                    value={socialLinks.playStoreUrl || ''}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, playStoreUrl: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:border-indigo-500 focus:bg-white outline-none transition font-mono"
+                  />
+                </div>
+
+                {/* Apple App Store URL */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-blue-600" />
+                    Apple App Store URL
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://apps.apple.com/app/healnex-medi-bazar/id123456789"
+                    value={socialLinks.appStoreUrl || ''}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, appStoreUrl: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:border-indigo-500 focus:bg-white outline-none transition font-mono"
+                  />
+                </div>
+
+                {/* Mobile App QR Code Upload */}
+                <div className="space-y-1 md:col-span-2 bg-slate-100/60 p-3 rounded-xl border border-slate-200">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                    <QrCode className="w-4 h-4 text-purple-600" />
+                    App Download QR Code Image (Upload or URL)
+                  </label>
+                  <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+                    <input
+                      type="text"
+                      placeholder="QR Code Image URL or paste Base64 image"
+                      value={socialLinks.appQrCodeUrl || ''}
+                      onChange={(e) => setSocialLinks({ ...socialLinks, appQrCodeUrl: e.target.value })}
+                      className="flex-1 bg-white border border-slate-200 rounded-lg p-2 text-xs focus:border-indigo-500 outline-none font-mono"
+                    />
+                    <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition flex items-center gap-1.5 shrink-0 shadow-sm">
+                      <Upload className="w-3.5 h-3.5" />
+                      Upload QR Code
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              if (reader.result) {
+                                setSocialLinks({ ...socialLinks, appQrCodeUrl: reader.result as string });
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {socialLinks.appQrCodeUrl && (
+                    <div className="flex items-center gap-3 pt-2">
+                      <div className="w-16 h-16 bg-white p-1 rounded-lg border border-slate-300 shadow-sm flex items-center justify-center">
+                        <img src={socialLinks.appQrCodeUrl} alt="QR Code Preview" className="max-w-full max-h-full object-contain rounded" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSocialLinks({ ...socialLinks, appQrCodeUrl: '' })}
+                        className="text-xs text-rose-600 hover:underline font-bold"
+                      >
+                        Remove QR Code Image
+                      </button>
+                    </div>
+                  )}
+                </div>
+
               </div>
 
               <div className="flex justify-end pt-2">
@@ -5136,7 +5362,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                   className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm"
                 >
                   <Link2 className="w-4 h-4" />
-                  Save Social Media Links
+                  Save App & Social Media Links
                 </button>
               </div>
             </form>
@@ -5144,14 +5370,335 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
         </div>
       )}
 
-      {/* Admin Promotional Banners Management Tab */}
+      {/* Admin Promotional Banners & Offers Management Tab */}
       {activeTab === 'banners' && (
         <div className="space-y-8 animate-fade-in pb-12">
+          {/* Sub Navigation Bar for Offers vs Hero Banners */}
+          <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
+            <button
+              onClick={() => setOffersSubTab('deal_of_day')}
+              className={`px-5 py-2.5 rounded-2xl text-xs font-extrabold transition flex items-center gap-2 ${
+                offersSubTab === 'deal_of_day'
+                  ? 'bg-amber-500 text-white shadow-md'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              ⚡ Flash Offers &amp; Deal of the Day
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${offersSubTab === 'deal_of_day' ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {dealOfDay.isActive ? 'LIVE' : 'OFF'}
+              </span>
+            </button>
+            <button
+              onClick={() => setOffersSubTab('banners')}
+              className={`px-5 py-2.5 rounded-2xl text-xs font-extrabold transition flex items-center gap-2 ${
+                offersSubTab === 'banners'
+                  ? 'bg-teal-700 text-white shadow-md'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <ImageIcon className="w-4 h-4" />
+              🖼️ Homepage Promo Banners
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${offersSubTab === 'banners' ? 'bg-teal-900 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {promoBanners.filter(b => b.isActive).length} Active
+              </span>
+            </button>
+          </div>
+
+          {/* Subtab 1: Flash Offers & Deal of the Day Management */}
+          {offersSubTab === 'deal_of_day' && (
+            <div className="space-y-8 animate-fade-in">
+              {/* Header Control Bar for Deal of Day */}
+              <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-slate-900 p-6 sm:p-8 rounded-3xl border border-amber-800/60 shadow-xl text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="space-y-2">
+                  <span className="inline-block bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                    HOMEPAGE OFFERS SECTION CONTROL
+                  </span>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-2">
+                    <Zap className="w-7 h-7 text-amber-400" /> Flash Sale &amp; Deal of the Day Offers
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
+                    Manage the daily promotional deal section featured prominently on the marketplace homepage. Configure discount percentage, live countdown timer, stock availability progress, and targeted products.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = { ...dealOfDay, isActive: !dealOfDay.isActive };
+                      setDealOfDay(updated);
+                      dbLocal.saveDealOfDay(updated);
+                      addToast(`Deal of the Day section is now ${updated.isActive ? 'ACTIVE' : 'DISABLED'} on Homepage!`, updated.isActive ? 'success' : 'info');
+                    }}
+                    className={`px-5 py-3 rounded-2xl font-extrabold text-xs shadow-lg transition flex items-center gap-2 ${
+                      dealOfDay.isActive
+                        ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                        : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+                    }`}
+                  >
+                    {dealOfDay.isActive ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                    {dealOfDay.isActive ? '● Live on Home Page' : '○ Disabled'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid: Form Editor + Live Customer View Preview */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Form Editor */}
+                <div className="lg:col-span-7 bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                    <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <Edit className="w-4 h-4 text-amber-600" /> Edit Deal of the Day Content
+                    </h3>
+                    <span className="text-[11px] font-bold text-slate-400 font-mono">ID: {dealOfDay.id}</span>
+                  </div>
+
+                  <form onSubmit={handleSaveDealOfDay} className="space-y-5">
+                    {/* Active Status & Discount Tag */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Badge Headline *</label>
+                        <input
+                          type="text"
+                          value={dealOfDay.badgeText}
+                          onChange={(e) => setDealOfDay({ ...dealOfDay, badgeText: e.target.value })}
+                          placeholder="e.g. ⚡ DEAL OF THE DAY • LIMITED STOCK"
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Offer Discount Badge</label>
+                        <input
+                          type="text"
+                          value={dealOfDay.discountText || ''}
+                          onChange={(e) => setDealOfDay({ ...dealOfDay, discountText: e.target.value })}
+                          placeholder="e.g. 40% OFF"
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-rose-600 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Offer Title & Subtitle */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Main Offer Title *</label>
+                      <input
+                        type="text"
+                        value={dealOfDay.title}
+                        onChange={(e) => setDealOfDay({ ...dealOfDay, title: e.target.value })}
+                        placeholder="e.g. Hospital Grade ICU Monitor & ECG Flash Sale"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Offer Subtitle / Highlights</label>
+                      <textarea
+                        rows={3}
+                        value={dealOfDay.subtitle}
+                        onChange={(e) => setDealOfDay({ ...dealOfDay, subtitle: e.target.value })}
+                        placeholder="Detailed deal summary..."
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white leading-relaxed"
+                      />
+                    </div>
+
+                    {/* Countdown Timer */}
+                    <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/60 space-y-3">
+                      <label className="block text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                        <Clock className="w-4 h-4 text-amber-600" /> Live Countdown Timer Settings
+                      </label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 mb-1">Hours</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="99"
+                            value={dealOfDay.hours}
+                            onChange={(e) => setDealOfDay({ ...dealOfDay, hours: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 mb-1">Minutes</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="59"
+                            value={dealOfDay.mins}
+                            onChange={(e) => setDealOfDay({ ...dealOfDay, mins: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-slate-500 mb-1">Seconds</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="59"
+                            value={dealOfDay.secs}
+                            onChange={(e) => setDealOfDay({ ...dealOfDay, secs: Number(e.target.value) })}
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Inventory & Stock Progress */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Claimed Stock Percentage (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={dealOfDay.claimedPercentage}
+                          onChange={(e) => setDealOfDay({ ...dealOfDay, claimedPercentage: Number(e.target.value) })}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Units Remaining Counter</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={dealOfDay.unitsLeft}
+                          onChange={(e) => setDealOfDay({ ...dealOfDay, unitsLeft: Number(e.target.value) })}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Linked Product & CTA Text */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Linked Catalog Product (Optional)</label>
+                        <select
+                          value={dealOfDay.productId || ''}
+                          onChange={(e) => {
+                            const pId = e.target.value;
+                            const matched = products.find(p => p.id === pId);
+                            setDealOfDay({
+                              ...dealOfDay,
+                              productId: pId,
+                              title: matched ? `${matched.name} - Special Flash Deal` : dealOfDay.title,
+                              linkUrl: pId ? `#product-${pId}` : dealOfDay.linkUrl
+                            });
+                          }}
+                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        >
+                          <option value="">-- No Direct Product (Custom Link) --</option>
+                          {products.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.brand} - Rs. {p.salePrice.toLocaleString()})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">CTA Button Label</label>
+                        <input
+                          type="text"
+                          value={dealOfDay.buttonText}
+                          onChange={(e) => setDealOfDay({ ...dealOfDay, buttonText: e.target.value })}
+                          placeholder="e.g. Claim Flash Offer Now"
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex justify-end">
+                      <button
+                        type="submit"
+                        className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs px-6 py-3 rounded-2xl shadow-md transition flex items-center gap-2"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Save Deal of the Day Settings
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Live Preview Panel */}
+                <div className="lg:col-span-5 space-y-4">
+                  <h4 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Eye className="w-4 h-4 text-amber-600" /> Live Homepage Offer Card Preview
+                  </h4>
+
+                  <div className="bg-gradient-to-br from-amber-600 via-amber-700 to-amber-900 rounded-3xl p-6 text-white shadow-xl space-y-5 relative overflow-hidden border border-amber-500/30">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="bg-white/20 backdrop-blur-md border border-white/30 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
+                        {dealOfDay.badgeText || '⚡ DEAL OF THE DAY'}
+                      </span>
+                      {dealOfDay.discountText && (
+                        <span className="bg-rose-500 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full shadow">
+                          {dealOfDay.discountText}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h3 className="text-xl font-extrabold tracking-tight leading-snug">
+                        {dealOfDay.title || 'Flash Offer Headline'}
+                      </h3>
+                      <p className="text-xs text-amber-100/90 leading-relaxed line-clamp-3">
+                        {dealOfDay.subtitle || 'Offer description snippet...'}
+                      </p>
+                    </div>
+
+                    {/* Timer preview */}
+                    <div className="bg-black/30 backdrop-blur border border-white/10 p-3 rounded-2xl flex items-center justify-between text-center">
+                      <div>
+                        <span className="block text-base font-mono font-extrabold text-amber-300">{String(dealOfDay.hours).padStart(2, '0')}</span>
+                        <span className="text-[9px] uppercase tracking-wider text-amber-200/80 font-bold">Hours</span>
+                      </div>
+                      <span className="text-amber-300 font-extrabold">:</span>
+                      <div>
+                        <span className="block text-base font-mono font-extrabold text-amber-300">{String(dealOfDay.mins).padStart(2, '0')}</span>
+                        <span className="text-[9px] uppercase tracking-wider text-amber-200/80 font-bold">Mins</span>
+                      </div>
+                      <span className="text-amber-300 font-extrabold">:</span>
+                      <div>
+                        <span className="block text-base font-mono font-extrabold text-amber-300">{String(dealOfDay.secs).padStart(2, '0')}</span>
+                        <span className="text-[9px] uppercase tracking-wider text-amber-200/80 font-bold">Secs</span>
+                      </div>
+                    </div>
+
+                    {/* Stock Claimed Bar */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-[11px] font-bold text-amber-100">
+                        <span>Claimed {dealOfDay.claimedPercentage}%</span>
+                        <span>{dealOfDay.unitsLeft} Units Left</span>
+                      </div>
+                      <div className="w-full h-2.5 bg-black/30 rounded-full overflow-hidden p-0.5 border border-white/10">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-300 to-amber-100 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, Math.max(0, dealOfDay.claimedPercentage))}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* CTA Button preview */}
+                    <button type="button" className="w-full bg-white text-amber-900 hover:bg-amber-50 font-extrabold text-xs py-3 rounded-xl shadow-lg transition text-center">
+                      {dealOfDay.buttonText || 'Claim Deal'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Subtab 2: Homepage Promotional Banners */}
+          {offersSubTab === 'banners' && (
+            <div className="space-y-8 animate-fade-in">
           {/* Header Banner Control Bar */}
           <div className="bg-gradient-to-r from-teal-950 via-slate-900 to-slate-900 p-6 sm:p-8 rounded-3xl border border-teal-800/60 shadow-xl text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="space-y-2">
               <span className="inline-block bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                MARKETPLACE HERO & PROMOTIONS MANAGEMENT
+                MARKETPLACE HERO &amp; PROMOTIONS MANAGEMENT
               </span>
               <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
                 Manage Homepage Banners
@@ -5224,14 +5771,37 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Banner Image URL *</label>
-                    <input
-                      type="text"
-                      value={bannerForm.imageUrl}
-                      onChange={(e) => setBannerForm({ ...bannerForm, imageUrl: e.target.value })}
-                      placeholder="https://images.unsplash.com/..."
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white"
-                    />
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Banner Image (File Upload or URL) *</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={bannerForm.imageUrl}
+                        onChange={(e) => setBannerForm({ ...bannerForm, imageUrl: e.target.value })}
+                        placeholder="https://images.unsplash.com/... or upload image file"
+                        className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                      />
+                      <label className="bg-teal-700 hover:bg-teal-800 text-white px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 shrink-0 shadow-sm">
+                        <Upload className="w-3.5 h-3.5" />
+                        Upload Image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                if (reader.result) {
+                                  setBannerForm({ ...bannerForm, imageUrl: reader.result as string });
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -5521,13 +6091,36 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Banner Image URL *</label>
-                    <input
-                      type="text"
-                      value={editingBannerModal.imageUrl}
-                      onChange={(e) => setEditingBannerModal({ ...editingBannerModal, imageUrl: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Banner Image (File Upload or URL) *</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={editingBannerModal.imageUrl}
+                        onChange={(e) => setEditingBannerModal({ ...editingBannerModal, imageUrl: e.target.value })}
+                        className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                      <label className="bg-teal-700 hover:bg-teal-800 text-white px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 shrink-0 shadow-sm">
+                        <Upload className="w-3.5 h-3.5" />
+                        Upload
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                if (reader.result) {
+                                  setEditingBannerModal({ ...editingBannerModal, imageUrl: reader.result as string });
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -5663,6 +6256,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
             </div>
           )}
         </div>

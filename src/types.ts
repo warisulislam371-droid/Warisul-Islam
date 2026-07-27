@@ -466,6 +466,10 @@ export interface SocialMediaLinks {
   youtube: string;
   linkedin: string;
   twitter?: string;
+  appDownloadLink?: string;
+  playStoreUrl?: string;
+  appStoreUrl?: string;
+  appQrCodeUrl?: string;
 }
 
 export interface WhatsAppClickLog {
@@ -547,7 +551,7 @@ export interface PromoBanner {
 }
 
 export interface DealOfDay {
-  id?: string;
+  id: string;
   badgeText: string;
   title: string;
   subtitle: string;
