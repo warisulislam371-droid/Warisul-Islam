@@ -217,13 +217,21 @@ export default function CustomerPanel({
       return approvedVendors;
     });
 
-    // All approved/published products that are active are immediately visible to customers in the live portal
+    const approvedVendorIds = new Set(approvedVendors.map(v => v.id));
+    const approvedVendorNames = new Set(approvedVendors.map(v => v.companyName.trim().toLowerCase()));
+
+    // All approved/published products that belong to approved vendors are visible to customers on the platform
     const approvedProducts = dbLocal.getProducts().filter(p => {
       const statusLower = (p.status || '').toLowerCase();
       const isApprovedStatus = statusLower === 'approved' || statusLower === 'published';
       const isExplicitlyUnpublished = p.published === false;
       const isActive = p.isActive !== false;
-      return (isApprovedStatus || p.published === true) && !isExplicitlyUnpublished && isActive;
+
+      // Ensure the vendor is approved
+      const isVendorApproved = approvedVendorIds.has(p.vendorId) ||
+        (!!p.vendorName && approvedVendorNames.has(p.vendorName.trim().toLowerCase()));
+
+      return isApprovedStatus && !isExplicitlyUnpublished && isActive && isVendorApproved;
     });
     setProducts(prev => {
       if (JSON.stringify(prev) === JSON.stringify(approvedProducts)) return prev;

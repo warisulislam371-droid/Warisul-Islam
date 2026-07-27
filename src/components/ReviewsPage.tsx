@@ -43,7 +43,17 @@ export default function ReviewsPage({
   const [formBadge, setFormBadge] = useState('Verified B2B Consignment');
 
   useEffect(() => {
-    const loadedProducts = dbLocal.getProducts();
+    const approvedVendors = dbLocal.getVendors().filter(v => v.status === 'Approved');
+    const approvedVendorIds = new Set(approvedVendors.map(v => v.id));
+    const approvedVendorNames = new Set(approvedVendors.map(v => v.companyName.trim().toLowerCase()));
+
+    const loadedProducts = dbLocal.getProducts().filter(p => {
+      const statusLower = (p.status || '').toLowerCase();
+      const isApprovedStatus = statusLower === 'approved' || statusLower === 'published';
+      const isVendorApproved = approvedVendorIds.has(p.vendorId) ||
+        (!!p.vendorName && approvedVendorNames.has(p.vendorName.trim().toLowerCase()));
+      return isApprovedStatus && p.published !== false && p.isActive !== false && isVendorApproved;
+    });
     setProducts(loadedProducts);
     if (loadedProducts.length > 0 && !formProductId) {
       setFormProductId(loadedProducts[0].id);
