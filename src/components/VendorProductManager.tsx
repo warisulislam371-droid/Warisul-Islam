@@ -1017,32 +1017,66 @@ export default function VendorProductManager({
   };
 
   const handleExportCsv = () => {
-    const headers = ['ID', 'Name', 'SKU', 'Model Number', 'Category', 'Brand', 'MSRP', 'Vendor Price', 'Est. Payout', 'Stock Quantity', 'MOQ', 'Status', 'Views', 'Inquiries'];
-    const rows = filteredProducts.map(p => [
-      p.id,
-      `"${p.name.replace(/"/g, '""')}"`,
-      p.sku,
-      p.modelNumber || '',
-      p.category,
-      p.brand,
-      p.mrp || p.price,
-      p.vendorPrice || p.salePrice,
-      p.vendorPayout || p.vendorPrice || p.salePrice,
-      p.stockQuantity,
-      p.moq,
-      p.status,
-      p.performance?.views || 0,
-      p.performance?.inquiries || 0
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const headers = [
+      'ID',
+      'Name',
+      'SKU',
+      'Model Number',
+      'Category',
+      'Brand',
+      'MSRP',
+      'Vendor Price',
+      'Est. Payout',
+      'Stock Quantity',
+      'MOQ',
+      'Status',
+      'Primary Image URL',
+      'Image 2 URL',
+      'Image 3 URL',
+      'All Image URLs (Semicolon Separated)',
+      'Views',
+      'Inquiries'
+    ];
+    const escapeCsv = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+
+    const rows = filteredProducts.map(p => {
+      const primaryImg = p.images && p.images[0] ? p.images[0] : '';
+      const img2 = p.images && p.images[1] ? p.images[1] : '';
+      const img3 = p.images && p.images[2] ? p.images[2] : '';
+      const allImgs = p.images && p.images.length > 0 ? p.images.join('; ') : '';
+
+      return [
+        escapeCsv(p.id),
+        escapeCsv(p.name),
+        escapeCsv(p.sku),
+        escapeCsv(p.modelNumber || ''),
+        escapeCsv(p.category),
+        escapeCsv(p.brand),
+        escapeCsv(p.mrp || p.price),
+        escapeCsv(p.vendorPrice || p.salePrice),
+        escapeCsv(p.vendorPayout || p.vendorPrice || p.salePrice),
+        escapeCsv(p.stockQuantity),
+        escapeCsv(p.moq),
+        escapeCsv(p.status),
+        escapeCsv(primaryImg),
+        escapeCsv(img2),
+        escapeCsv(img3),
+        escapeCsv(allImgs),
+        escapeCsv(p.performance?.views || 0),
+        escapeCsv(p.performance?.inquiries || 0)
+      ];
+    });
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.href = url;
     link.setAttribute('download', `healnex_vendor_products_${vendor.companyName.replace(/\s+/g, '_')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast('Exported product catalog to CSV.');
+    showToast('Exported product catalog with image links to CSV.');
   };
 
   return (

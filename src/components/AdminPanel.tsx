@@ -458,23 +458,51 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       addToast('No products available to export.', 'info');
       return;
     }
-    const headers = ['ID', 'Name', 'SKU', 'Category', 'Brand', 'Vendor Name', 'Price (INR)', 'MRP (INR)', 'Stock', 'Status', 'Published', 'Created At'];
+    const headers = [
+      'ID',
+      'Name',
+      'SKU',
+      'Category',
+      'Brand',
+      'Vendor Name',
+      'Price (INR)',
+      'MRP (INR)',
+      'Stock',
+      'Status',
+      'Published',
+      'Primary Image URL',
+      'Image 2 URL',
+      'Image 3 URL',
+      'All Image URLs (Semicolon Separated)',
+      'Created At'
+    ];
     const escapeCsv = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
 
-    const rows = productsToExport.map(p => [
-      escapeCsv(p.id),
-      escapeCsv(p.name),
-      escapeCsv(p.sku),
-      escapeCsv(p.category),
-      escapeCsv(p.brand || ''),
-      escapeCsv(p.vendorName || ''),
-      escapeCsv(p.price),
-      escapeCsv(p.mrp || p.price),
-      escapeCsv(p.stockQuantity ?? (p.outOfStock ? 0 : 10)),
-      escapeCsv(p.status || 'Pending'),
-      escapeCsv(p.published ? 'Yes' : 'No'),
-      escapeCsv(p.createdAt || '')
-    ]);
+    const rows = productsToExport.map(p => {
+      const primaryImg = p.images && p.images[0] ? p.images[0] : '';
+      const img2 = p.images && p.images[1] ? p.images[1] : '';
+      const img3 = p.images && p.images[2] ? p.images[2] : '';
+      const allImgs = p.images && p.images.length > 0 ? p.images.join('; ') : '';
+
+      return [
+        escapeCsv(p.id),
+        escapeCsv(p.name),
+        escapeCsv(p.sku),
+        escapeCsv(p.category),
+        escapeCsv(p.brand || ''),
+        escapeCsv(p.vendorName || ''),
+        escapeCsv(p.price),
+        escapeCsv(p.mrp || p.price),
+        escapeCsv(p.stockQuantity ?? (p.outOfStock ? 0 : 10)),
+        escapeCsv(p.status || 'Pending'),
+        escapeCsv(p.published ? 'Yes' : 'No'),
+        escapeCsv(primaryImg),
+        escapeCsv(img2),
+        escapeCsv(img3),
+        escapeCsv(allImgs),
+        escapeCsv(p.createdAt || '')
+      ];
+    });
 
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -485,7 +513,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    addToast(`Exported ${productsToExport.length} products to CSV!`, 'success');
+    addToast(`Exported ${productsToExport.length} products with image links to CSV!`, 'success');
   };
 
   const handleBulkDeleteProducts = () => {
