@@ -13,6 +13,7 @@ import {
   AlertCircle,
   FileCheck,
   CheckCircle,
+  CheckSquare,
   XCircle,
   Clock,
   Shield,
@@ -3092,7 +3093,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
               return (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex flex-wrap justify-between items-center gap-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input
                           type="checkbox"
@@ -3104,6 +3105,21 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                           Select All ({filteredProducts.length})
                         </span>
                       </label>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const first100 = filteredProducts.slice(0, 100).map(p => p.id);
+                          setSelectedProductIds(first100);
+                          addToast(`Selected first ${first100.length} product(s).`, 'info');
+                        }}
+                        className="px-3 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-extrabold shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+                        title="Select and mark the first 100 products in the list"
+                      >
+                        <CheckSquare className="w-3.5 h-3.5 text-teal-600" />
+                        <span>Select First 100 Products</span>
+                      </button>
+
                       {selectedProductIds.length > 0 && (
                         <span className="text-xs font-bold bg-teal-100 text-teal-800 px-2.5 py-0.5 rounded-full">
                           {selectedProductIds.length} Selected
