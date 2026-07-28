@@ -3145,7 +3145,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                             title="Approve and publish selected products live to marketplace catalog"
                           >
                             <CheckCircle className="w-3.5 h-3.5" />
-                            Publish &amp; Make Live ({selectedProducts.length})
+                            Approve &amp; Publish Live Selected ({selectedProducts.length})
                           </button>
 
                           <button

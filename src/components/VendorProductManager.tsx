@@ -22,6 +22,7 @@ import {
   Sparkles,
   ShieldCheck,
   Check,
+  CheckSquare,
   Download,
   AlertTriangle,
   ChevronRight,
@@ -1322,6 +1323,23 @@ export default function VendorProductManager({
               <Check className="w-3.5 h-3.5" />
               {draftProducts.every(d => selectedProductIds.includes(d.id)) ? 'Deselect All Drafts' : 'Select All Drafts'}
             </button>
+
+            {draftProducts.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const first100 = draftProducts.slice(0, 100).map(d => d.id);
+                  setSelectedProductIds(prev => Array.from(new Set([...prev, ...first100])));
+                  showToast(`Selected first ${first100.length} draft product(s).`);
+                }}
+                className="bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs px-3.5 py-2 rounded-xl transition border border-amber-300 flex items-center gap-1.5 cursor-pointer"
+                title="Select the first 100 drafted products"
+              >
+                <CheckSquare className="w-3.5 h-3.5 text-amber-800" />
+                Select First 100 Drafts
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleSubmitSelectedDrafts}
@@ -1414,6 +1432,58 @@ export default function VendorProductManager({
               </button>
             )}
           </div>
+
+          {/* Draft Selection Toolbar */}
+          {(activeTab === 'Draft' || draftProducts.length > 0) && (
+            <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-amber-900">
+                  Draft Selection: {selectedDraftProducts.length} of {draftProducts.length} draft item(s) selected
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSelectAllDrafts}
+                  className="bg-white hover:bg-amber-100 text-amber-900 font-bold text-xs px-3 py-1.5 rounded-lg border border-amber-300 shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  {draftProducts.every(d => selectedProductIds.includes(d.id)) ? 'Deselect All Drafts' : 'Select All Drafts'}
+                </button>
+
+                {draftProducts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const first100 = draftProducts.slice(0, 100).map(d => d.id);
+                      setSelectedProductIds(prev => Array.from(new Set([...prev, ...first100])));
+                      showToast(`Selected first ${first100.length} draft product(s).`);
+                    }}
+                    className="bg-white hover:bg-amber-100 text-amber-900 font-bold text-xs px-3 py-1.5 rounded-lg border border-amber-300 shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+                    title="Select the first 100 drafted products"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5 text-amber-800" />
+                    Select First 100 Drafts
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSubmitSelectedDrafts}
+                  disabled={selectedDraftProducts.length === 0}
+                  className={`font-extrabold text-xs px-3.5 py-1.5 rounded-lg transition shadow-2xs flex items-center gap-1.5 cursor-pointer ${
+                    selectedDraftProducts.length > 0
+                      ? 'bg-teal-700 hover:bg-teal-800 text-white'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Submit Selected ({selectedDraftProducts.length}) for Approval
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Product Catalog Cards / Table */}
