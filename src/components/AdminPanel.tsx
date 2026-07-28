@@ -541,10 +541,14 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     const selectedSet = new Set(selectedProductIds);
     const now = new Date().toISOString();
     let count = 0;
+    const vendorIdsToEnsureApproved = new Set<string>();
 
     const updated = products.map(p => {
       if (selectedSet.has(p.id)) {
         count++;
+        if (p.vendorId) {
+          vendorIdsToEnsureApproved.add(p.vendorId);
+        }
         dbLocal.addNotification(
           p.vendorId,
           `Product Approved & Live: ${p.name}`,
@@ -565,9 +569,26 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       return p;
     });
 
+    // Auto-approve vendor accounts if needed so products show live immediately
+    if (vendorIdsToEnsureApproved.size > 0) {
+      const allVendors = dbLocal.getVendors();
+      let vendorUpdated = false;
+      const updatedVendors = allVendors.map(v => {
+        if (vendorIdsToEnsureApproved.has(v.id) && v.status !== 'Approved') {
+          vendorUpdated = true;
+          return { ...v, status: 'Approved' as const, updatedAt: now };
+        }
+        return v;
+      });
+      if (vendorUpdated) {
+        dbLocal.saveVendors(updatedVendors);
+        setVendors(updatedVendors);
+      }
+    }
+
     dbLocal.saveProducts(updated);
     setProducts(updated);
-    addToast(`Successfully approved & published ${count} selected product(s) live to marketplace!`, 'success');
+    addToast(`Successfully approved & published ${count} selected product(s) live to marketplace catalog!`, 'success');
     setSelectedProductIds([]);
   };
 
