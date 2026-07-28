@@ -788,7 +788,13 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     };
     dbLocal.savePaymentSettings(updated);
     setPaymentSettings(updated);
-    addToast(`Platform commission rate updated to ${globalCommRate}% & minimum payout limit set to ₹${minWithdrawalLimit}!`, 'success');
+
+    // Recalculate product prices for all vendors using platform commission
+    const { updatedCount } = dbLocal.recalculateProductPricesForCommission();
+    setProducts(dbLocal.getProducts());
+
+    const commMsg = updatedCount > 0 ? ` Automatically updated live prices for ${updatedCount} product(s) on marketplace.` : '';
+    addToast(`Platform commission rate set to ${globalCommRate}%.${commMsg}`, 'success');
   };
 
   const handleExportSettlementReport = (format: 'excel' | 'pdf') => {
@@ -1193,6 +1199,10 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       dbLocal.saveVendors(updated);
       setVendors(updated);
 
+      // Auto-recalculate prices for all products of this vendor based on the new commission rate
+      const { updatedCount } = dbLocal.recalculateProductPricesForCommission(editingVendorModal.id);
+      setProducts(dbLocal.getProducts());
+
       // Also sync user role if applicable
       const allUsers = dbLocal.getUsers();
       const updatedUsers = allUsers.map(u => {
@@ -1203,7 +1213,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       });
       dbLocal.saveUsers(updatedUsers);
 
-      addToast(`Vendor "${vendorForm.companyName}" updated successfully.`, 'success');
+      const commMsg = updatedCount > 0 ? ` (Prices updated automatically for ${updatedCount} product(s) live in marketplace)` : '';
+      addToast(`Vendor "${vendorForm.companyName}" updated successfully (${vendorForm.customCommissionRate}% Commission)${commMsg}.`, 'success');
     } else {
       const newVendorId = `vnd-${Date.now()}`;
       const newVendor: Vendor = {
@@ -8395,12 +8406,24 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
               className="w-full max-w-[200px] bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition font-mono font-bold"
             />
           </div>
-          <div className="pt-3 border-t border-slate-100">
+          <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
             <button
               type="submit"
-              className="bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 px-6 rounded-xl transition shadow-sm cursor-pointer"
+              className="bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 px-6 rounded-xl transition shadow-sm cursor-pointer w-full"
             >
-              Update Base Settings
+              Update Base Settings & Recalculate Prices
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const { updatedCount } = dbLocal.recalculateProductPricesForCommission();
+                setProducts(dbLocal.getProducts());
+                addToast(`Recalculated prices for ${updatedCount} products based on vendor & platform commission rates!`, 'success');
+              }}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold py-2 px-4 rounded-xl transition cursor-pointer w-full text-xs flex items-center justify-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-teal-600" />
+              Sync & Recalculate Catalog Prices Now
             </button>
           </div>
         </form>

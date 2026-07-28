@@ -845,6 +845,79 @@ export const dbLocal = {
     }
     return updatedCount;
   },
+  recalculateProductPricesForCommission(targetVendorId?: string): { updatedCount: number; updatedProducts: Product[] } {
+    const paymentSettings = this.getPaymentSettings();
+    const globalRate = paymentSettings.platformCommissionRate || 10;
+    const vendors = this.getVendors();
+    const vendorMap = new Map<string, Vendor>();
+    vendors.forEach(v => {
+      vendorMap.set(v.id, v);
+      if (v.email) vendorMap.set(v.email, v);
+    });
+
+    const products = this.getProducts();
+    let updatedCount = 0;
+
+    const updatedProducts = products.map(p => {
+      // If targetVendorId is specified, skip products that don't belong to this vendor
+      if (targetVendorId) {
+        const vendor = p.vendorId ? vendorMap.get(p.vendorId) : undefined;
+        const matchVendor = p.vendorId === targetVendorId || (vendor && vendor.id === targetVendorId);
+        if (!matchVendor) {
+          return p;
+        }
+      }
+
+      const vendor = p.vendorId ? vendorMap.get(p.vendorId) : undefined;
+      const effectiveCommissionRate = (vendor && vendor.customCommissionRate !== undefined)
+        ? vendor.customCommissionRate
+        : globalRate;
+
+      // Determine vendor base price (payout)
+      let basePrice = p.vendorPrice ?? p.vendorPayout;
+      if (basePrice === undefined || basePrice <= 0) {
+        if (p.commissionRate !== undefined && p.commissionRate > 0) {
+          basePrice = Math.round(p.salePrice / (1 + (p.commissionRate / 100)));
+        } else {
+          basePrice = p.salePrice || p.price || 0;
+        }
+      }
+
+      // Calculate new commission amount and final selling price
+      const commAmt = Math.round(((basePrice * effectiveCommissionRate) / 100) * 100) / 100;
+      const newFinalPrice = Math.round(basePrice + commAmt);
+
+      const isChanged = p.commissionRate !== effectiveCommissionRate ||
+                        p.salePrice !== newFinalPrice ||
+                        p.finalPrice !== newFinalPrice ||
+                        p.commissionAmount !== commAmt ||
+                        p.vendorPrice !== basePrice;
+
+      if (isChanged) {
+        updatedCount++;
+        const now = new Date().toISOString();
+        return {
+          ...p,
+          vendorPrice: basePrice,
+          vendorPayout: basePrice,
+          commissionRate: effectiveCommissionRate,
+          commissionAmount: commAmt,
+          finalPrice: newFinalPrice,
+          salePrice: newFinalPrice,
+          price: p.mrp && p.mrp > newFinalPrice ? p.mrp : newFinalPrice,
+          updatedAt: now
+        };
+      }
+
+      return p;
+    });
+
+    if (updatedCount > 0) {
+      this.saveProducts(updatedProducts);
+    }
+
+    return { updatedCount, updatedProducts };
+  },
   addProduct(prod: Product) {
     const list = this.getProducts();
     list.unshift(prod);
