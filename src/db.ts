@@ -699,6 +699,9 @@ export const dbLocal = {
     if (!localStorage.getItem(STORAGE_KEYS.BRAND_REQUESTS)) this.set(STORAGE_KEYS.BRAND_REQUESTS, []);
     if (!localStorage.getItem(STORAGE_KEYS.SOCIAL_LINKS)) this.set(STORAGE_KEYS.SOCIAL_LINKS, [DEFAULT_SOCIAL_LINKS]);
     
+    // Auto-approve all pending audit products
+    this.approveAllPendingProducts();
+
     // Do not auto-login by default to allow showing login screen on startup
     this.set(STORAGE_KEYS.CURRENT_USER, null);
 
@@ -814,6 +817,33 @@ export const dbLocal = {
     this.set(STORAGE_KEYS.PRODUCTS, products);
     syncListToFirestoreWithDeletions('products', products, old);
     window.dispatchEvent(new Event('healnex_db_update'));
+  },
+  approveAllPendingProducts(): number {
+    const now = new Date().toISOString();
+    const products = this.getProducts();
+    let updatedCount = 0;
+    const updated = products.map(p => {
+      const statusLower = (p.status || '').toLowerCase();
+      const isPending = !p.status || statusLower === 'pending' || statusLower === 'draft' || statusLower === 'changesrequested' || statusLower === 'needs_changes' || p.published !== true;
+      if (isPending) {
+        updatedCount++;
+        return {
+          ...p,
+          status: 'Approved' as const,
+          published: true,
+          isActive: true,
+          approvedAt: now,
+          publishedAt: now,
+          updatedAt: now
+        };
+      }
+      return p;
+    });
+
+    if (updatedCount > 0) {
+      this.saveProducts(updated);
+    }
+    return updatedCount;
   },
   addProduct(prod: Product) {
     const list = this.getProducts();

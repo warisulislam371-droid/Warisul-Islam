@@ -592,6 +592,65 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     setSelectedProductIds([]);
   };
 
+  const handleApproveAllPendingProducts = () => {
+    const now = new Date().toISOString();
+    let count = 0;
+    const vendorIdsToEnsureApproved = new Set<string>();
+
+    const updated = products.map(p => {
+      const statusLower = (p.status || '').toLowerCase();
+      const isPendingAudit = !p.status || statusLower === 'pending' || statusLower === 'draft' || statusLower === 'changesrequested' || statusLower === 'needs_changes' || p.published !== true;
+      if (isPendingAudit) {
+        count++;
+        if (p.vendorId) {
+          vendorIdsToEnsureApproved.add(p.vendorId);
+        }
+        dbLocal.addNotification(
+          p.vendorId,
+          `Product Approved & Live: ${p.name}`,
+          `Your product "${p.name}" (SKU: ${p.sku}) has been approved and published live on the marketplace! Customers can now view and purchase it.`,
+          'product_approved'
+        );
+        return {
+          ...p,
+          status: 'Approved' as const,
+          published: true,
+          isActive: true,
+          approvedBy: currentUser?.id || 'admin',
+          approvedAt: now,
+          publishedAt: now,
+          updatedAt: now
+        };
+      }
+      return p;
+    });
+
+    if (count === 0) {
+      addToast('All products are already approved and published live on the marketplace!', 'info');
+      return;
+    }
+
+    if (vendorIdsToEnsureApproved.size > 0) {
+      const allVendors = dbLocal.getVendors();
+      let vendorUpdated = false;
+      const updatedVendors = allVendors.map(v => {
+        if (vendorIdsToEnsureApproved.has(v.id) && v.status !== 'Approved') {
+          vendorUpdated = true;
+          return { ...v, status: 'Approved' as const, updatedAt: now };
+        }
+        return v;
+      });
+      if (vendorUpdated) {
+        dbLocal.saveVendors(updatedVendors);
+        setVendors(updatedVendors);
+      }
+    }
+
+    dbLocal.saveProducts(updated);
+    setProducts(updated);
+    addToast(`Successfully approved & published ALL ${count} pending audit product(s) live to marketplace!`, 'success');
+  };
+
   // Admin Vendor Directory Management states
   const [vendorSearchText, setVendorSearchText] = useState('');
   const [vendorStatusFilter, setVendorStatusFilter] = useState<string>('All');
@@ -2968,8 +3027,21 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                   Full administrative control over marketplace inventory: audit listings, approve & publish to live customer portal, or reject listings with notes.
                 </p>
               </div>
-              <div className="flex items-center gap-2 text-xs font-bold bg-teal-50 text-teal-800 px-4 py-2.5 rounded-xl border border-teal-200">
-                <Shield className="w-4 h-4 text-teal-600" /> Catalog Audit Mode Active
+              <div className="flex flex-wrap items-center gap-2">
+                {pendingCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleApproveAllPendingProducts}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl border border-emerald-500 shadow-sm transition flex items-center gap-2 cursor-pointer animate-pulse"
+                    title="Approve and publish all pending audit products live immediately"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Approve All Pending Products ({pendingCount})
+                  </button>
+                )}
+                <div className="flex items-center gap-2 text-xs font-bold bg-teal-50 text-teal-800 px-4 py-2.5 rounded-xl border border-teal-200">
+                  <Shield className="w-4 h-4 text-teal-600" /> Catalog Audit Mode Active
+                </div>
               </div>
             </div>
 
@@ -3150,8 +3222,17 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
                     <div className="flex flex-wrap items-center gap-2">
                       <button
+                        onClick={handleApproveAllPendingProducts}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+                        title="Approve and publish all pending products live to the marketplace"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Approve All Pending Products
+                      </button>
+
+                      <button
                         onClick={() => handleExportProductsCSV(selectedProducts.length > 0 ? selectedProducts : filteredProducts)}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-1.5"
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-1.5"
                         title="Export products to CSV"
                       >
                         <Download className="w-3.5 h-3.5" />
