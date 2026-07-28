@@ -32,8 +32,10 @@ import {
   Percent,
   Check,
   Download,
-  QrCode
+  QrCode,
+  ZoomIn
 } from 'lucide-react';
+import { ImageLightboxModal } from './ImageLightboxModal';
 
 interface EnterpriseHomepageProps {
   products: Product[];
@@ -71,6 +73,7 @@ export default function EnterpriseHomepage({
   const [heroSlide, setHeroSlide] = useState(0);
   const [sidebarExpandedCategory, setSidebarExpandedCategory] = useState<string | null>(null);
   const [emailInput, setEmailInput] = useState('');
+  const [lightboxProduct, setLightboxProduct] = useState<Product | null>(null);
   const [dealOfDay, setDealOfDay] = useState<DealOfDay>(() => dbLocal.getDealOfDay());
   const [countdown, setCountdown] = useState({
     hours: dbLocal.getDealOfDay().hours || 14,
@@ -418,14 +421,25 @@ export default function EnterpriseHomepage({
           </button>
         </div>
 
-        {/* Image Container */}
-        <div className="h-44 w-full rounded-xl overflow-hidden bg-[#F5F7FA] p-2 relative mb-3 flex items-center justify-center">
+        {/* Image Container with Lightbox Zoom Trigger */}
+        <div 
+          onClick={(e) => {
+            e.stopPropagation();
+            setLightboxProduct(product);
+          }}
+          className="h-44 w-full rounded-xl overflow-hidden bg-[#F5F7FA] p-2 relative mb-3 flex items-center justify-center cursor-pointer group/img transition-all hover:bg-slate-200/50"
+          title="Click thumbnail to inspect & zoom medical image in lightbox modal"
+        >
           <img
             src={product.images && product.images.length > 0 ? product.images[0] : 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400'}
             alt={product.name}
-            className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-500"
+            className="max-h-full max-w-full object-contain group-hover/img:scale-105 transition-transform duration-500"
             referrerPolicy="no-referrer"
           />
+          <div className="absolute inset-0 bg-slate-950/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white font-extrabold text-[11px] backdrop-blur-[1px]">
+            <ZoomIn className="w-4 h-4 text-emerald-400" />
+            <span>Inspect &amp; Zoom</span>
+          </div>
         </div>
 
         {/* Product Details */}
@@ -1292,6 +1306,14 @@ export default function EnterpriseHomepage({
           </form>
         </div>
       </section>
+
+      {/* Image Lightbox / Modal Zoom Feature */}
+      <ImageLightboxModal
+        isOpen={!!lightboxProduct}
+        onClose={() => setLightboxProduct(null)}
+        product={lightboxProduct}
+        onAddToCart={onAddToCart}
+      />
 
     </div>
   );

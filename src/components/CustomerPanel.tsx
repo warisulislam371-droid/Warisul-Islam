@@ -52,8 +52,10 @@ import {
   Trash2,
   TrendingDown,
   Smartphone,
-  ArrowUpDown
+  ArrowUpDown,
+  ZoomIn
 } from 'lucide-react';
+import { ImageLightboxModal } from './ImageLightboxModal';
 import InvoicePDF from './InvoicePDF';
 import { PolicyType } from './PolicyModal';
 import { getSliceUpiQrDataUrl } from '../utils/sliceQrSvg';
@@ -118,6 +120,7 @@ export default function CustomerPanel({
 
   // Detailed Modal view of a product
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [lightboxProduct, setLightboxProduct] = useState<Product | null>(null);
 
   // Price Alert state
   const [priceAlertModalProduct, setPriceAlertModalProduct] = useState<Product | null>(null);
@@ -3053,15 +3056,23 @@ export default function CustomerPanel({
       {selectedProduct && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-100 animate-scale-up flex flex-col md:flex-row">
-            <div className="w-full md:w-1/2 bg-slate-100 h-64 md:h-auto overflow-hidden relative">
+            <div 
+              onClick={() => setLightboxProduct(selectedProduct)}
+              className="w-full md:w-1/2 bg-slate-100 h-64 md:h-auto overflow-hidden relative cursor-pointer group/modalimg"
+              title="Click image to open high-res Lightbox & Zoom"
+            >
               <img
                 src={selectedProduct.images[0]}
                 alt={selectedProduct.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover group-hover/modalimg:scale-105 transition-transform duration-300"
               />
+              <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover/modalimg:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white font-extrabold text-xs backdrop-blur-[1px]">
+                <ZoomIn className="w-4 h-4 text-emerald-400" />
+                <span>Inspect &amp; Zoom</span>
+              </div>
               <button
-                onClick={() => handleToggleWishlist(selectedProduct.id)}
-                className="p-1.5 bg-white text-slate-400 hover:text-rose-600 rounded-full absolute top-4 left-4 shadow-sm"
+                onClick={(e) => { e.stopPropagation(); handleToggleWishlist(selectedProduct.id); }}
+                className="p-1.5 bg-white text-slate-400 hover:text-rose-600 rounded-full absolute top-4 left-4 shadow-sm z-10"
               >
                 <Heart className={`w-4 h-4 ${wishlist.includes(selectedProduct.id) ? 'fill-rose-600 text-rose-600' : ''}`} />
               </button>
@@ -3437,6 +3448,14 @@ export default function CustomerPanel({
           isDarkMode={isDarkMode}
         />
       )}
+
+      {/* Image Lightbox / Modal Zoom Feature */}
+      <ImageLightboxModal
+        isOpen={!!lightboxProduct}
+        onClose={() => setLightboxProduct(null)}
+        product={lightboxProduct}
+        onAddToCart={handleAddToCart}
+      />
 
     </div>
   );
