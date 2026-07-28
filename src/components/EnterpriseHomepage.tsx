@@ -33,7 +33,8 @@ import {
   Check,
   Download,
   QrCode,
-  ZoomIn
+  ZoomIn,
+  Flame
 } from 'lucide-react';
 import { ImageLightboxModal } from './ImageLightboxModal';
 
@@ -471,6 +472,33 @@ export default function EnterpriseHomepage({
               </span>
             )}
           </div>
+
+          {/* Urgency Progress Bar for Low Stock (< 20 units) */}
+          {((product.stockQuantity !== undefined ? product.stockQuantity : 15) < 20) && (
+            <div className="pt-1.5 space-y-1">
+              <div className="flex items-center justify-between text-[10px] font-bold">
+                <span className="text-amber-700 flex items-center gap-1">
+                  <Flame className="w-3 h-3 text-amber-500 fill-amber-500 animate-pulse" />
+                  Only {product.stockQuantity !== undefined ? product.stockQuantity : 15} left in stock!
+                </span>
+                <span className="text-slate-400 font-mono text-[9px]">
+                  {product.stockQuantity !== undefined ? product.stockQuantity : 15}/20
+                </span>
+              </div>
+              <div className="w-full bg-amber-100/80 rounded-full h-1.5 overflow-hidden border border-amber-200/50">
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    (product.stockQuantity !== undefined ? product.stockQuantity : 15) <= 5
+                      ? 'bg-rose-500'
+                      : (product.stockQuantity !== undefined ? product.stockQuantity : 15) <= 10
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${Math.max(8, Math.min(100, ((product.stockQuantity !== undefined ? product.stockQuantity : 15) / 20) * 100))}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Verification & EMI Badges */}
           <div className="flex flex-wrap items-center gap-1 pt-1 text-[9px] font-semibold text-slate-500">

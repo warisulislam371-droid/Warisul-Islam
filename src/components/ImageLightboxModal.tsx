@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, ZoomIn, ZoomOut, RotateCcw, ChevronLeft, ChevronRight, 
   Maximize2, Minimize2, ShieldCheck, Tag, FileText, Check, 
-  Info, Sparkles, Building2, Layers
+  Info, Sparkles, Building2, Layers, Flame
 } from 'lucide-react';
 import { Product } from '../types';
 
@@ -325,6 +325,31 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
                     </span>
                   )}
                 </div>
+                {((product.stockQuantity !== undefined ? product.stockQuantity : 15) < 20) && (
+                  <div className="pt-2 border-t border-slate-700/50 mt-2 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold">
+                      <span className="text-amber-400 flex items-center gap-1">
+                        <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400 animate-pulse" />
+                        Only {product.stockQuantity !== undefined ? product.stockQuantity : 15} left in stock!
+                      </span>
+                      <span className="text-slate-400 font-mono text-[10px]">
+                        {product.stockQuantity !== undefined ? product.stockQuantity : 15}/20
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-700">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          (product.stockQuantity !== undefined ? product.stockQuantity : 15) <= 5
+                            ? 'bg-rose-500'
+                            : (product.stockQuantity !== undefined ? product.stockQuantity : 15) <= 10
+                            ? 'bg-amber-400'
+                            : 'bg-emerald-400'
+                        }`}
+                        style={{ width: `${Math.max(8, Math.min(100, ((product.stockQuantity !== undefined ? product.stockQuantity : 15) / 20) * 100))}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
                 <p className="text-[10px] text-slate-400">Inclusive of all taxes ({product.gstRate}% GST) | HSN: {product.hsnCode}</p>
               </div>
 
