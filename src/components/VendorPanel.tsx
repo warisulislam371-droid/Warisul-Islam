@@ -703,13 +703,13 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
         const brandVal = (brandIdx !== -1 && cols[brandIdx]) ? cols[brandIdx].trim() : (vendorProfile?.companyName || 'Generic Medical');
         const catVal = (catIdx !== -1 && cols[catIdx]) ? cols[catIdx].trim() : 'Medical Equipment';
         const subcatVal = (subcatIdx !== -1 && cols[subcatIdx]) ? cols[subcatIdx].trim() : 'General Equipment';
-        const rawPrice = priceIdx !== -1 ? cols[priceIdx] : cols[5];
+        const rawPrice = priceIdx !== -1 ? cols[priceIdx] : (cols[5] || '');
         const priceVal = cleanNum(rawPrice, 1000);
-        const mrpVal = cleanNum(mrpIdx !== -1 ? cols[mrpIdx] : cols[7], Math.round(priceVal * 1.25));
-        const moqVal = cleanNum(moqIdx !== -1 ? cols[moqIdx] : cols[8], 1);
-        const stockVal = cleanNum(stockIdx !== -1 ? cols[stockIdx] : cols[9], 10);
+        const mrpVal = mrpIdx !== -1 ? cleanNum(cols[mrpIdx], Math.round(priceVal * 1.25)) : Math.round(priceVal * 1.25);
+        const moqVal = moqIdx !== -1 ? cleanNum(cols[moqIdx], 1) : 1;
+        const stockVal = stockIdx !== -1 ? cleanNum(cols[stockIdx], 10) : 10;
         const hsnVal = (hsnIdx !== -1 && cols[hsnIdx]) ? cols[hsnIdx].trim() : '90189019';
-        const gstVal = cleanNum(gstIdx !== -1 ? cols[gstIdx] : cols[11], 12);
+        const gstVal = gstIdx !== -1 ? cleanNum(cols[gstIdx], 12) : 12;
         const descVal = (descIdx !== -1 && cols[descIdx]) ? cols[descIdx].trim() : `${nameVal} - High quality hospital grade clinical equipment.`;
         
         let imgVal = (imgIdx !== -1 && cols[imgIdx]) ? cols[imgIdx].trim() : 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400';
@@ -853,33 +853,53 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
       dbLocal.saveBrands(currentBrands);
     }
 
-    const newProducts: Product[] = validRows.map((r, i) => ({
-      id: `prod-blk-${Date.now()}-${i}`,
-      vendorId: currentUser.id,
-      vendorName: vendorProfile.companyName || 'Vendor Partner',
-      name: r.name.trim(),
-      sku: r.sku.trim() || `SKU-BLK-${Math.floor(Math.random() * 90000 + 10000)}`,
-      brand: r.brand.trim() || vendorProfile.companyName || 'HealNex Partner',
-      category: r.category || 'Medical Equipment',
-      subcategory: r.subcategory || 'General',
-      description: r.description.trim() || `${r.name} - Professional medical & hospital grade equipment.`,
-      specifications: [{ key: 'Quality Standard', value: 'Hospital Grade Certified' }],
-      price: Number(r.price) || 1000,
-      salePrice: Number(r.salePrice) || Number(r.price) || 900,
-      mrp: Number(r.mrp) || Math.round((Number(r.price) || 1000) * 1.25),
-      wholesalePrice: Number(r.salePrice) || Number(r.price) || 900,
-      moq: Number(r.moq) || 1,
-      stockQuantity: Number(r.stockQuantity) || 10,
-      unit: 'Piece',
-      hsnCode: r.hsnCode || '90189019',
-      gstRate: Number(r.gstRate) || 12,
-      warranty: '1 Year Standard Warranty',
-      countryOfOrigin: 'India',
-      images: [r.imageUrl || 'https://images.unsplash.com/photo-1516549655169-df83a0774514'],
-      status: asDraft ? 'Draft' : 'Pending',
-      createdAt: now,
-      performance: { views: 0, inquiries: 0, sales: 0 }
-    }));
+    const globalCommissionRate = dbLocal.getPaymentSettings().platformCommissionRate || 10;
+    const vendorCommRate = vendorProfile.customCommissionRate !== undefined ? vendorProfile.customCommissionRate : globalCommissionRate;
+
+    const newProducts: Product[] = validRows.map((r, i) => {
+      const vPrice = Number(r.price) || 1000;
+      const commAmount = Math.round((vPrice * vendorCommRate) / 100 * 100) / 100;
+      const finalPrice = Math.round((vPrice + commAmount) * 100) / 100;
+      const mrpPrice = Number(r.mrp) || Math.round(vPrice * 1.25);
+
+      return {
+        id: `prod-blk-${Date.now()}-${i}`,
+        vendorId: currentUser.id,
+        vendorName: vendorProfile.companyName || 'Vendor Partner',
+        name: r.name.trim(),
+        sku: r.sku.trim() || `SKU-BLK-${Math.floor(Math.random() * 90000 + 10000)}`,
+        brand: r.brand.trim() || vendorProfile.companyName || 'HealNex Partner',
+        category: r.category || 'Medical Equipment',
+        subcategory: r.subcategory || 'General',
+        description: r.description.trim() || `${r.name} - Professional medical & hospital grade equipment.`,
+        shortDescription: r.description.trim() || r.name.trim(),
+        fullDescription: r.description.trim() || `${r.name} - Professional medical & hospital grade equipment.`,
+        specifications: [{ key: 'Quality Standard', value: 'Hospital Grade Certified' }],
+        price: finalPrice,
+        salePrice: finalPrice,
+        mrp: mrpPrice,
+        wholesalePrice: Number(r.salePrice) || vPrice,
+        vendorPrice: vPrice,
+        commissionRate: vendorCommRate,
+        commissionAmount: commAmount,
+        finalPrice: finalPrice,
+        vendorPayout: vPrice,
+        moq: Number(r.moq) || 1,
+        stockQuantity: Number(r.stockQuantity) || 10,
+        unit: 'Piece',
+        hsnCode: r.hsnCode || '90189019',
+        gstRate: Number(r.gstRate) || 12,
+        warranty: '1 Year Standard Warranty',
+        countryOfOrigin: 'India',
+        images: [r.imageUrl || 'https://images.unsplash.com/photo-1516549655169-df83a0774514'],
+        status: asDraft ? 'Draft' : 'Pending',
+        published: false,
+        isActive: false,
+        createdAt: now,
+        updatedAt: now,
+        performance: { views: 0, inquiries: 0, sales: 0 }
+      };
+    });
 
     const all = dbLocal.getProducts();
     dbLocal.saveProducts([...newProducts, ...all]);

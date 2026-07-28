@@ -531,6 +531,45 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     setSelectedProductIds([]);
   };
 
+  const handleBulkPublishProducts = () => {
+    if (selectedProductIds.length === 0) {
+      addToast('Please select products to publish & make live.', 'info');
+      return;
+    }
+
+    const selectedSet = new Set(selectedProductIds);
+    const now = new Date().toISOString();
+    let count = 0;
+
+    const updated = products.map(p => {
+      if (selectedSet.has(p.id)) {
+        count++;
+        dbLocal.addNotification(
+          p.vendorId,
+          `Product Approved & Live: ${p.name}`,
+          `Your product "${p.name}" (SKU: ${p.sku}) has been approved and published live on the marketplace! Customers can now view and purchase it.`,
+          'product_approved'
+        );
+        return {
+          ...p,
+          status: 'Approved' as any,
+          published: true,
+          isActive: true,
+          approvedBy: currentUser?.id || 'admin',
+          approvedAt: now,
+          publishedAt: now,
+          updatedAt: now
+        };
+      }
+      return p;
+    });
+
+    dbLocal.saveProducts(updated);
+    setProducts(updated);
+    addToast(`Successfully approved & published ${count} selected product(s) live to marketplace!`, 'success');
+    setSelectedProductIds([]);
+  };
+
   // Admin Vendor Directory Management states
   const [vendorSearchText, setVendorSearchText] = useState('');
   const [vendorStatusFilter, setVendorStatusFilter] = useState<string>('All');
@@ -3083,14 +3122,25 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       </button>
 
                       {selectedProducts.length > 0 && (
-                        <button
-                          onClick={handleBulkDeleteProducts}
-                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-1.5 animate-scale-up"
-                          title="Delete selected products"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Delete Selected ({selectedProducts.length})
-                        </button>
+                        <>
+                          <button
+                            onClick={handleBulkPublishProducts}
+                            className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition flex items-center gap-1.5 animate-scale-up cursor-pointer"
+                            title="Approve and publish selected products live to marketplace catalog"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Publish &amp; Make Live ({selectedProducts.length})
+                          </button>
+
+                          <button
+                            onClick={handleBulkDeleteProducts}
+                            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-1.5 animate-scale-up cursor-pointer"
+                            title="Delete selected products"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete Selected ({selectedProducts.length})
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>

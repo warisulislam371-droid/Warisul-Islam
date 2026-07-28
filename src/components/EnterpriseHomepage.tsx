@@ -254,9 +254,8 @@ export default function EnterpriseHomepage({
         seen.add(key);
 
         const count = products.filter(p =>
-          p.category.toLowerCase() === key ||
-          p.category.toLowerCase().includes(key) ||
-          (p.subcategory && p.subcategory.toLowerCase().includes(key))
+          (p.category || '').trim().toLowerCase() === key ||
+          (p.subcategory || '').trim().toLowerCase() === key
         ).length;
 
         const preset = defaultPresetMap[key];
@@ -344,27 +343,20 @@ export default function EnterpriseHomepage({
     ];
 
     return staticDefs.map(def => {
-      // Find matching products
+      // Find matching products strictly by category or subcategory
       const matched = products.filter(p => {
-        const catLower = (p.category || '').toLowerCase();
-        const subcatLower = (p.subcategory || '').toLowerCase();
-        const nameLower = (p.name || '').toLowerCase();
-        const descLower = (p.shortDescription || '').toLowerCase();
+        const catLower = (p.category || '').trim().toLowerCase();
+        const subcatLower = (p.subcategory || '').trim().toLowerCase();
 
         return def.keywords.some(kw => 
           catLower.includes(kw) || 
-          subcatLower.includes(kw) || 
-          nameLower.includes(kw) || 
-          descLower.includes(kw)
+          subcatLower.includes(kw)
         );
       });
 
-      // Fallback if matched count is small, take general products to keep slider full
-      const itemsToDisplay = matched.length >= 2 ? matched : (matched.concat(products.filter(p => !matched.includes(p))).slice(0, 8));
-
       return {
         ...def,
-        products: itemsToDisplay
+        products: matched
       };
     });
   }, [products]);
@@ -941,14 +933,24 @@ export default function EnterpriseHomepage({
             </div>
 
             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
-              {products
-                .filter(p => 
-                  p.category.toLowerCase().includes(selectedCategoryName.toLowerCase()) || 
-                  (p.subcategory && p.subcategory.toLowerCase().includes(selectedCategoryName.toLowerCase())) ||
-                  p.brand.toLowerCase().includes(selectedCategoryName.toLowerCase()) ||
-                  p.name.toLowerCase().includes(selectedCategoryName.toLowerCase())
-                )
-                .map(renderProductCard)}
+              {(() => {
+                const sel = selectedCategoryName.trim().toLowerCase();
+                const matched = products.filter(p => {
+                  const catMatch = (p.category || '').trim().toLowerCase() === sel;
+                  const subMatch = (p.subcategory || '').trim().toLowerCase() === sel;
+                  return catMatch || subMatch;
+                });
+
+                if (matched.length === 0) {
+                  return (
+                    <div className="w-full py-8 text-center bg-slate-50 border border-slate-200 rounded-xl text-slate-500 font-medium text-sm">
+                      No products found under "{selectedCategoryName}". Try selecting another category or clear filters.
+                    </div>
+                  );
+                }
+
+                return matched.map(renderProductCard);
+              })()}
             </div>
           </section>
         )}

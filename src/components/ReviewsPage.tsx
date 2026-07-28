@@ -129,7 +129,7 @@ export default function ReviewsPage({
       (rev.hospitalName && rev.hospitalName.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesRating = selectedRating === 'all' || rev.rating === selectedRating;
-    const matchesCategory = selectedCategory === 'all' || prodCat === selectedCategory;
+    const matchesCategory = selectedCategory === 'all' || prodCat.trim().toLowerCase() === selectedCategory.trim().toLowerCase();
 
     return matchesSearch && matchesRating && matchesCategory;
   });

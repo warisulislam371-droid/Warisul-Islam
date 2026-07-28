@@ -1126,6 +1126,7 @@ export default function VendorProductManager({
     );
 
     showToast(`Successfully imported ${validProds.length} products!`);
+    setImportProducts([]);
     setShowBulkImportModal(false);
     onRefresh();
   };

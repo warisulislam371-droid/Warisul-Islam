@@ -433,9 +433,11 @@ export default function CustomerPanel({
 
     // 1. Filter out non-matching products
     const matched = products.filter(p => {
-      // Searching scans ALL categories regardless of category selection
-      const matchesCategory = (selectedCategoryName && !hasSearch)
-        ? p.category.toLowerCase() === selectedCategoryName.toLowerCase()
+      const matchesCategory = (selectedCategoryName && selectedCategoryName.trim().toLowerCase() !== 'all')
+        ? (
+            (p.category || '').trim().toLowerCase() === selectedCategoryName.trim().toLowerCase() ||
+            (Boolean(p.subcategory) && (p.subcategory || '').trim().toLowerCase() === selectedCategoryName.trim().toLowerCase())
+          )
         : true;
 
       const matchesBrand = filterBrand ? p.brand.toLowerCase() === filterBrand.toLowerCase() || p.brand.toLowerCase().includes(filterBrand.toLowerCase()) : true;
