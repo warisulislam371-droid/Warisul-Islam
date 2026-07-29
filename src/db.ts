@@ -853,22 +853,24 @@ export const dbLocal = {
     vendors.forEach(v => {
       vendorMap.set(v.id, v);
       if (v.email) vendorMap.set(v.email, v);
+      if (v.companyName) vendorMap.set(v.companyName.trim().toLowerCase(), v);
     });
 
     const products = this.getProducts();
     let updatedCount = 0;
 
     const updatedProducts = products.map(p => {
+      const vendor = (p.vendorId ? vendorMap.get(p.vendorId) : undefined) ||
+                     (p.vendorName ? vendorMap.get(p.vendorName.trim().toLowerCase()) : undefined);
+
       // If targetVendorId is specified, skip products that don't belong to this vendor
       if (targetVendorId) {
-        const vendor = p.vendorId ? vendorMap.get(p.vendorId) : undefined;
         const matchVendor = p.vendorId === targetVendorId || (vendor && vendor.id === targetVendorId);
         if (!matchVendor) {
           return p;
         }
       }
 
-      const vendor = p.vendorId ? vendorMap.get(p.vendorId) : undefined;
       const effectiveCommissionRate = (vendor && vendor.customCommissionRate !== undefined)
         ? vendor.customCommissionRate
         : globalRate;
@@ -895,8 +897,9 @@ export const dbLocal = {
 
       if (isChanged) {
         updatedCount++;
+        const oldSalePrice = p.salePrice || p.price || 0;
         const now = new Date().toISOString();
-        return {
+        const updatedProd = {
           ...p,
           vendorPrice: basePrice,
           vendorPayout: basePrice,
@@ -907,6 +910,8 @@ export const dbLocal = {
           price: p.mrp && p.mrp > newFinalPrice ? p.mrp : newFinalPrice,
           updatedAt: now
         };
+        this.checkAndTriggerPriceAlerts(updatedProd, oldSalePrice, p.stockQuantity);
+        return updatedProd;
       }
 
       return p;

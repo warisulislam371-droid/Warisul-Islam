@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Notification, Category } from '../types';
+import { User, Notification, Category, PriceAlert } from '../types';
 import { dbLocal } from '../db';
 import {
   Activity,
@@ -29,7 +29,9 @@ import {
   Menu,
   X,
   Layers,
-  ArrowRight
+  ArrowRight,
+  TrendingDown,
+  Tag
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -75,6 +77,7 @@ export default function Navbar({
   const [showImageSearchModal, setShowImageSearchModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([]);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -103,8 +106,10 @@ export default function Navbar({
 
   useEffect(() => {
     setNotifications(dbLocal.getNotifications());
+    setPriceAlerts(dbLocal.getPriceAlerts());
     const handleDbUpdate = () => {
       setNotifications(dbLocal.getNotifications());
+      setPriceAlerts(dbLocal.getPriceAlerts());
     };
     window.addEventListener('healnex_db_update', handleDbUpdate);
     return () => window.removeEventListener('healnex_db_update', handleDbUpdate);
@@ -117,6 +122,13 @@ export default function Navbar({
   });
 
   const unreadCount = displayedNotifications.filter(n => !n.read).length;
+  const triggeredAlertsCount = priceAlerts.filter(a => a.status === 'triggered').length;
+  const priceDropNotifs = displayedNotifications.filter(n =>
+    n.title.toLowerCase().includes('price') || n.message.toLowerCase().includes('price') || n.message.toLowerCase().includes('drop')
+  );
+  const unreadPriceDropNotifsCount = priceDropNotifs.filter(n => !n.read).length;
+  const priceDropBadgeCount = triggeredAlertsCount || unreadPriceDropNotifsCount || (priceAlerts.length > 0 ? priceAlerts.length : 0);
+  const hasActivePriceDropTrigger = triggeredAlertsCount > 0 || unreadPriceDropNotifsCount > 0;
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -357,6 +369,26 @@ export default function Navbar({
             )}
           </button>
 
+          {/* Price Drops Badge */}
+          <button
+            onClick={() => onNavigate('price-alerts')}
+            className="p-2 rounded-2xl text-slate-600 hover:text-amber-600 hover:bg-amber-50 transition relative flex flex-col items-center justify-center text-[10px] font-bold"
+            title="Price Drop Alerts & Saved Interests"
+          >
+            <TrendingDown className={`w-5 h-5 ${hasActivePriceDropTrigger ? 'text-amber-500 animate-pulse' : 'text-slate-700'}`} />
+            <span className="hidden lg:block text-[9px] mt-0.5">Price Drops</span>
+            {hasActivePriceDropTrigger ? (
+              <span className="absolute -top-1 -right-1 bg-gradient-to-r from-amber-500 to-rose-500 text-white text-[9px] font-mono font-black px-1.5 py-0.5 rounded-full shadow-md animate-bounce flex items-center gap-0.5">
+                <Sparkles className="w-2.5 h-2.5" />
+                {triggeredAlertsCount || unreadPriceDropNotifsCount}
+              </span>
+            ) : priceAlerts.length > 0 ? (
+              <span className="absolute top-1 right-1 bg-amber-500 text-white text-[9px] font-mono font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                {priceAlerts.length}
+              </span>
+            ) : null}
+          </button>
+
           {/* Notifications */}
           <div className="relative">
             <button
@@ -379,6 +411,20 @@ export default function Navbar({
                   <h4 className="font-bold text-xs">Notifications</h4>
                   <span className="text-[10px] text-teal-600 font-semibold">{unreadCount} New</span>
                 </div>
+                {hasActivePriceDropTrigger && (
+                  <div className="p-2.5 bg-gradient-to-r from-amber-50 to-emerald-50 border border-amber-200 rounded-xl mb-2 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                      <TrendingDown className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{priceDropBadgeCount} Price Drop{priceDropBadgeCount > 1 ? 's' : ''} Alert Triggered!</span>
+                    </div>
+                    <button
+                      onClick={() => { setShowNotifications(false); onNavigate('price-alerts'); }}
+                      className="text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white px-2 py-1 rounded-lg transition"
+                    >
+                      View
+                    </button>
+                  </div>
+                )}
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {displayedNotifications.length === 0 ? (
                     <p className="text-xs text-slate-400 text-center py-4">No recent updates</p>

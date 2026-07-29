@@ -34,7 +34,9 @@ import {
   Download,
   QrCode,
   ZoomIn,
-  Flame
+  Flame,
+  Bell,
+  TrendingDown
 } from 'lucide-react';
 import { ImageLightboxModal } from './ImageLightboxModal';
 
@@ -51,6 +53,7 @@ interface EnterpriseHomepageProps {
   onAddToWishlist: (productId: string) => void;
   onAddToCompare: (product: Product) => void;
   onQuickView: (product: Product) => void;
+  onPriceAlert?: (product: Product) => void;
   onBecomeSeller?: () => void;
   addToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
@@ -68,6 +71,7 @@ export default function EnterpriseHomepage({
   onAddToWishlist,
   onAddToCompare,
   onQuickView,
+  onPriceAlert,
   onBecomeSeller,
   addToast
 }: EnterpriseHomepageProps) {
@@ -75,6 +79,15 @@ export default function EnterpriseHomepage({
   const [sidebarExpandedCategory, setSidebarExpandedCategory] = useState<string | null>(null);
   const [emailInput, setEmailInput] = useState('');
   const [lightboxProduct, setLightboxProduct] = useState<Product | null>(null);
+  const [savedPriceAlerts, setSavedPriceAlerts] = useState(dbLocal.getPriceAlerts());
+
+  useEffect(() => {
+    const handleDbUpdate = () => {
+      setSavedPriceAlerts(dbLocal.getPriceAlerts());
+    };
+    window.addEventListener('healnex_db_update', handleDbUpdate);
+    return () => window.removeEventListener('healnex_db_update', handleDbUpdate);
+  }, []);
   const [dealOfDay, setDealOfDay] = useState<DealOfDay>(() => dbLocal.getDealOfDay());
   const [countdown, setCountdown] = useState({
     hours: dbLocal.getDealOfDay().hours || 14,
@@ -378,6 +391,10 @@ export default function EnterpriseHomepage({
 
   const renderProductCard = (product: Product) => {
     const discount = Math.round(((product.price - product.salePrice) / product.price) * 100);
+    const userAlert = savedPriceAlerts.find(a => a.productId === product.id);
+    const hasActiveAlert = userAlert && userAlert.status === 'active';
+    const isTriggeredAlert = userAlert && userAlert.status === 'triggered';
+
     return (
       <div 
         key={product.id}
@@ -419,6 +436,18 @@ export default function EnterpriseHomepage({
             title="Quick View"
           >
             <Eye className="w-3.5 h-3.5" />
+          </button>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onPriceAlert) onPriceAlert(product);
+            }}
+            className={`p-1.5 rounded-full shadow-md transition ${
+              hasActiveAlert || isTriggeredAlert ? 'bg-amber-500 text-white' : 'bg-white/90 hover:bg-amber-50 text-slate-600 hover:text-amber-600'
+            }`}
+            title="Notify me of price drops"
+          >
+            <Bell className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -472,6 +501,55 @@ export default function EnterpriseHomepage({
               </span>
             )}
           </div>
+
+          {/* Notify me of price drops button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onPriceAlert) {
+                onPriceAlert(product);
+              } else {
+                const newAlert = {
+                  id: userAlert?.id || `alert-${Date.now()}`,
+                  userEmail: 'procurement@healnex.com',
+                  productName: product.name,
+                  productId: product.id,
+                  productImage: product.images?.[0],
+                  vendorName: product.vendorName,
+                  currentPrice: product.salePrice || product.price,
+                  targetPrice: Math.round((product.salePrice || product.price) * 0.95),
+                  alertType: 'price_drop' as const,
+                  channel: 'both' as const,
+                  enableEmail: true,
+                  enablePush: true,
+                  createdAt: new Date().toISOString(),
+                  status: 'active' as const
+                };
+                dbLocal.addPriceAlert(newAlert);
+                addToast(`🔔 Price drop alert active for ${product.name}!`, 'success');
+              }
+            }}
+            className={`w-full py-1.5 px-2.5 rounded-xl text-[10px] font-bold border flex items-center justify-center gap-1.5 transition cursor-pointer my-1.5 ${
+              isTriggeredAlert
+                ? 'bg-rose-500 text-white border-rose-600 shadow-xs animate-pulse'
+                : hasActiveAlert
+                ? 'bg-amber-100 text-amber-900 border-amber-300 font-extrabold'
+                : 'bg-amber-50 hover:bg-amber-100/90 text-amber-800 border-amber-200/90 hover:border-amber-300'
+            }`}
+            title={
+              isTriggeredAlert
+                ? '⚡ Price reduced! Click to configure or view'
+                : hasActiveAlert
+                ? 'Price alert is active for this product'
+                : 'Notify me when this product price drops'
+            }
+          >
+            <Bell className={`w-3.5 h-3.5 ${hasActiveAlert || isTriggeredAlert ? 'fill-current text-current' : 'text-amber-600'}`} />
+            <span>
+              {isTriggeredAlert ? '⚡ Price Reduced!' : hasActiveAlert ? 'Price Alert Set' : 'Notify me of price drops'}
+            </span>
+          </button>
 
           {/* Urgency Progress Bar for Low Stock (< 20 units) */}
           {((product.stockQuantity !== undefined ? product.stockQuantity : 15) < 20) && (

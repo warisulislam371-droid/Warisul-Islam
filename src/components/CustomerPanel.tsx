@@ -1110,6 +1110,7 @@ export default function CustomerPanel({
               }
             }}
             onQuickView={(p) => setSelectedProduct(p)}
+            onPriceAlert={(p) => setPriceAlertModalProduct(p)}
             onBecomeSeller={onBecomeSeller}
             addToast={addToast}
           />
