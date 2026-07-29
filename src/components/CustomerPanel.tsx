@@ -1022,7 +1022,7 @@ export default function CustomerPanel({
 
       addToast(`Direct Sandbox Bypass Approved! Order #${newOrder.id} has been successfully created and routed.`, 'success');
     } else {
-      // Transition the RFQ status to PENDING_PAYMENT_VERIFICATION
+      // 1. Transition the RFQ status to PENDING_PAYMENT_VERIFICATION
       const updatedRfqs = dbLocal.getRfqs().map(r => {
         if (r.id === rfq.id) {
           return { 
@@ -1035,7 +1035,7 @@ export default function CustomerPanel({
       });
       dbLocal.saveRfqs(updatedRfqs);
 
-      // Update Quotations
+      // 2. Update Quotations
       const updatedQuotes = dbLocal.getQuotations().map(q => {
         if (q.id === quo.id) return { ...q, status: 'Accepted' as const };
         if (q.rfqId === rfq.id) return { ...q, status: 'Rejected' as const };
@@ -1043,18 +1043,67 @@ export default function CustomerPanel({
       });
       dbLocal.saveQuotations(updatedQuotes);
 
-      // Notify Admin about the escrow deposit matching
+      // 3. Create active Order for Admin Payment Verification
+      const sub = quo.totalPrice;
       const qGstRate = quo.gstRate !== undefined ? quo.gstRate : 12;
-      const totalPlusGst = (quo.totalPrice || 0) * (1 + qGstRate / 100);
+      const gst = sub * (qGstRate / 100);
+      const final = sub + gst;
 
+      const newOrder: Order = {
+        id: `ORD-${Math.floor(10000 + Math.random() * 90000)}`,
+        customerId: currentUser.id,
+        customerName: currentUser.name,
+        customerEmail: currentUser.email,
+        vendorId: quo.vendorId,
+        vendorName: quo.companyName,
+        items: [{
+          productId: rfq.id,
+          productName: `${rfq.productName} (RFQ Custom Specification)`,
+          productImage: 'https://images.unsplash.com/photo-1579684389782-64d84b5e901a',
+          price: quo.pricePerUnit,
+          quantity: rfq.quantity,
+          gstRate: qGstRate,
+          hsnCode: '90181100',
+          vendorId: quo.vendorId,
+          vendorName: quo.companyName,
+          vendorPrice: quo.pricePerUnit,
+          commissionRate: quo.commissionRateApplied || 10,
+          commissionAmount: quo.platform_fee || 0,
+          finalPrice: quo.pricePerUnit,
+          vendorPayout: (quo.vendor_base_price || (quo.pricePerUnit * 0.9)) * rfq.quantity
+        }],
+        totalAmount: sub,
+        gstAmount: gst,
+        discountAmount: 0,
+        finalAmount: final,
+        status: 'Awaiting Payment Verification',
+        paymentMethod: method,
+        paymentId: `pay_HN_${Date.now().toString().slice(-9)}`,
+        shippingAddress: {
+          address: rfq.deliveryLocation,
+          city: 'Clinical Hub',
+          state: 'Delhi',
+          pincode: '110001'
+        },
+        createdAt: new Date().toISOString(),
+        timeline: [
+          { status: 'Awaiting Payment Verification', time: new Date().toISOString(), note: `RFQ Tender quote accepted via ${method}. Payment proof awaiting Admin verification.` }
+        ]
+      };
+
+      const allOrders = dbLocal.getOrders();
+      allOrders.unshift(newOrder);
+      dbLocal.saveOrders(allOrders);
+
+      // Notify Admin about the escrow deposit matching
       dbLocal.addNotification(
         'admin',
-        'B2B Escrow Deposit Pending Verification',
-        `Client ${currentUser.name} has accepted Quote #${quo.id} for RFQ #${rfq.id}. A escrow deposit of ₹${totalPlusGst.toLocaleString()} (including ${qGstRate}% GST) via ${method} is awaiting your manual ledger/webhook verification.`,
+        'New Payment Verification Required (RFQ Escrow)',
+        `Client ${currentUser.name} accepted Quote #${quo.id} for RFQ #${rfq.id}. Order #${newOrder.id} (₹${final.toLocaleString('en-IN')}) via ${method} is awaiting payment verification.`,
         'payment_received'
       );
 
-      addToast(`Escrow payment gateway session authorized via ${method}. Status is now PENDING_PAYMENT_VERIFICATION.`, 'success');
+      addToast(`Escrow payment gateway session authorized via ${method}. Order #${newOrder.id} submitted for Admin Payment Verification.`, 'success');
     }
 
     setEscrowPaymentSession(null);
