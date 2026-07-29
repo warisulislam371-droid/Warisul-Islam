@@ -728,10 +728,8 @@ export default function CustomerPanel({
         ? (manualTxId.trim() || `pay_HN_${Date.now().toString().slice(-9)}`) 
         : manualTxId.trim();
 
-      const initialStatus = selectedPayMethod === 'razorpay' ? 'Order Sent to Vendor' : 'Awaiting Payment Verification';
-      const initialTimelineNote = selectedPayMethod === 'razorpay' 
-        ? 'Procurement order placed via Razorpay Gateway. Payment proof screenshot submitted.' 
-        : `Order placed via ${selectedPayMethod.toUpperCase()}. Payment proof submitted with transaction ID ${manualTxId}. Awaiting Admin Verification.`;
+      const initialStatus = 'Awaiting Payment Verification';
+      const initialTimelineNote = `Order placed via ${(selectedPayMethod === 'razorpay' ? 'Razorpay' : selectedPayMethod === 'upi' ? 'UPI' : 'Bank Transfer').toUpperCase()}. Payment proof submitted with transaction ID ${payId || manualTxId || 'Pending'}. Awaiting Admin Verification.`;
 
       const newOrder: Order = {
         id: `ORD-${Math.floor(10000 + Math.random() * 90000)}`,
@@ -794,21 +792,11 @@ export default function CustomerPanel({
       currentOrders.unshift(newOrder);
       dbLocal.saveOrders(currentOrders);
 
-      // Alert Vendor ONLY IF payment is verified/Razorpay
-      if (initialStatus === 'Order Sent to Vendor') {
-        dbLocal.addNotification(
-          newOrder.vendorId,
-          'New Equipment Order Placed',
-          `Order #${newOrder.id} has been received for ₹${newOrder.finalAmount.toLocaleString('en-IN')}. Verify calibrated packing.`,
-          'order_placed'
-        );
-      }
-
-      // Alert Admin
+      // Alert Admin for payment verification
       dbLocal.addNotification(
         'admin',
-        `New Marketplace Transaction`,
-        `Order #${newOrder.id} placed via ${newOrder.paymentMethod}. Final: ₹${newOrder.finalAmount.toLocaleString('en-IN')}.`,
+        `New Payment Verification Required`,
+        `Order #${newOrder.id} submitted via ${newOrder.paymentMethod}. Final: ₹${newOrder.finalAmount.toLocaleString('en-IN')}. Awaiting administrative clearance.`,
         'order_placed'
       );
 
@@ -2422,7 +2410,7 @@ export default function CustomerPanel({
                   return o.status === 'Awaiting Payment Verification' || o.status === 'Pending Payment';
                 }
                 if (ordersFilter === 'Active') {
-                  return ['Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped'].includes(o.status);
+                  return ['Paid', 'Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped', 'Packed'].includes(o.status);
                 }
                 if (ordersFilter === 'Completed') {
                   return o.status === 'Delivered' || o.status === 'Completed';
@@ -2449,7 +2437,7 @@ export default function CustomerPanel({
                       return o.status === 'Awaiting Payment Verification' || o.status === 'Pending Payment';
                     }
                     if (ordersFilter === 'Active') {
-                      return ['Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped'].includes(o.status);
+                      return ['Paid', 'Order Sent to Vendor', 'Vendor Accepted', 'Processing', 'Shipped', 'Packed'].includes(o.status);
                     }
                     if (ordersFilter === 'Completed') {
                       return o.status === 'Delivered' || o.status === 'Completed';

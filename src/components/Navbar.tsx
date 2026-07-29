@@ -445,6 +445,20 @@ export default function Navbar({
             )}
           </div>
 
+          {/* My Orders Badge */}
+          <button
+            onClick={() => onNavigate('orders')}
+            className={`p-2 rounded-2xl transition relative flex flex-col items-center justify-center text-[10px] font-bold ${
+              currentView === 'orders'
+                ? 'text-[#0077B6] bg-sky-50'
+                : 'text-slate-600 hover:text-[#0077B6] hover:bg-slate-100'
+            }`}
+            title="My Equipment Orders & Tracking"
+          >
+            <ClipboardList className="w-5 h-5 text-slate-700" />
+            <span className="hidden lg:block text-[9px] mt-0.5">My Orders</span>
+          </button>
+
           {/* Cart Badge */}
           <button
             onClick={() => onNavigate('cart')}
@@ -607,6 +621,13 @@ export default function Navbar({
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Hospital B2B Tenders</span>
+            </button>
+            <button 
+              onClick={() => onNavigate('orders')} 
+              className="text-teal-300 hover:text-teal-100 transition font-extrabold whitespace-nowrap flex items-center gap-1"
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              <span>My Orders</span>
             </button>
           </div>
 
