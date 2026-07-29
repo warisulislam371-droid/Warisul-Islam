@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, Search, Filter, CheckCircle2, XCircle, AlertTriangle, 
-  FileText, Eye, Download, MessageSquare, Clock, Check, X, RefreshCw, Layers, Printer
+  FileText, Eye, Download, MessageSquare, Clock, Check, X, RefreshCw, Layers, Printer,
+  Percent
 } from 'lucide-react';
 import { Vendor, VendorVerificationDocument, DocumentStatus, VendorStatus } from '../types';
 import { db } from '../firebase';
 import { collection, query, getDocs, updateDoc, doc, addDoc, onSnapshot } from 'firebase/firestore';
+import { dbLocal } from '../db';
 
 export const AdminVerificationPanel: React.FC = () => {
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -13,11 +15,19 @@ export const AdminVerificationPanel: React.FC = () => {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [vendorCommissionRate, setVendorCommissionRate] = useState<number>(5.0);
   const [activeDocPreview, setActiveDocPreview] = useState<VendorVerificationDocument | null>(null);
   const [adminRemarkInput, setAdminRemarkInput] = useState('');
   const [selectedVendorIds, setSelectedVendorIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  // Sync selectedVendor commission input when selected vendor changes
+  useEffect(() => {
+    if (selectedVendor) {
+      setVendorCommissionRate(selectedVendor.customCommissionRate !== undefined ? selectedVendor.customCommissionRate : 5.0);
+    }
+  }, [selectedVendor?.id]);
 
   // Sync Vendors from Firestore
   useEffect(() => {
@@ -82,7 +92,12 @@ export const AdminVerificationPanel: React.FC = () => {
         timestamp: new Date().toISOString()
       });
 
-      setStatusMessage({ type: 'success', text: 'Vendor successfully approved and granted Verified Trust Seal!' });
+      // Also sync to local storage & recalculate product catalog prices for this vendor
+      const updatedVendors = dbLocal.getVendors().map(v => v.id === vendorId ? { ...v, status: 'Approved' as const, isVerifiedSeller: true } : v);
+      dbLocal.saveVendors(updatedVendors);
+      dbLocal.recalculateProductPricesForCommission(vendorId);
+
+      setStatusMessage({ type: 'success', text: 'Vendor successfully approved! Product prices & commissions updated live.' });
       setIsProcessing(false);
       if (selectedVendor?.id === vendorId) {
         setSelectedVendor(prev => prev ? { ...prev, status: 'Verified Vendor', isVerifiedSeller: true } : null);
@@ -348,6 +363,99 @@ export const AdminVerificationPanel: React.FC = () => {
                   placeholder="e.g. GSTIN verified on GST portal. Bank account matched. CDSCO drug license active."
                   className="w-full p-2.5 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500"
                 />
+              </div>
+
+              {/* Vendor Custom Commission Control */}
+              <div className="p-4 bg-teal-50/80 rounded-2xl border border-teal-200/90 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
+                      <Percent className="w-4 h-4 text-teal-600" />
+                      Verification Platform Commission Rate (%)
+                    </h4>
+                    <p className="text-[10px] text-teal-700 mt-0.5">
+                      Modifying this commission automatically updates selling prices for all <strong>pending approval</strong> &amp; <strong>already live</strong> products of this vendor.
+                    </p>
+                  </div>
+                  <span className="text-xs font-black text-teal-900 font-mono px-2.5 py-1 bg-white border border-teal-200 rounded-lg shadow-xs shrink-0 self-start sm:self-auto">
+                    {selectedVendor.customCommissionRate !== undefined ? `${selectedVendor.customCommissionRate}%` : '5% (Default)'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="50"
+                    value={vendorCommissionRate}
+                    onChange={(e) => setVendorCommissionRate(Number(e.target.value))}
+                    className="w-32 px-3 py-1.5 bg-white border border-teal-300 rounded-xl text-xs font-bold text-teal-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        setIsProcessing(true);
+                        const newRate = Number(vendorCommissionRate);
+                        
+                        // Update Firestore
+                        try {
+                          await updateDoc(doc(db, 'vendors', selectedVendor.id), {
+                            customCommissionRate: newRate,
+                            updatedAt: new Date().toISOString()
+                          });
+                        } catch (err) {
+                          console.log('Firestore vendor update skipped/failed:', err);
+                        }
+
+                        // Update local DB
+                        const updatedVendors = dbLocal.getVendors().map(v => v.id === selectedVendor.id ? { ...v, customCommissionRate: newRate } : v);
+                        dbLocal.saveVendors(updatedVendors);
+
+                        // Recalculate all products (pending approval + already live)
+                        const { updatedCount, updatedProducts } = dbLocal.recalculateProductPricesForCommission(selectedVendor.id);
+
+                        // Sync updated products to Firestore if applicable
+                        try {
+                          const pSnap = await getDocs(collection(db, 'products'));
+                          pSnap.forEach(async (pDoc) => {
+                            const pData = pDoc.data();
+                            if (pData.vendorId === selectedVendor.id) {
+                              const matchLocal = updatedProducts.find(p => p.id === pDoc.id);
+                              if (matchLocal) {
+                                await updateDoc(doc(db, 'products', pDoc.id), {
+                                  commissionRate: matchLocal.commissionRate,
+                                  commissionAmount: matchLocal.commissionAmount,
+                                  finalPrice: matchLocal.finalPrice,
+                                  salePrice: matchLocal.salePrice,
+                                  price: matchLocal.price,
+                                  updatedAt: new Date().toISOString()
+                                });
+                              }
+                            }
+                          });
+                        } catch (e) {
+                          console.log('Firestore product sync skipped or failed:', e);
+                        }
+
+                        setIsProcessing(false);
+                        setSelectedVendor(prev => prev ? { ...prev, customCommissionRate: newRate } : null);
+                        setStatusMessage({
+                          type: 'success',
+                          text: `Vendor commission updated to ${newRate}%. Recalculated prices for ${updatedCount} product(s) (pending & live)!`
+                        });
+                      } catch (err) {
+                        setIsProcessing(false);
+                        setStatusMessage({ type: 'error', text: 'Failed to update vendor commission.' });
+                      }
+                    }}
+                    disabled={isProcessing}
+                    className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-xs"
+                  >
+                    Update Commission &amp; Recalculate Products
+                  </button>
+                </div>
               </div>
 
               {/* Data Review Grid */}

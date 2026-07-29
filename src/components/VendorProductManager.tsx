@@ -381,8 +381,10 @@ export default function VendorProductManager({
       }
     }
 
-    const globalCommissionRate = dbLocal.getPaymentSettings().platformCommissionRate || 10;
-    const commissionAmount = Math.round((formSalePrice * globalCommissionRate) / 100 * 100) / 100;
+    const effectiveCommissionRate = vendor?.customCommissionRate !== undefined
+      ? vendor.customCommissionRate
+      : (dbLocal.getPaymentSettings().platformCommissionRate || 10);
+    const commissionAmount = Math.round((formSalePrice * effectiveCommissionRate) / 100 * 100) / 100;
     const finalPrice = formSalePrice + commissionAmount;
     const vendorPayout = formSalePrice;
 
@@ -421,7 +423,7 @@ export default function VendorProductManager({
       
       // Commission System fields
       vendorPrice: formSalePrice,
-      commissionRate: globalCommissionRate,
+      commissionRate: effectiveCommissionRate,
       commissionAmount: commissionAmount,
       finalPrice: finalPrice,
       vendorPayout: vendorPayout,
@@ -966,7 +968,9 @@ export default function VendorProductManager({
       return;
     }
 
-    const globalCommissionRate = dbLocal.getPaymentSettings().platformCommissionRate || 10;
+    const effectiveCommissionRate = vendor?.customCommissionRate !== undefined
+      ? vendor.customCommissionRate
+      : (dbLocal.getPaymentSettings().platformCommissionRate || 10);
     const now = new Date().toISOString();
 
     // Dynamically create categories or subcategories if they do not exist
@@ -1056,7 +1060,7 @@ export default function VendorProductManager({
     }
 
     validProds.forEach(prod => {
-      const commissionAmount = Math.round((prod.vendorPrice * globalCommissionRate) / 100 * 100) / 100;
+      const commissionAmount = Math.round((prod.vendorPrice * effectiveCommissionRate) / 100 * 100) / 100;
       const finalPrice = prod.vendorPrice + commissionAmount;
       const vendorPayout = prod.vendorPrice;
 
@@ -1090,7 +1094,7 @@ export default function VendorProductManager({
         specifications: [],
         
         vendorPrice: prod.vendorPrice,
-        commissionRate: globalCommissionRate,
+        commissionRate: effectiveCommissionRate,
         commissionAmount,
         finalPrice,
         vendorPayout,

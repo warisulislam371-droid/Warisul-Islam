@@ -7476,6 +7476,45 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                     </div>
                   </div>
 
+                  {/* Vendor Verification Custom Commission Control */}
+                  <div className="bg-teal-50/90 p-3 rounded-xl border border-teal-200/90 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-teal-900 font-extrabold uppercase tracking-wider flex items-center gap-1">
+                        <Percent className="w-3.5 h-3.5 text-teal-700" />
+                        Verification Commission Rate (%)
+                      </span>
+                      <span className="text-xs font-black text-teal-800 font-mono">
+                        {selectedVendorDoc.customCommissionRate !== undefined ? `${selectedVendorDoc.customCommissionRate}%` : '5% (Default)'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="50"
+                        value={selectedVendorDoc.customCommissionRate !== undefined ? selectedVendorDoc.customCommissionRate : 5}
+                        onChange={(e) => {
+                          const newRate = Number(e.target.value);
+                          const updatedVendors = vendors.map(v => v.id === selectedVendorDoc.id ? { ...v, customCommissionRate: newRate } : v);
+                          dbLocal.saveVendors(updatedVendors);
+                          setVendors(updatedVendors);
+                          setSelectedVendorDoc({ ...selectedVendorDoc, customCommissionRate: newRate });
+                          
+                          // Recalculate catalog prices for all products (new pending approval or live) of this vendor
+                          const { updatedCount } = dbLocal.recalculateProductPricesForCommission(selectedVendorDoc.id);
+                          setProducts(dbLocal.getProducts());
+                          
+                          addToast(`Commission rate updated to ${newRate}% for "${selectedVendorDoc.companyName}". Recalculated prices for ${updatedCount} product(s) (pending & live)!`, 'success');
+                        }}
+                        className="w-full px-3 py-1.5 bg-white border border-teal-300 rounded-lg text-xs font-bold text-teal-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500 font-mono"
+                      />
+                    </div>
+                    <p className="text-[9px] text-teal-700 leading-tight">
+                      Modifying vendor commission automatically adjusts selling prices for all <strong>pending approval</strong> &amp; <strong>already live</strong> products of this vendor.
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-600 font-medium">
                     <div className="bg-slate-50 p-2 rounded-lg border border-slate-150">
                       <span className="text-[8px] text-slate-400 block uppercase font-bold">GSTIN Number</span>
