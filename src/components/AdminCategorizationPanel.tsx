@@ -6,6 +6,7 @@ import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/fir
 import { Sparkles, CheckCircle2, AlertTriangle, ShieldCheck, Edit3, Save, RefreshCw, Layers, Tag, Search, Filter } from 'lucide-react';
 import { INITIAL_CATEGORIES } from '../data';
 import { getCategorySeoUrl, getSubcategorySeoUrl, getProductSeoUrl } from '../utils/seoUrls';
+import { GeminiCategoryAuditModal } from './GeminiCategoryAuditModal';
 
 export const AdminCategorizationPanel: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -22,6 +23,7 @@ export const AdminCategorizationPanel: React.FC = () => {
 
   // Feedback memory logs
   const [feedbackLogs, setFeedbackLogs] = useState<any[]>([]);
+  const [showAuditModal, setShowAuditModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -129,6 +131,14 @@ export const AdminCategorizationPanel: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowAuditModal(true)}
+            className="px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg transition flex items-center gap-1.5 cursor-pointer uppercase tracking-wider animate-pulse"
+          >
+            <Sparkles className="w-4 h-4 text-slate-950 fill-slate-950" />
+            <span>Gemini AI Category Audit</span>
+          </button>
+
           <div className="bg-slate-900/80 px-4 py-2 rounded-xl border border-emerald-500/30 text-center">
             <span className="text-[10px] uppercase text-slate-400 font-bold block">Learned Corrections</span>
             <span className="text-lg font-black text-emerald-400">{feedbackLogs.length} Records</span>
@@ -299,6 +309,12 @@ export const AdminCategorizationPanel: React.FC = () => {
           </table>
         </div>
       </div>
+      {/* Gemini Category Audit Modal */}
+      <GeminiCategoryAuditModal
+        isOpen={showAuditModal}
+        onClose={() => setShowAuditModal(false)}
+        onAuditCompleted={loadData}
+      />
     </div>
   );
 };

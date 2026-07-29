@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Order } from '../types';
-import { Printer, Download, X, CheckCircle } from 'lucide-react';
+import { Printer, Download, X, CheckCircle, FileText, Receipt } from 'lucide-react';
+import { downloadBillAsHTML, printBillInWindow } from '../utils/billPrinter';
 
 interface InvoicePDFProps {
   order: Order;
@@ -9,8 +10,20 @@ interface InvoicePDFProps {
 }
 
 export default function InvoicePDF({ order, onClose, addToast }: InvoicePDFProps) {
+  const [billFormat, setBillFormat] = useState<'a4' | 'pos'>('a4');
+
   const handlePrint = () => {
-    window.print();
+    printBillInWindow(order, billFormat);
+    if (addToast) {
+      addToast(`Print preview launched for ${billFormat.toUpperCase()} Bill Invoice #${order.id}`, 'info');
+    }
+  };
+
+  const handleDownload = () => {
+    downloadBillAsHTML(order, billFormat);
+    if (addToast) {
+      addToast(`Downloaded B2B Tax Invoice #${order.id} (${billFormat.toUpperCase()} Format)`, 'success');
+    }
   };
 
   const getSubtotal = () => {
@@ -21,33 +34,57 @@ export default function InvoicePDF({ order, onClose, addToast }: InvoicePDFProps
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-center items-start overflow-y-auto p-4 sm:p-6 md:p-10 font-sans animate-fade-in">
       <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-100 overflow-hidden my-4">
         {/* Toolbar */}
-        <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between no-print">
+        <div className="bg-slate-900 text-white px-6 py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 no-print">
           <div className="flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-emerald-600" />
-            <h3 className="text-sm font-semibold text-slate-800">B2B Commercial Tax Invoice</h3>
+            <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+            <div>
+              <h3 className="text-sm font-bold text-white leading-tight">B2B Commercial Tax Invoice</h3>
+              <p className="text-[10px] text-slate-400">Bill ID: {order.id}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Format Switcher */}
+            <div className="bg-slate-800 p-1 rounded-xl flex items-center border border-slate-700 text-xs">
+              <button
+                onClick={() => setBillFormat('a4')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold transition ${
+                  billFormat === 'a4' ? 'bg-teal-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>A4 Invoice</span>
+              </button>
+              <button
+                onClick={() => setBillFormat('pos')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold transition ${
+                  billFormat === 'pos' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>80mm POS Slip</span>
+              </button>
+            </div>
+
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-slate-900 bg-white hover:bg-slate-100 rounded-xl transition shadow"
             >
-              <Printer className="w-3.5 h-3.5" />
-              Print Invoice
+              <Printer className="w-3.5 h-3.5 text-slate-800" />
+              <span>Print Bill</span>
             </button>
+
             <button
-              onClick={() => {
-                if (addToast) {
-                  addToast('Invoice PDF generated and downloaded to device cache.', 'success');
-                }
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-teal-700 rounded-lg hover:bg-teal-800 transition"
+              onClick={handleDownload}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 rounded-xl transition shadow"
             >
               <Download className="w-3.5 h-3.5" />
-              Download PDF
+              <span>Download Bill</span>
             </button>
+
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition ml-2"
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition ml-1"
             >
               <X className="w-5 h-5" />
             </button>

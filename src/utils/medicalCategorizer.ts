@@ -417,3 +417,122 @@ export function categorizeProductLocally(productData: {
     seoProductUrl: getProductSeoUrl(mainCategory, subcategory, productData.name, productData.brand)
   };
 }
+
+export interface ProductCategoryAuditResult {
+  productId: string;
+  productName: string;
+  sku: string;
+  currentCategory: string;
+  currentSubcategory: string;
+  recommendedCategory: string;
+  recommendedSubcategory: string;
+  recommendedHsnCode: string;
+  recommendedGstRate: number;
+  issueType: 'COMPLIANT' | 'MISCLASSIFIED_CATEGORY' | 'UNCATEGORIZED' | 'TAX_HSN_MISMATCH' | 'MISSING_SUBCATEGORY';
+  severity: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+  confidenceScore: number;
+  auditNotes: string;
+}
+
+export interface CatalogCategoryAuditReport {
+  timestamp: string;
+  totalAudited: number;
+  compliantCount: number;
+  misclassifiedCount: number;
+  uncategorizedCount: number;
+  taxHsnFixCount: number;
+  auditResults: ProductCategoryAuditResult[];
+  summaryInsight: string;
+}
+
+export function auditProductsLocally(products: Product[]): CatalogCategoryAuditReport {
+  const auditResults: ProductCategoryAuditResult[] = (products || []).map(p => {
+    const localCat = categorizeProductLocally({
+      name: p.name,
+      brand: p.brand,
+      description: p.description,
+      specifications: p.specifications,
+      sku: p.sku
+    });
+
+    const currentCat = (p.category || '').trim();
+    const currentSub = (p.subcategory || '').trim();
+    const recommendedCat = localCat.mainCategory;
+    const recommendedSub = localCat.subcategory;
+
+    let recHsn = p.hsnCode || '9018';
+    let recGst = p.gstRate || 12;
+
+    if (recommendedCat === 'Medical Equipment') {
+      recHsn = p.hsnCode && p.hsnCode !== 'N/A' ? p.hsnCode : '9018';
+      recGst = 12;
+    } else if (recommendedCat === 'Hospital Furniture') {
+      recHsn = p.hsnCode && p.hsnCode !== 'N/A' ? p.hsnCode : '9402';
+      recGst = 18;
+    } else if (recommendedCat === 'Consumables') {
+      recHsn = p.hsnCode && p.hsnCode !== 'N/A' ? p.hsnCode : '9018';
+      recGst = 12;
+    } else if (recommendedCat === 'Homecare Devices') {
+      recHsn = p.hsnCode && p.hsnCode !== 'N/A' ? p.hsnCode : '9019';
+      recGst = 12;
+    } else if (recommendedCat === 'Laboratory Equipment') {
+      recHsn = p.hsnCode && p.hsnCode !== 'N/A' ? p.hsnCode : '9027';
+      recGst = 18;
+    }
+
+    let issueType: ProductCategoryAuditResult['issueType'] = 'COMPLIANT';
+    let severity: ProductCategoryAuditResult['severity'] = 'NONE';
+    let notes = `Product categorized correctly in taxonomy under ${recommendedCat} -> ${recommendedSub}.`;
+
+    if (!currentCat || currentCat === 'Uncategorized' || currentCat === 'General') {
+      issueType = 'UNCATEGORIZED';
+      severity = 'HIGH';
+      notes = `Product lacks verified main medical category. Gemini auto-assigned to ${recommendedCat} -> ${recommendedSub}.`;
+    } else if (currentCat.toLowerCase() !== recommendedCat.toLowerCase()) {
+      issueType = 'MISCLASSIFIED_CATEGORY';
+      severity = 'HIGH';
+      notes = `Category conflict detected: currently labeled "${currentCat}" but clinical keywords map to "${recommendedCat} (${recommendedSub})".`;
+    } else if (currentSub && recommendedSub && currentSub.toLowerCase() !== recommendedSub.toLowerCase()) {
+      issueType = 'MISSING_SUBCATEGORY';
+      severity = 'MEDIUM';
+      notes = `Subcategory refinement suggested: current "${currentSub}" vs clinical optimal "${recommendedSub}".`;
+    } else if (!p.hsnCode || p.hsnCode === 'N/A' || p.hsnCode === '9999' || !p.gstRate) {
+      issueType = 'TAX_HSN_MISMATCH';
+      severity = 'LOW';
+      notes = `GST/HSN tax code requires standardized B2B classification (${recHsn}, ${recGst}% GST).`;
+    }
+
+    return {
+      productId: p.id,
+      productName: p.name,
+      sku: p.sku || 'N/A',
+      currentCategory: currentCat || 'Uncategorized',
+      currentSubcategory: currentSub || 'General',
+      recommendedCategory: recommendedCat,
+      recommendedSubcategory: recommendedSub,
+      recommendedHsnCode: recHsn,
+      recommendedGstRate: recGst,
+      issueType,
+      severity,
+      confidenceScore: localCat.confidenceScore,
+      auditNotes: notes
+    };
+  });
+
+  const totalAudited = auditResults.length;
+  const compliantCount = auditResults.filter(r => r.issueType === 'COMPLIANT').length;
+  const misclassifiedCount = auditResults.filter(r => r.issueType === 'MISCLASSIFIED_CATEGORY' || r.issueType === 'MISSING_SUBCATEGORY').length;
+  const uncategorizedCount = auditResults.filter(r => r.issueType === 'UNCATEGORIZED').length;
+  const taxHsnFixCount = auditResults.filter(r => r.issueType === 'TAX_HSN_MISMATCH').length;
+
+  return {
+    timestamp: new Date().toISOString(),
+    totalAudited,
+    compliantCount,
+    misclassifiedCount,
+    uncategorizedCount,
+    taxHsnFixCount,
+    auditResults,
+    summaryInsight: `Audit completed across ${totalAudited} products. Found ${misclassifiedCount} category misclassifications, ${uncategorizedCount} uncategorized items, and ${taxHsnFixCount} tax/HSN code recommendations.`
+  };
+}

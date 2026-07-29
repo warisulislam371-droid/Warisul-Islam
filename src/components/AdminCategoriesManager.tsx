@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Category, Brand, CategoryRequest, BrandRequest } from '../types';
 import { dbLocal } from '../db';
 import { autoSortAndClassifyProducts, sortCategoriesTaxonomy } from '../utils/categorySorter';
+import { GeminiCategoryAuditModal } from './GeminiCategoryAuditModal';
 import {
   Tag,
   Plus,
@@ -50,6 +51,7 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
   // Modals for editing category / brand
   const [editingCatModal, setEditingCatModal] = useState<Category | null>(null);
   const [editingBrandModal, setEditingBrandModal] = useState<Brand | null>(null);
+  const [showAuditModal, setShowAuditModal] = useState(false);
 
   const loadData = () => {
     setCategories(dbLocal.getCategories());
@@ -328,7 +330,15 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowAuditModal(true)}
+            className="px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition flex items-center gap-1.5 cursor-pointer tracking-wider animate-pulse border border-amber-300"
+          >
+            <Sparkles className="w-4 h-4 text-slate-950 fill-slate-950" />
+            <span>Gemini AI Category Audit</span>
+          </button>
           <button
             type="button"
             onClick={handleAutoSortCategories}
@@ -340,9 +350,9 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
           <button
             type="button"
             onClick={handleAutoSortProducts}
-            className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer uppercase tracking-wider"
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-teal-100 font-extrabold text-xs rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer uppercase tracking-wider border border-slate-700"
           >
-            <Wand2 className="w-4 h-4" />
+            <Wand2 className="w-4 h-4 text-amber-300" />
             Auto-Sort All Products
           </button>
         </div>
@@ -999,6 +1009,13 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
           </div>
         </div>
       )}
+
+      {/* Gemini Category Audit Modal */}
+      <GeminiCategoryAuditModal
+        isOpen={showAuditModal}
+        onClose={() => setShowAuditModal(false)}
+        onAuditCompleted={loadData}
+      />
 
     </div>
   );

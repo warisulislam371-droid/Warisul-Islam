@@ -17,7 +17,7 @@ import {
   generateRobotsTxt
 } from './src/seo/generator';
 
-import { categorizeProductLocally } from './src/utils/medicalCategorizer';
+import { categorizeProductLocally, auditProductsLocally } from './src/utils/medicalCategorizer';
 import { getCategorySeoUrl, getSubcategorySeoUrl, getProductSeoUrl } from './src/utils/seoUrls';
 
 dotenv.config();
@@ -449,6 +449,133 @@ SKU: "${sku || ''}"`;
       });
     } catch (err) {
       return res.json({ category: 'Medical Equipment', subcategory: 'General Equipment', confidence: 50, aiReason: 'Local taxonomy fallback.' });
+    }
+  });
+
+  // AI-Powered Catalog Category Audit Endpoint using Gemini AI
+  app.post('/api/gemini/category-audit', async (req, res) => {
+    try {
+      const { products } = req.body;
+      const productList = Array.isArray(products) && products.length > 0 ? products : [];
+      const localReport = auditProductsLocally(productList);
+
+      if (productList.length === 0 || isQuotaCooldowned()) {
+        return res.json(localReport);
+      }
+
+      const ai = getGeminiClient();
+      if (!ai) {
+        return res.json(localReport);
+      }
+
+      try {
+        const systemPrompt = `You are the HealNex B2B Medical Equipment AI Category Audit & Taxonomy Verification Engine.
+You audit medical catalog items to ensure accurate medical categorization, correct subcategories, proper HSN codes (e.g. 9018 for medical/surgical, 9019 for respiration/therapy, 9022 for X-Ray, 9402 for medical furniture), correct GST rates (typically 12% or 18%), and standardized medical terminology.
+
+For each product provided, determine:
+1. issueType: "COMPLIANT", "MISCLASSIFIED_CATEGORY", "UNCATEGORIZED", "TAX_HSN_MISMATCH", or "MISSING_SUBCATEGORY"
+2. severity: "HIGH", "MEDIUM", "LOW", or "NONE"
+3. recommendedCategory and recommendedSubcategory
+4. recommendedHsnCode and recommendedGstRate
+5. confidenceScore (0-100)
+6. auditNotes (Clinical/taxonomy explanation)`;
+
+        const sampleProducts = productList.slice(0, 30).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          brand: p.brand || '',
+          description: (p.description || '').slice(0, 150),
+          category: p.category || '',
+          subcategory: p.subcategory || '',
+          hsnCode: p.hsnCode || '',
+          gstRate: p.gstRate || 0
+        }));
+
+        const userMessage = `Audit these medical catalog products:\n${JSON.stringify(sampleProducts)}`;
+
+        const schema = {
+          type: Type.OBJECT,
+          properties: {
+            auditResults: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  productId: { type: Type.STRING },
+                  productName: { type: Type.STRING },
+                  sku: { type: Type.STRING },
+                  currentCategory: { type: Type.STRING },
+                  currentSubcategory: { type: Type.STRING },
+                  recommendedCategory: { type: Type.STRING },
+                  recommendedSubcategory: { type: Type.STRING },
+                  recommendedHsnCode: { type: Type.STRING },
+                  recommendedGstRate: { type: Type.NUMBER },
+                  issueType: { type: Type.STRING },
+                  severity: { type: Type.STRING },
+                  confidenceScore: { type: Type.NUMBER },
+                  auditNotes: { type: Type.STRING }
+                },
+                required: [
+                  'productId', 'recommendedCategory', 'recommendedSubcategory',
+                  'issueType', 'confidenceScore', 'auditNotes'
+                ]
+              }
+            },
+            summaryInsight: { type: Type.STRING }
+          },
+          required: ['auditResults', 'summaryInsight']
+        };
+
+        const parsedData = await generateContentResilient(ai, [userMessage], systemPrompt, schema);
+
+        if (parsedData && Array.isArray(parsedData.auditResults) && parsedData.auditResults.length > 0) {
+          const geminiResultsMap = new Map();
+          parsedData.auditResults.forEach((item: any) => geminiResultsMap.set(item.productId, item));
+
+          const mergedResults = localReport.auditResults.map(localItem => {
+            const geminiItem = geminiResultsMap.get(localItem.productId);
+            if (!geminiItem) return localItem;
+
+            return {
+              ...localItem,
+              recommendedCategory: geminiItem.recommendedCategory || localItem.recommendedCategory,
+              recommendedSubcategory: geminiItem.recommendedSubcategory || localItem.recommendedSubcategory,
+              recommendedHsnCode: geminiItem.recommendedHsnCode || localItem.recommendedHsnCode,
+              recommendedGstRate: geminiItem.recommendedGstRate || localItem.recommendedGstRate,
+              issueType: (geminiItem.issueType as any) || localItem.issueType,
+              severity: (geminiItem.severity as any) || localItem.severity,
+              confidenceScore: geminiItem.confidenceScore || localItem.confidenceScore,
+              auditNotes: geminiItem.auditNotes || localItem.auditNotes
+            };
+          });
+
+          const totalAudited = mergedResults.length;
+          const compliantCount = mergedResults.filter(r => r.issueType === 'COMPLIANT').length;
+          const misclassifiedCount = mergedResults.filter(r => r.issueType === 'MISCLASSIFIED_CATEGORY' || r.issueType === 'MISSING_SUBCATEGORY').length;
+          const uncategorizedCount = mergedResults.filter(r => r.issueType === 'UNCATEGORIZED').length;
+          const taxHsnFixCount = mergedResults.filter(r => r.issueType === 'TAX_HSN_MISMATCH').length;
+
+          return res.json({
+            timestamp: new Date().toISOString(),
+            totalAudited,
+            compliantCount,
+            misclassifiedCount,
+            uncategorizedCount,
+            taxHsnFixCount,
+            auditResults: mergedResults,
+            summaryInsight: parsedData.summaryInsight || localReport.summaryInsight
+          });
+        }
+
+        return res.json(localReport);
+      } catch (innerErr: any) {
+        handleQuotaExceeded(innerErr, 'ai category audit');
+        return res.json(localReport);
+      }
+    } catch (err: any) {
+      console.log('Category audit endpoint error:', err.message || err);
+      const fallback = auditProductsLocally(req.body.products || []);
+      return res.json(fallback);
     }
   });
 
