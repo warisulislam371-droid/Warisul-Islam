@@ -599,8 +599,8 @@ export default function CustomerPanel({
   };
 
   const handleAddToCart = (p: Product, customQty?: number) => {
-    const qtyToAdd = customQty || p.moq;
-    if (qtyToAdd < p.moq) {
+    const qtyToAdd = customQty || p.moq || 1;
+    if (qtyToAdd < (p.moq || 1)) {
       addToast(`Minimum Order Quantity (MOQ) for this equipment is ${p.moq} units.`, 'error');
       return;
     }
@@ -734,10 +734,17 @@ export default function CustomerPanel({
     setCheckoutStep('processing');
 
     setTimeout(() => {
-      const firstItem = cart[0].product;
-      const sub = getSubtotal();
-      const gst = getGstTotal();
-      const final = getCheckoutTotal();
+      // Group cart items by vendorId so each vendor gets their respective order dispatch
+      const itemsByVendor: { [vendorId: string]: typeof cart } = {};
+      cart.forEach(item => {
+        const vId = item.product.vendorId || 'vendor-default';
+        if (!itemsByVendor[vId]) itemsByVendor[vId] = [];
+        itemsByVendor[vId].push(item);
+      });
+
+      const vendorKeys = Object.keys(itemsByVendor);
+      const baseOrderNum = Math.floor(10000 + Math.random() * 90000);
+      const createdOrdersList: Order[] = [];
 
       const payId = selectedPayMethod === 'razorpay' 
         ? (manualTxId.trim() || `pay_HN_${Date.now().toString().slice(-9)}`) 
@@ -746,76 +753,92 @@ export default function CustomerPanel({
       const initialStatus = 'Awaiting Payment Verification';
       const initialTimelineNote = `Order placed via ${(selectedPayMethod === 'razorpay' ? 'Razorpay' : selectedPayMethod === 'upi' ? 'UPI' : 'Bank Transfer').toUpperCase()}. Payment proof submitted with transaction ID ${payId || manualTxId || 'Pending'}. Awaiting Admin Verification.`;
 
-      const newOrder: Order = {
-        id: `ORD-${Math.floor(10000 + Math.random() * 90000)}`,
-        customerId: currentUser.id,
-        customerName: currentUser.name,
-        customerEmail: currentUser.email,
-        vendorId: firstItem.vendorId,
-        vendorName: firstItem.vendorName,
-        items: cart.map(item => {
-          const vPrice = item.product.vendorPrice !== undefined ? item.product.vendorPrice : item.product.salePrice;
-          const commRate = item.product.commissionRate !== undefined ? item.product.commissionRate : 0;
-          const commAmt = item.product.commissionAmount !== undefined ? item.product.commissionAmount : 0;
-          const fPrice = item.product.salePrice;
-          const vPayout = item.product.vendorPayout !== undefined ? item.product.vendorPayout : vPrice;
-          
-          return {
-            productId: item.product.id,
-            productName: item.product.name,
-            productImage: item.product.images[0],
-            price: fPrice,
-            quantity: item.quantity,
-            gstRate: item.product.gstRate,
-            hsnCode: item.product.hsnCode,
-            vendorId: item.product.vendorId,
-            vendorName: item.product.vendorName,
+      vendorKeys.forEach((vId, idx) => {
+        const vendorCartItems = itemsByVendor[vId];
+        const firstVendorItem = vendorCartItems[0].product;
+
+        const sub = vendorCartItems.reduce((sum, item) => sum + (item.product.salePrice * item.quantity), 0);
+        const gst = vendorCartItems.reduce((sum, item) => {
+          const price = item.product.salePrice * item.quantity;
+          return sum + (price * (item.product.gstRate / 100));
+        }, 0);
+        const final = sub + gst;
+
+        const orderId = vendorKeys.length > 1 
+          ? `ORD-${baseOrderNum}-${idx + 1}` 
+          : `ORD-${baseOrderNum}`;
+
+        const newOrder: Order = {
+          id: orderId,
+          customerId: currentUser.id,
+          customerName: currentUser.name,
+          customerEmail: currentUser.email,
+          vendorId: vId,
+          vendorName: firstVendorItem.vendorName || 'HealNex Partner',
+          items: vendorCartItems.map(item => {
+            const vPrice = item.product.vendorPrice !== undefined ? item.product.vendorPrice : item.product.salePrice;
+            const commRate = item.product.commissionRate !== undefined ? item.product.commissionRate : 0;
+            const commAmt = item.product.commissionAmount !== undefined ? item.product.commissionAmount : 0;
+            const fPrice = item.product.salePrice;
+            const vPayout = item.product.vendorPayout !== undefined ? item.product.vendorPayout : vPrice;
             
-            // Commission system snapshots
-            vendorPrice: vPrice,
-            commissionRate: commRate,
-            commissionAmount: commAmt,
-            finalPrice: fPrice,
-            vendorPayout: vPayout
-          };
-        }),
-        totalAmount: sub,
-        gstAmount: gst,
-        discountAmount: 0,
-        finalAmount: final,
-        status: initialStatus as any,
-        paymentMethod: selectedPayMethod === 'razorpay' ? 'Razorpay' : selectedPayMethod === 'upi' ? 'UPI' : 'Bank Transfer',
-        paymentId: payId,
-        shippingAddress: shippingAddress,
-        createdAt: new Date().toISOString(),
-        timeline: [
-          { status: initialStatus as any, time: new Date().toISOString(), note: initialTimelineNote }
-        ],
-        paymentProofUrl: manualProofUrl || undefined,
-        paymentTxId: manualTxId.trim() || payId,
-        paymentNote: manualNote.trim() || undefined,
-        paymentVerificationLogs: [{
-          action: 'submit',
-          performedBy: currentUser.name,
-          performedByRole: 'customer',
-          timestamp: new Date().toISOString(),
-          note: 'Initial payment proof submission at checkout.'
-        }]
-      };
+            return {
+              productId: item.product.id,
+              productName: item.product.name,
+              productImage: item.product.images[0],
+              price: fPrice,
+              quantity: item.quantity,
+              gstRate: item.product.gstRate,
+              hsnCode: item.product.hsnCode,
+              vendorId: item.product.vendorId,
+              vendorName: item.product.vendorName,
+              
+              vendorPrice: vPrice,
+              commissionRate: commRate,
+              commissionAmount: commAmt,
+              finalPrice: fPrice,
+              vendorPayout: vPayout
+            };
+          }),
+          totalAmount: sub,
+          gstAmount: gst,
+          discountAmount: 0,
+          finalAmount: final,
+          status: initialStatus as any,
+          paymentMethod: selectedPayMethod === 'razorpay' ? 'Razorpay' : selectedPayMethod === 'upi' ? 'UPI' : 'Bank Transfer',
+          paymentId: payId,
+          shippingAddress: shippingAddress,
+          createdAt: new Date().toISOString(),
+          timeline: [
+            { status: initialStatus as any, time: new Date().toISOString(), note: initialTimelineNote }
+          ],
+          paymentProofUrl: manualProofUrl || undefined,
+          paymentTxId: manualTxId.trim() || payId,
+          paymentNote: manualNote.trim() || undefined,
+          paymentVerificationLogs: [{
+            action: 'submit',
+            performedBy: currentUser.name,
+            performedByRole: 'customer',
+            timestamp: new Date().toISOString(),
+            note: 'Initial payment proof submission at checkout.'
+          }]
+        };
+
+        createdOrdersList.push(newOrder);
+
+        // Alert Admin for payment verification
+        dbLocal.addNotification(
+          'admin',
+          `New Payment Verification Required`,
+          `Order #${newOrder.id} (${newOrder.vendorName}) submitted via ${newOrder.paymentMethod}. Final: ₹${newOrder.finalAmount.toLocaleString('en-IN')}. Awaiting administrative clearance.`,
+          'order_placed'
+        );
+      });
 
       const currentOrders = dbLocal.getOrders();
-      currentOrders.unshift(newOrder);
-      dbLocal.saveOrders(currentOrders);
+      dbLocal.saveOrders([...createdOrdersList, ...currentOrders]);
 
-      // Alert Admin for payment verification
-      dbLocal.addNotification(
-        'admin',
-        `New Payment Verification Required`,
-        `Order #${newOrder.id} submitted via ${newOrder.paymentMethod}. Final: ₹${newOrder.finalAmount.toLocaleString('en-IN')}. Awaiting administrative clearance.`,
-        'order_placed'
-      );
-
-      setCreatedOrder(newOrder);
+      setCreatedOrder(createdOrdersList[0]);
       setCheckoutStep('success');
       onUpdateCart([]); // clear cart
       

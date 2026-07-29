@@ -81,7 +81,24 @@ export default function App() {
   const [selectedCategoryName, setSelectedCategoryName] = useState('');
 
   // Cart & Interaction states
-  const [cart, setCart] = useState<{ product: Product; quantity: number }[]>([]);
+  const [cart, setCart] = useState<{ product: Product; quantity: number }[]>(() => {
+    try {
+      const saved = localStorage.getItem('healnex_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const handleUpdateCart = (newCart: { product: Product; quantity: number }[]) => {
+    setCart(newCart);
+    try {
+      localStorage.setItem('healnex_cart', JSON.stringify(newCart));
+    } catch (e) {
+      console.error('Failed to save cart to localStorage', e);
+    }
+  };
+
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [compareList, setCompareList] = useState<Product[]>([]);
 
@@ -204,7 +221,7 @@ export default function App() {
               onNavigate={setCurrentView}
               currentView={currentView}
               cart={cart}
-              onUpdateCart={setCart}
+              onUpdateCart={handleUpdateCart}
               wishlist={wishlist}
               onUpdateWishlist={setWishlist}
               compareList={compareList}
