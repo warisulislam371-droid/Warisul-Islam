@@ -47,3 +47,40 @@ export async function uploadVendorDocumentToCloudinary(file: File): Promise<Clou
     resource_type: data.resource_type,
   };
 }
+
+export async function uploadOrderDocumentToCloudinary(file: File, subFolder = 'order_payments'): Promise<CloudinaryUploadResult> {
+  const cloudName =
+    (import.meta as any).env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
+    (import.meta as any).env?.VITE_CLOUDINARY_CLOUD_NAME ||
+    'kpb5rcow';
+  const uploadPreset =
+    (import.meta as any).env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ||
+    (import.meta as any).env?.VITE_CLOUDINARY_UPLOAD_PRESET ||
+    'healnex_products';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', uploadPreset);
+  formData.append('folder', `orders/${subFolder}`);
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Cloudinary Order Document Upload Error Response:', errorText);
+    throw new Error(`Cloudinary order upload failed with status ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  return {
+    url: data.secure_url || data.url,
+    public_id: data.public_id || '',
+    original_filename: data.original_filename || file.name,
+    format: data.format,
+    resource_type: data.resource_type,
+  };
+}

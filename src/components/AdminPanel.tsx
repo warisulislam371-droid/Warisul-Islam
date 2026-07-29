@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
-import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
+import { uploadVendorDocumentToCloudinary, uploadOrderDocumentToCloudinary } from '../utils/cloudinary';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation, SocialMediaLinks, DealOfDay } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
 import { AdminVerificationPanel } from './AdminVerificationPanel';
@@ -3968,10 +3968,17 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         </div>
                       </div>
 
-                      {/* Right Column: Payment Proof Receipt Visual */}
+                      {/* Right Column: Payment Proof Receipt Visual & Cloudinary Invoice Manager */}
                       <div className="p-6 bg-slate-50/80 flex flex-col justify-between items-center text-center">
-                        <div className="w-full space-y-2">
-                          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider text-left">Uploaded Payment Proof</p>
+                        <div className="w-full space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider text-left">Uploaded Payment Proof</p>
+                            {order.paymentProofUrl?.includes('cloudinary') && (
+                              <span className="bg-sky-100 text-sky-800 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-sky-300 flex items-center gap-1">
+                                Cloudinary Verified
+                              </span>
+                            )}
+                          </div>
                           
                           {order.paymentProofUrl ? (
                             <div className="space-y-3">
@@ -3983,7 +3990,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                   className="w-full h-48 object-contain rounded"
                                   referrerPolicy="no-referrer"
                                 />
-                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
                                   <a
                                     href={order.paymentProofUrl}
                                     target="_blank"
@@ -3991,11 +3998,13 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                     className="bg-white text-slate-800 text-[10px] font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-1 hover:bg-slate-100"
                                   >
                                     <ExternalLink className="w-3.5 h-3.5" />
-                                    View Full Document
+                                    View Full Asset
                                   </a>
                                 </div>
                               </div>
-                              <p className="text-[10px] text-slate-400 truncate max-w-[200px] mx-auto font-mono">receipt_screenshot.png</p>
+                              <p className="text-[10px] text-slate-500 truncate max-w-[220px] mx-auto font-mono">
+                                {order.paymentProofUrl.includes('cloudinary') ? 'Cloudinary Hosted Receipt' : 'receipt_screenshot.png'}
+                              </p>
                             </div>
                           ) : (
                             <div className="border border-dashed border-slate-300 rounded-xl p-8 bg-slate-100 text-slate-400 flex flex-col items-center justify-center space-y-2">
@@ -4003,9 +4012,62 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                               <p className="text-[11px] font-semibold">No Receipt Uploaded</p>
                             </div>
                           )}
+
+                          {/* Cloudinary Invoice Attachment Section */}
+                          <div className="mt-4 pt-3 border-t border-slate-200 text-left space-y-2">
+                            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Cloudinary Tax Invoice</p>
+                            {order.invoiceUrl ? (
+                              <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl p-2.5">
+                                <div className="flex items-center gap-2 overflow-hidden">
+                                  <FileText className="w-4 h-4 text-emerald-700 shrink-0" />
+                                  <span className="text-[10px] font-bold text-emerald-900 truncate">Official Invoice Attached</span>
+                                </div>
+                                <a
+                                  href={order.invoiceUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold px-2 py-1 rounded transition shrink-0"
+                                >
+                                  View Invoice
+                                </a>
+                              </div>
+                            ) : (
+                              <label className="w-full bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-bold py-2 px-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs">
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>Upload Invoice via Cloudinary</span>
+                                <input
+                                  type="file"
+                                  accept=".pdf,.png,.jpg,.jpeg"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      try {
+                                        addToast(`Uploading invoice ${file.name} to Cloudinary...`, 'info');
+                                        const res = await uploadOrderDocumentToCloudinary(file, 'invoices');
+                                        if (res.url) {
+                                          const allOrders = dbLocal.getOrders();
+                                          const idx = allOrders.findIndex(o => o.id === order.id);
+                                          if (idx > -1) {
+                                            allOrders[idx].invoiceUrl = res.url;
+                                            dbLocal.saveOrders(allOrders);
+                                            setOrders(allOrders);
+                                            addToast('Tax Invoice uploaded to Cloudinary & attached to Order!', 'success');
+                                          }
+                                        }
+                                      } catch (err) {
+                                        console.error(err);
+                                        addToast('Failed to upload invoice to Cloudinary.', 'error');
+                                      }
+                                    }
+                                  }}
+                                />
+                              </label>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="w-full border-t border-slate-200/60 pt-4 mt-4 text-[10px] text-slate-400 font-medium">
+                        <div className="w-full border-t border-slate-200/60 pt-3 mt-3 text-[10px] text-slate-400 font-medium">
                           Audit logs logged under super admin key.
                         </div>
                       </div>

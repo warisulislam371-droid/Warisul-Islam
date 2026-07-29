@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbLocal } from '../db';
+import { uploadOrderDocumentToCloudinary } from '../utils/cloudinary';
 import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderItem, PaymentSettings, PromoBanner, Vendor, PriceAlert } from '../types';
 import PriceAlertModal from './PriceAlertModal';
 import EnterpriseHomepage from './EnterpriseHomepage';
@@ -165,6 +166,7 @@ export default function CustomerPanel({
   const [manualNote, setManualNote] = useState('');
   const [manualProofUrl, setManualProofUrl] = useState('');
   const [manualProofFileName, setManualProofFileName] = useState('');
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [ordersFilter, setOrdersFilter] = useState<'All' | 'Pending Verification' | 'Active' | 'Completed'>('All');
   
@@ -663,7 +665,7 @@ export default function CustomerPanel({
     }
   };
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
       addToast('File size exceeds the 10MB limit.', 'error');
       return;
@@ -673,15 +675,28 @@ export default function CustomerPanel({
       return;
     }
     setManualProofFileName(file.name);
-    
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result) {
-        setManualProofUrl(reader.result as string);
-        addToast('Payment proof uploaded successfully!', 'success');
+    setIsUploadingProof(true);
+    addToast(`Uploading ${file.name} to Cloudinary...`, 'info');
+
+    try {
+      const cloudRes = await uploadOrderDocumentToCloudinary(file, 'payment_proofs');
+      if (cloudRes.url) {
+        setManualProofUrl(cloudRes.url);
+        addToast('Payment receipt uploaded to Cloudinary successfully!', 'success');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Cloudinary Order Upload Error:', err);
+      addToast('Cloudinary upload fallback: Loading file locally...', 'info');
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result) {
+          setManualProofUrl(reader.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingProof(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
