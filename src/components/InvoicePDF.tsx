@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Order } from '../types';
 import { Printer, Download, X, CheckCircle, FileText, Receipt } from 'lucide-react';
 import { downloadBillAsHTML, printBillInWindow } from '../utils/billPrinter';
+import { MARKETPLACE_LOGO } from '../assets/logo';
 
 interface InvoicePDFProps {
   order: Order;
@@ -95,15 +96,23 @@ export default function InvoicePDF({ order, onClose, addToast }: InvoicePDFProps
         <div className="p-8 sm:p-12 md:p-16 bg-white" id="invoice-printable">
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-200 pb-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 text-teal-800 mb-1">
-                <span className="font-display font-bold text-2xl tracking-tight">HealNex</span>
-                <span className="text-xs bg-teal-100 text-teal-800 px-2 py-0.5 rounded font-semibold tracking-wider uppercase">Medi Bazar</span>
+            <div className="flex items-center gap-3">
+              <img
+                src={MARKETPLACE_LOGO}
+                alt="HealNex Medi Bazar Logo"
+                referrerPolicy="no-referrer"
+                className="w-14 h-14 object-contain rounded-xl border border-slate-200 p-0.5 shadow-sm bg-white shrink-0"
+              />
+              <div>
+                <div className="flex items-center gap-2 text-teal-800 mb-0.5">
+                  <span className="font-display font-black text-2xl tracking-tight">HealNex</span>
+                  <span className="text-xs bg-teal-100 text-teal-800 px-2 py-0.5 rounded-md font-bold tracking-wider uppercase">Medi Bazar</span>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  India's Trusted Medical Equipment Procurement Platform<br />
+                  support@medbazarhealnex.shop | www.medbazarhealnex.shop
+                </p>
               </div>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                India's Trusted Medical Equipment Procurement Platform<br />
-                support@healnexmedibazar.com | www.healnexmedibazar.com
-              </p>
             </div>
             <div className="text-left md:text-right">
               <h2 className="text-xl font-bold text-slate-800 uppercase tracking-wide">Commercial Tax Invoice</h2>

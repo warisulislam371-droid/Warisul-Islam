@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Notification, Category, PriceAlert } from '../types';
 import { dbLocal } from '../db';
+import { MARKETPLACE_LOGO } from '../assets/logo';
 import {
   Activity,
   Search,
@@ -256,9 +257,12 @@ export default function Navbar({
           onClick={() => { onNavigate('marketplace'); onSearch(''); setSearchQuery(''); }}
           className="flex items-center gap-3 cursor-pointer shrink-0 transition-transform hover:scale-[1.01]"
         >
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#0077B6] to-[#0F9D8A] text-white flex items-center justify-center shadow-md">
-            <Activity className="w-6 h-6 stroke-[2.5]" />
-          </div>
+          <img
+            src={MARKETPLACE_LOGO}
+            alt="HealNex Medi Bazar Logo"
+            referrerPolicy="no-referrer"
+            className="w-12 h-12 object-contain rounded-xl shadow-sm bg-white p-0.5 border border-slate-200 shrink-0"
+          />
           <div>
             <span className="font-display font-black text-xl tracking-tight block leading-none text-[#1F2937]">
               Heal<span className="text-[#0F9D8A]">Nex</span>

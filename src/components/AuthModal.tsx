@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { User, Vendor } from '../types';
 import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
+import { MARKETPLACE_LOGO } from '../assets/logo';
 import {
   Lock,
   Mail,
@@ -605,12 +606,20 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
           
           <div className="space-y-6 z-10">
             <div>
-              <span className={`text-[9px] font-bold tracking-widest px-2.5 py-1 rounded-full uppercase ${
-                isDarkMode ? 'bg-teal-500/10 text-teal-400' : 'bg-white/10 text-teal-200'
-              }`}>
-                Certified Marketplace
-              </span>
-              <h3 className="text-xl font-bold font-display tracking-tight mt-3 text-white">HealNex Medi Bazar</h3>
+              <div className="flex items-center gap-2.5 mb-3">
+                <img
+                  src={MARKETPLACE_LOGO}
+                  alt="HealNex Logo"
+                  referrerPolicy="no-referrer"
+                  className="w-10 h-10 object-contain rounded-xl bg-white p-0.5 border border-white/20 shadow-md shrink-0"
+                />
+                <span className={`text-[9px] font-bold tracking-widest px-2.5 py-1 rounded-full uppercase ${
+                  isDarkMode ? 'bg-teal-500/10 text-teal-400' : 'bg-white/10 text-teal-200'
+                }`}>
+                  Certified Marketplace
+                </span>
+              </div>
+              <h3 className="text-xl font-bold font-display tracking-tight text-white">HealNex Medi Bazar</h3>
               <p className="text-[11px] text-slate-300 mt-1 font-medium">India's Trusted Clinical Equipment Procurement & Supplier Exchange Portal</p>
             </div>
 

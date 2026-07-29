@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { MARKETPLACE_LOGO } from '../assets/logo';
 import { 
   Activity, 
   MapPin, 
@@ -109,10 +110,13 @@ export default function Footer({
           
           {/* Brand & About Column */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="bg-gradient-to-r from-blue-600 to-teal-500 text-white p-2 rounded-xl shadow-md">
-                <Activity className="w-5 h-5 text-white" />
-              </div>
+            <div className="flex items-center gap-3">
+              <img
+                src={MARKETPLACE_LOGO}
+                alt="HealNex Medi Bazar Logo"
+                referrerPolicy="no-referrer"
+                className="w-11 h-11 object-contain rounded-xl shadow-md bg-white p-0.5 shrink-0"
+              />
               <div>
                 <span className="font-display font-black text-lg tracking-tight text-white block leading-tight">
                   Heal<span className="text-teal-400">Nex</span>

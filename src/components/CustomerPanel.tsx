@@ -1311,49 +1311,56 @@ export default function CustomerPanel({
               <form onSubmit={handleProceedToPayment} className="space-y-4 text-xs font-semibold">
                 
                 {/* Shipping Location fields */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Hospital Consignment Destination</h4>
+                <div className="space-y-3 p-4 bg-slate-50/80 rounded-xl border border-slate-200">
+                  <h4 className="text-xs font-black text-black uppercase tracking-wider flex items-center gap-1.5">
+                    <Building className="w-4 h-4 text-teal-700" />
+                    <span>Hospital Consignment Destination</span>
+                  </h4>
                   <div className="grid grid-cols-1 gap-3">
                     <div>
-                      <label className="text-slate-400 block mb-1">Detailed Street Address *</label>
+                      <label className="text-black font-bold block mb-1">Detailed Street Address *</label>
                       <input
                         type="text"
                         required
+                        placeholder="e.g., Block B, Fortis Healthcare, Sector 62"
                         value={shippingAddress.address}
                         onChange={(e) => setShippingAddress({ ...shippingAddress, address: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:border-teal-700 transition"
+                        className="w-full bg-white border border-slate-300 text-black font-bold rounded-lg p-2.5 outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition placeholder:text-slate-400"
                       />
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="text-slate-400 block mb-1">City *</label>
+                      <label className="text-black font-bold block mb-1">City *</label>
                       <input
                         type="text"
                         required
+                        placeholder="e.g., Mumbai"
                         value={shippingAddress.city}
                         onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-lg outline-none"
+                        className="w-full bg-white border border-slate-300 text-black font-bold p-2.5 rounded-lg outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition placeholder:text-slate-400"
                       />
                     </div>
                     <div>
-                      <label className="text-slate-400 block mb-1">State *</label>
+                      <label className="text-black font-bold block mb-1">State *</label>
                       <input
                         type="text"
                         required
+                        placeholder="e.g., Maharashtra"
                         value={shippingAddress.state}
                         onChange={(e) => setShippingAddress({ ...shippingAddress, state: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-lg outline-none"
+                        className="w-full bg-white border border-slate-300 text-black font-bold p-2.5 rounded-lg outline-none focus:border-black focus:ring-2 focus:ring-black/10 transition placeholder:text-slate-400"
                       />
                     </div>
                     <div>
-                      <label className="text-slate-400 block mb-1">Pincode *</label>
+                      <label className="text-black font-bold block mb-1">Pincode *</label>
                       <input
                         type="text"
                         required
+                        placeholder="e.g., 400001"
                         value={shippingAddress.pincode}
                         onChange={(e) => setShippingAddress({ ...shippingAddress, pincode: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-lg outline-none font-mono"
+                        className="w-full bg-white border border-slate-300 text-black font-bold p-2.5 rounded-lg outline-none font-mono focus:border-black focus:ring-2 focus:ring-black/10 transition placeholder:text-slate-400"
                       />
                     </div>
                   </div>
@@ -2526,11 +2533,11 @@ export default function CustomerPanel({
                           </div>
 
                           {/* Consignment Address & Summary Details */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border border-slate-100 rounded-xl p-3 text-[11px] font-medium leading-relaxed">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border border-slate-200 bg-slate-50/50 rounded-xl p-3.5 text-[11px] font-medium leading-relaxed">
                             <div className="space-y-1">
-                              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Hospital Consignment Target</p>
-                              <p className="text-slate-800 font-semibold">{order.shippingAddress.address}</p>
-                              <p className="text-slate-500">{order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pincode}</p>
+                              <p className="text-[10px] text-black uppercase font-black tracking-wider">Hospital Consignment Target</p>
+                              <p className="text-black font-bold text-xs">{order.shippingAddress.address}</p>
+                              <p className="text-black font-semibold">{order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pincode}</p>
                             </div>
                             <div className="space-y-1 sm:border-l sm:border-slate-100 sm:pl-4">
                               <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Payment coordinates</p>
