@@ -5,16 +5,22 @@ import { Order } from '../types';
  */
 
 export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): string {
-  const dateStr = new Date(order.createdAt).toLocaleDateString('en-IN', {
+  const rawDate = order?.createdAt ? new Date(order.createdAt) : new Date();
+  const validDate = isNaN(rawDate.getTime()) ? new Date() : rawDate;
+  const dateStr = validDate.toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric'
   });
 
-  const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const gstTotal = order.gstAmount || Math.round(subtotal * 0.12);
-  const discount = order.discountAmount || 0;
-  const grandTotal = order.finalAmount || (subtotal + gstTotal - discount);
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const subtotal = items.reduce((sum, item) => sum + ((item?.price || 0) * (item?.quantity || 1)), 0);
+  const gstTotal = order?.gstAmount ?? Math.round(subtotal * 0.12);
+  const discount = order?.discountAmount || 0;
+  const grandTotal = order?.finalAmount || Math.max(0, subtotal + gstTotal - discount);
+  const customerName = order?.customerName || 'Valued Buyer';
+  const vendorName = order?.vendorName || 'HealNex Certified Supplier';
+  const orderId = order?.id || 'ORD-HEALNEX';
 
   if (format === 'pos') {
     // 80mm POS Slip Format
@@ -22,7 +28,7 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
 <html>
 <head>
   <meta charset="utf-8">
-  <title>POS Receipt - ${order.id}</title>
+  <title>POS Receipt - ${orderId}</title>
   <style>
     @page { size: 80mm auto; margin: 0; }
     body {
@@ -55,14 +61,14 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
     <div>GSTIN: 27AAAAA1111A1Z1</div>
     <div class="dashed-line"></div>
     <div class="bold">TAX INVOICE SLIP</div>
-    <div>Bill No: ${order.id}</div>
+    <div>Bill No: ${orderId}</div>
     <div>Date: ${dateStr}</div>
   </div>
 
   <div class="dashed-line"></div>
-  <div><strong>Customer:</strong> ${order.customerName}</div>
-  <div><strong>City:</strong> ${order.shippingAddress?.city || 'India'}</div>
-  <div><strong>Vendor:</strong> ${order.vendorName}</div>
+  <div><strong>Customer:</strong> ${customerName}</div>
+  <div><strong>City:</strong> ${order?.shippingAddress?.city || 'India'}</div>
+  <div><strong>Vendor:</strong> ${vendorName}</div>
 
   <div class="dashed-line"></div>
   <table>
@@ -74,14 +80,14 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
       </tr>
     </thead>
     <tbody>
-      ${order.items.map(item => `
+      ${items.map(item => `
         <tr>
-          <td colspan="3" class="bold">${item.productName.slice(0, 32)}</td>
+          <td colspan="3" class="bold">${(item?.productName || 'Medical Item').slice(0, 32)}</td>
         </tr>
         <tr>
-          <td>HSN: ${item.hsnCode || '9018'}</td>
-          <td class="text-center">${item.quantity} x ₹${item.price}</td>
-          <td class="text-right">₹${item.price * item.quantity}</td>
+          <td>HSN: ${item?.hsnCode || '9018'}</td>
+          <td class="text-center">${item?.quantity || 1} x ₹${item?.price || 0}</td>
+          <td class="text-right">₹${(item?.price || 0) * (item?.quantity || 1)}</td>
         </tr>
       `).join('')}
     </tbody>
@@ -96,7 +102,7 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
   <div class="dashed-line"></div>
 
   <div class="text-center" style="margin-top:10px;">
-    <div>Payment: ${order.paymentMethod || 'Online Prepaid'}</div>
+    <div>Payment: ${order?.paymentMethod || 'Online Prepaid'}</div>
     <div>Status: PAID / VERIFIED</div>
     <br/>
     <div>Thank you for choosing HealNex!</div>
@@ -111,7 +117,7 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Tax Invoice - ${order.id}</title>
+  <title>Tax Invoice - ${orderId}</title>
   <style>
     @page { size: A4; margin: 15mm; }
     * { box-sizing: border-box; }
@@ -197,12 +203,12 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
     <div class="header">
       <div>
         <div class="brand">HealNex <span style="font-size:14px; color:#0284c7;">Medi Bazar</span></div>
-        <div class="brand-sub">Certified B2B Medical Equipment Marketplace<br/>GSTIN: 27AAAAA1111A1Z1 | Support: support@healnexmedibazar.com</div>
+        <div class="brand-sub">Certified B2B Medical Equipment Marketplace<br/>GSTIN: 27AAAAA1111A1Z1 | Support: support@medbazarhealnex.shop</div>
       </div>
       <div>
         <div class="title">Tax Invoice</div>
         <div class="meta">
-          <strong>Invoice No:</strong> ${order.id}<br/>
+          <strong>Invoice No:</strong> ${orderId}<br/>
           <strong>Date:</strong> ${dateStr}<br/>
           <strong>Status:</strong> <span style="color:#16a34a; font-weight:bold;">PAID / CONFIRMED</span>
         </div>
@@ -212,16 +218,16 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
     <div class="grid">
       <div class="card">
         <div class="card-title">Seller / Authorized Supplier</div>
-        <strong>${order.vendorName}</strong><br/>
+        <strong>${vendorName}</strong><br/>
         HealNex Certified Medical Equipment Supplier<br/>
         GSTIN: 27AAAAA1111A1Z1 | PAN: AAAAA1111A
       </div>
       <div class="card">
         <div class="card-title">Buyer / Consignee</div>
-        <strong>${order.customerName}</strong><br/>
-        ${order.shippingAddress?.address || ''}, ${order.shippingAddress?.city || ''}<br/>
-        ${order.shippingAddress?.state || ''} - ${order.shippingAddress?.pincode || ''}<br/>
-        Email: ${order.customerEmail}
+        <strong>${customerName}</strong><br/>
+        ${order?.shippingAddress?.address || ''}, ${order?.shippingAddress?.city || ''}<br/>
+        ${order?.shippingAddress?.state || ''} - ${order?.shippingAddress?.pincode || ''}<br/>
+        Email: ${order?.customerEmail || 'N/A'}
       </div>
     </div>
 
@@ -238,15 +244,15 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
         </tr>
       </thead>
       <tbody>
-        ${order.items.map((item, i) => `
+        ${items.map((item, i) => `
           <tr>
             <td>${i + 1}</td>
-            <td><strong>${item.productName}</strong><br/><span style="font-size:10px; color:#64748b;">SKU: ${item.productId}</span></td>
-            <td>${item.hsnCode || '9018'}</td>
-            <td style="text-align:right;">₹${item.price.toLocaleString('en-IN')}</td>
-            <td style="text-align:center;">${item.quantity}</td>
-            <td style="text-align:right;">${item.gstRate || 12}%</td>
-            <td style="text-align:right; font-weight:bold;">₹${(item.price * item.quantity).toLocaleString('en-IN')}</td>
+            <td><strong>${item?.productName || 'Medical Equipment'}</strong><br/><span style="font-size:10px; color:#64748b;">SKU: ${item?.productId || 'N/A'}</span></td>
+            <td>${item?.hsnCode || '9018'}</td>
+            <td style="text-align:right;">₹${(item?.price || 0).toLocaleString('en-IN')}</td>
+            <td style="text-align:center;">${item?.quantity || 1}</td>
+            <td style="text-align:right;">${item?.gstRate || 12}%</td>
+            <td style="text-align:right; font-weight:bold;">₹${((item?.price || 0) * (item?.quantity || 1)).toLocaleString('en-IN')}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -267,7 +273,7 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
       </div>
       <div style="text-align:right;">
         <div class="seal">HealNex Verified Gateway</div>
-        <div style="margin-top:6px; font-weight:bold;">${order.vendorName}</div>
+        <div style="margin-top:6px; font-weight:bold;">${vendorName}</div>
         <div style="font-size:10px;">Authorized Signatory</div>
       </div>
     </div>
