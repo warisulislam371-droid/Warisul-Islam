@@ -67,6 +67,7 @@ export interface BulkProductRow {
   gstRate: number;
   description: string;
   imageUrl: string;
+  pricingTiers?: { minQty: number; price: number }[];
 }
 
 interface VendorPanelProps {
@@ -673,24 +674,29 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
         return -1;
       };
 
-      const nameIdx = findIndex(['name', 'productname', 'title', 'itemname', 'product']);
-      const skuIdx = findIndex(['sku', 'skucode', 'productcode', 'code']);
-      const brandIdx = findIndex(['brand', 'brandname', 'manufacturer']);
-      const catIdx = findIndex(['category', 'cat', 'categoryname']);
-      const subcatIdx = findIndex(['subcategory', 'subcat']);
-      const priceIdx = findIndex(['price', 'vendorprice', 'saleprice', 'cost', 'unitprice']);
-      const mrpIdx = findIndex(['mrp', 'listprice', 'msrp']);
-      const moqIdx = findIndex(['moq', 'minorderqty', 'minimumorder']);
-      const stockIdx = findIndex(['stockquantity', 'stock', 'qty', 'quantity']);
-      const hsnIdx = findIndex(['hsncode', 'hsn', 'sac']);
-      const gstIdx = findIndex(['gstrate', 'gst', 'tax']);
-      const descIdx = findIndex(['description', 'shortdescription', 'fulldescription']);
-      const imgIdx = findIndex(['imageurl', 'imageurls', 'images', 'image', 'picture', 'primaryimageurl']);
+      const nameIdx = findIndex(['name', 'productname', 'title', 'itemname', 'product', 'item']);
+      const skuIdx = findIndex(['sku', 'skucode', 'productcode', 'itemsku', 'code', 'modelnumber']);
+      const brandIdx = findIndex(['brand', 'brandname', 'manufacturer', 'make']);
+      const catIdx = findIndex(['category', 'cat', 'categoryname', 'department']);
+      const subcatIdx = findIndex(['subcategory', 'subcat', 'subcategoryname']);
+      const priceIdx = findIndex(['price', 'vendorprice', 'saleprice', 'cost', 'unitprice', 'rate', 'ourprice', 'vendorcost']);
+      const mrpIdx = findIndex(['mrp', 'listprice', 'msrp', 'originalprice', 'regularprice']);
+      const moqIdx = findIndex(['moq', 'minorderqty', 'minimumorder', 'minqty']);
+      const stockIdx = findIndex(['stockquantity', 'stock', 'qty', 'quantity', 'inventory', 'count']);
+      const hsnIdx = findIndex(['hsncode', 'hsn', 'saccode', 'sac']);
+      const gstIdx = findIndex(['gstrate', 'gst', 'tax', 'taxrate', 'vat']);
+      const descIdx = findIndex(['description', 'shortdescription', 'fulldescription', 'details', 'summary']);
+      const imgIdx = findIndex(['imageurl', 'imageurls', 'images', 'image', 'picture', 'primaryimageurl', 'photos', 'pictureurl']);
+      const tierIdx = findIndex(['pricingtiers', 'tiers', 'tierpricing', 'bulkdiscount', 'bulkprice']);
 
-      const cleanNum = (val: any, fallback: number) => {
-        if (!val) return fallback;
-        const n = Number(String(val).replace(/[^0-9.]/g, ''));
-        return isNaN(n) || n <= 0 ? fallback : n;
+      const cleanNum = (val: any, fallback: number, allowZero = false) => {
+        if (val === undefined || val === null || String(val).trim() === '') return fallback;
+        const cleaned = String(val).replace(/[^0-9.]/g, '');
+        const n = Number(cleaned);
+        if (isNaN(n)) return fallback;
+        if (!allowZero && n <= 0) return fallback;
+        if (allowZero && n < 0) return fallback;
+        return n;
       };
 
       const parsed: BulkProductRow[] = [];
@@ -709,12 +715,31 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
         const moqVal = moqIdx !== -1 ? cleanNum(cols[moqIdx], 1) : 1;
         const stockVal = stockIdx !== -1 ? cleanNum(cols[stockIdx], 10) : 10;
         const hsnVal = (hsnIdx !== -1 && cols[hsnIdx]) ? cols[hsnIdx].trim() : '90189019';
-        const gstVal = gstIdx !== -1 ? cleanNum(cols[gstIdx], 12) : 12;
+        const gstVal = gstIdx !== -1 ? cleanNum(cols[gstIdx], 12, true) : 12;
         const descVal = (descIdx !== -1 && cols[descIdx]) ? cols[descIdx].trim() : `${nameVal} - High quality hospital grade clinical equipment.`;
         
         let imgVal = (imgIdx !== -1 && cols[imgIdx]) ? cols[imgIdx].trim() : 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400';
         if (imgVal.includes(';')) {
           imgVal = imgVal.split(';')[0].trim();
+        } else if (imgVal.includes(',')) {
+          imgVal = imgVal.split(',')[0].trim();
+        }
+
+        // Parse optional pricing tiers (Format: Qty:Price;Qty:Price or Qty-Price)
+        let parsedTiers: { minQty: number; price: number }[] | undefined = undefined;
+        const rawTiers = tierIdx !== -1 ? cols[tierIdx] : '';
+        if (rawTiers && rawTiers.includes(':')) {
+          const list = rawTiers.split(';').map(t => t.trim()).filter(Boolean);
+          const tiersArr: { minQty: number; price: number }[] = [];
+          list.forEach(item => {
+            const [q, p] = item.split(':');
+            const qtyNum = cleanNum(q, 0);
+            const priceNum = cleanNum(p, 0);
+            if (qtyNum > 0 && priceNum > 0) {
+              tiersArr.push({ minQty: qtyNum, price: priceNum });
+            }
+          });
+          if (tiersArr.length > 0) parsedTiers = tiersArr;
         }
 
         parsed.push({
@@ -732,7 +757,8 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
           hsnCode: hsnVal,
           gstRate: gstVal,
           description: descVal,
-          imageUrl: imgVal
+          imageUrl: imgVal,
+          pricingTiers: parsedTiers
         });
       }
 
@@ -856,19 +882,41 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     const globalCommissionRate = dbLocal.getPaymentSettings().platformCommissionRate || 10;
     const vendorCommRate = vendorProfile.customCommissionRate !== undefined ? vendorProfile.customCommissionRate : globalCommissionRate;
 
+    const existingProducts = dbLocal.getProducts();
+    const seenSkus = new Set<string>();
+
+    const targetVendorId = vendorProfile.id || currentUser.id;
+    const targetVendorName = vendorProfile.companyName || currentUser.name || 'Vendor Partner';
+
     const newProducts: Product[] = validRows.map((r, i) => {
       const vPrice = Number(r.price) || 1000;
       const commAmount = Math.round((vPrice * vendorCommRate) / 100 * 100) / 100;
       const finalPrice = Math.round((vPrice + commAmount) * 100) / 100;
       const mrpPrice = Number(r.mrp) || Math.round(vPrice * 1.25);
 
+      let rawSku = r.sku.trim() || `SKU-BLK-${Math.floor(Math.random() * 90000 + 10000)}`;
+      let skuLower = rawSku.toLowerCase();
+      let suffixCounter = 1;
+
+      while (seenSkus.has(skuLower) || existingProducts.some(p => p.sku.toLowerCase() === skuLower)) {
+        rawSku = `${r.sku.trim() || 'SKU-BLK'}-${Math.floor(10 + Math.random() * 90)}`;
+        skuLower = rawSku.toLowerCase();
+        suffixCounter++;
+        if (suffixCounter > 10) break;
+      }
+      seenSkus.add(skuLower);
+
+      const gstValue = (r.gstRate !== undefined && r.gstRate !== null && !isNaN(Number(r.gstRate))) 
+        ? Number(r.gstRate) 
+        : 12;
+
       return {
         id: `prod-blk-${Date.now()}-${i}`,
-        vendorId: currentUser.id,
-        vendorName: vendorProfile.companyName || 'Vendor Partner',
+        vendorId: targetVendorId,
+        vendorName: targetVendorName,
         name: r.name.trim(),
-        sku: r.sku.trim() || `SKU-BLK-${Math.floor(Math.random() * 90000 + 10000)}`,
-        brand: r.brand.trim() || vendorProfile.companyName || 'HealNex Partner',
+        sku: rawSku,
+        brand: r.brand.trim() || targetVendorName || 'HealNex Partner',
         category: r.category || 'Medical Equipment',
         subcategory: r.subcategory || 'General',
         description: r.description.trim() || `${r.name} - Professional medical & hospital grade equipment.`,
@@ -888,10 +936,11 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
         stockQuantity: Number(r.stockQuantity) || 10,
         unit: 'Piece',
         hsnCode: r.hsnCode || '90189019',
-        gstRate: Number(r.gstRate) || 12,
+        gstRate: gstValue,
         warranty: '1 Year Standard Warranty',
         countryOfOrigin: 'India',
         images: [r.imageUrl || 'https://images.unsplash.com/photo-1516549655169-df83a0774514'],
+        pricingTiers: r.pricingTiers,
         status: asDraft ? 'Draft' : 'Pending',
         published: false,
         isActive: false,
@@ -2076,11 +2125,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                           <input
                             type="number"
                             placeholder="Price"
-                            value={row.price || ''}
+                            value={row.price !== undefined && row.price !== null && row.price !== 0 ? row.price : ''}
                             onChange={(e) => {
                               const list = [...manualRows];
-                              list[idx].price = Number(e.target.value);
-                              list[idx].salePrice = Number(e.target.value);
+                              const val = e.target.value === '' ? 0 : Number(e.target.value);
+                              list[idx].price = val;
+                              list[idx].salePrice = val;
                               setManualRows(list);
                             }}
                             className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 outline-none focus:border-teal-600 font-mono font-bold text-teal-700"
@@ -2090,10 +2140,10 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                           <input
                             type="number"
                             placeholder="MRP"
-                            value={row.mrp || ''}
+                            value={row.mrp !== undefined && row.mrp !== null && row.mrp !== 0 ? row.mrp : ''}
                             onChange={(e) => {
                               const list = [...manualRows];
-                              list[idx].mrp = Number(e.target.value);
+                              list[idx].mrp = e.target.value === '' ? 0 : Number(e.target.value);
                               setManualRows(list);
                             }}
                             className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 outline-none focus:border-teal-600 font-mono"
@@ -2103,10 +2153,10 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                           <input
                             type="number"
                             placeholder="Qty"
-                            value={row.stockQuantity || ''}
+                            value={row.stockQuantity !== undefined && row.stockQuantity !== null && row.stockQuantity !== 0 ? row.stockQuantity : ''}
                             onChange={(e) => {
                               const list = [...manualRows];
-                              list[idx].stockQuantity = Number(e.target.value);
+                              list[idx].stockQuantity = e.target.value === '' ? 0 : Number(e.target.value);
                               setManualRows(list);
                             }}
                             className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 outline-none focus:border-teal-600 font-mono"
@@ -2129,10 +2179,10 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                           <input
                             type="number"
                             placeholder="12"
-                            value={row.gstRate || ''}
+                            value={row.gstRate !== undefined && row.gstRate !== null ? row.gstRate : ''}
                             onChange={(e) => {
                               const list = [...manualRows];
-                              list[idx].gstRate = Number(e.target.value);
+                              list[idx].gstRate = e.target.value === '' ? 0 : Number(e.target.value);
                               setManualRows(list);
                             }}
                             className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 outline-none focus:border-teal-600 font-mono"

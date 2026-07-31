@@ -869,7 +869,8 @@ export default function VendorProductManager({
 
           const stockQuantity = Math.max(1, cleanNum(getVal('stockquantity'), 10));
           const minOrderQty = Math.max(1, cleanNum(getVal('minorderqty'), 1));
-          const gstRate = cleanNum(getVal('gstrate'), 12) || 12;
+          const rawGstVal = getVal('gstrate');
+          const gstRate = rawGstVal !== '' ? cleanNum(rawGstVal, 12) : 12;
 
           // Extract ALL image URLs from imageurls column as well as individual image columns (Image 1, Image 2, Primary Image URL, etc.)
           const urlsList: string[] = [];
