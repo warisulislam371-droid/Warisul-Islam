@@ -53,7 +53,7 @@ export async function uploadToGoogleDrive(
       sku: `DRV-${Date.now().toString().slice(-6)}`
     };
 
-    const res = await fetch('/api/google-drive/upload', {
+    const res = await fetch('/api/drive/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -95,10 +95,49 @@ export async function uploadToGoogleDrive(
     }
   }
 
+  const finalUrl = fallbackUrl || `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
+  const originalFileName = typeof file === 'string' ? 'asset_file.webp' : ((file as any).name || 'file.webp');
+
+  // Register in local database so Google Drive Manager tracks the asset
+  if (typeof dbLocal !== 'undefined' && dbLocal.addDriveFile) {
+    const driveRecord = {
+      id: `drv_${timestamp}_${Math.random().toString(36).substring(2, 6)}`,
+      fileId,
+      fileName: originalFileName,
+      directUrl: finalUrl,
+      thumbnailUrl: finalUrl,
+      mimeType: 'image/webp',
+      size: 195000,
+      category: categoryName,
+      brand: 'HealNex',
+      productName: originalFileName.split('.')[0] || 'Medical Asset',
+      uploadedBy,
+      uploadedByRole: 'vendor' as const,
+      folderPath,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    dbLocal.addDriveFile(driveRecord);
+    if (dbLocal.addDriveLog) {
+      dbLocal.addDriveLog({
+        id: `log_${timestamp}_${Math.random().toString(36).substring(2, 6)}`,
+        action: 'UPLOAD',
+        fileId,
+        fileName: originalFileName,
+        folderPath,
+        timestamp: new Date().toISOString(),
+        userId: uploadedBy,
+        userName: uploadedBy,
+        userRole: 'vendor',
+        details: `Uploaded asset stored in Google Drive folder "${folderPath}".`
+      });
+    }
+  }
+
   return {
-    url: fallbackUrl || `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
+    url: finalUrl,
     public_id: fileId,
-    original_filename: typeof file === 'string' ? 'file' : ((file as any).name || 'file'),
+    original_filename: originalFileName,
     format: 'webp',
     resource_type: 'image'
   };

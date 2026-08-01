@@ -464,6 +464,47 @@ export default function VendorProductManager({
       showToast(targetStatus === 'Draft' ? 'New draft product created.' : 'New product submitted for Admin approval!');
     }
 
+    // Register product images in Google Drive database
+    (updatedProd.images || []).forEach((imgUrl, imgIdx) => {
+      if (imgUrl && imgUrl.trim()) {
+        const fileId = `1DRV_Prod_${Date.now()}_${updatedProd.sku}_${imgIdx}`;
+        const driveRecord: GoogleDriveFile = {
+          id: `drv_file_${Date.now()}_${updatedProd.sku}_${imgIdx}`,
+          fileId,
+          fileName: `${updatedProd.sku || updatedProd.name}_img_${imgIdx + 1}.webp`,
+          directUrl: imgUrl,
+          thumbnailUrl: imgUrl,
+          mimeType: 'image/webp',
+          size: 215000,
+          category: updatedProd.category || 'Product Catalog',
+          brand: updatedProd.brand || vendor.companyName,
+          sku: updatedProd.sku,
+          productName: updatedProd.name,
+          vendorId: vendor.id,
+          vendorName: vendor.companyName,
+          folderPath: `VendorProducts/${updatedProd.category || 'General'}/${updatedProd.sku || 'Items'}`,
+          productId: updatedProd.id,
+          uploadedBy: vendor.companyName,
+          uploadedByRole: 'vendor',
+          createdAt: now,
+          updatedAt: now
+        };
+        dbLocal.addDriveFile(driveRecord);
+        dbLocal.addDriveLog({
+          id: `log_prod_${Date.now()}_${updatedProd.sku}_${imgIdx}`,
+          action: 'UPLOAD',
+          fileId,
+          fileName: driveRecord.fileName,
+          folderPath: driveRecord.folderPath,
+          timestamp: now,
+          userId: vendor.id,
+          userName: vendor.companyName,
+          userRole: 'vendor',
+          details: `Product catalog image stored in Google Drive for product "${updatedProd.name}" (SKU: ${updatedProd.sku}).`
+        });
+      }
+    });
+
     setShowProductModal(false);
     onRefresh();
   };
