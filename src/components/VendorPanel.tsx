@@ -6,6 +6,7 @@ import VendorProductManager from './VendorProductManager';
 import VendorAnalytics from './VendorAnalytics';
 import { VendorVerificationWizard } from './VendorVerificationWizard';
 import { ProductImageManager } from './ProductImageManager';
+import { GoogleDriveManager } from './GoogleDriveManager';
 import {
   Store,
   Upload,
@@ -82,7 +83,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [clearanceRequests, setClearanceRequests] = useState<PaymentClearanceRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<'profile' | 'products' | 'bulk' | 'orders' | 'rfqs' | 'payouts' | 'analytics' | 'verification' | 'image_assets'>('analytics');
+  const [activeTab, setActiveTab] = useState<'profile' | 'products' | 'bulk' | 'orders' | 'rfqs' | 'payouts' | 'analytics' | 'verification' | 'image_assets' | 'google_drive'>('analytics');
 
   // Payout Clearance Request State
   const [reqAmount, setReqAmount] = useState<number>(0);
@@ -1503,6 +1504,13 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
             Cloudinary Image Manager
           </button>
           <button
+            onClick={() => setActiveTab('google_drive')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'google_drive' ? 'bg-white text-slate-950 shadow-sm font-bold text-teal-800' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <UploadCloud className="w-3.5 h-3.5 text-teal-600" />
+            Google Drive Storage
+          </button>
+          <button
             onClick={() => setActiveTab('payouts')}
             className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'payouts' ? 'bg-white text-slate-950 shadow-sm font-bold text-teal-800' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -1526,6 +1534,15 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
           vendorId={vendorProfile.id}
           userRole="vendor"
           onImagesUpdated={() => loadData()}
+        />
+      )}
+
+      {/* Google Drive Asset Storage Tab */}
+      {activeTab === 'google_drive' && vendorProfile && (
+        <GoogleDriveManager
+          mode="vendor"
+          vendorId={vendorProfile.id}
+          vendorName={vendorProfile.companyName || vendorProfile.ownerName}
         />
       )}
 

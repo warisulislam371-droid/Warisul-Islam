@@ -105,6 +105,11 @@ export interface Product {
   warranty: string;
   countryOfOrigin: string;
   images: string[];
+  mainImage?: string;
+  galleryImages?: string[];
+  thumbnail?: string;
+  googleDriveFileIds?: string[];
+  imageUrls?: string[];
   brochureUrl?: string;
   status: ProductStatus;
   createdAt: string;
@@ -649,4 +654,45 @@ export interface ProductImageUploadHistory {
   performedByName: string;
   timestamp: string;
   note?: string;
+}
+
+export interface GoogleDriveFile {
+  id: string;
+  fileId: string;
+  fileName: string;
+  directUrl: string;
+  thumbnailUrl?: string;
+  mediumUrl?: string;
+  mimeType: string;
+  size: number;
+  md5Hash?: string;
+  category?: string;
+  brand?: string;
+  sku?: string;
+  productName?: string;
+  vendorId?: string;
+  vendorName?: string;
+  folderPath?: string;
+  driveFolderId?: string;
+  productId?: string;
+  uploadedBy: string;
+  uploadedByRole: 'admin' | 'vendor' | 'system';
+  createdAt: string;
+  updatedAt: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+}
+
+export interface GoogleDriveLog {
+  id: string;
+  action: 'UPLOAD' | 'DELETE' | 'REPLACE' | 'MOVE' | 'RENAME' | 'RESTORE' | 'DOWNLOAD';
+  fileId: string;
+  fileName: string;
+  productId?: string;
+  vendorId?: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  timestamp: string;
+  details?: string;
 }

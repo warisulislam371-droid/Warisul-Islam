@@ -1,4 +1,4 @@
-import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, PriceAlert, SocialMediaLinks, DealOfDay } from './types';
+import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, PriceAlert, SocialMediaLinks, DealOfDay, GoogleDriveFile, GoogleDriveLog } from './types';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_BLOGS, DEFAULT_SUPER_ADMIN, INITIAL_BRANDS } from './data';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from './utils/sliceQrSvg';
 import { 
@@ -268,7 +268,9 @@ const STORAGE_KEYS = {
   BRAND_REQUESTS: 'healnex_brand_requests',
   PRICE_ALERTS: 'healnex_price_alerts',
   SOCIAL_LINKS: 'healnex_social_links',
-  DEAL_OF_DAY: 'healnex_deal_of_day'
+  DEAL_OF_DAY: 'healnex_deal_of_day',
+  GOOGLE_DRIVE_FILES: 'healnex_drive_files',
+  GOOGLE_DRIVE_LOGS: 'healnex_drive_logs'
 };
 
 export const DEFAULT_DEAL_OF_DAY: DealOfDay = {
@@ -1277,5 +1279,58 @@ export const dbLocal = {
     if (updated) {
       this.savePriceAlerts(alerts);
     }
+  },
+
+  // Google Drive Files Storage
+  getDriveFiles(): GoogleDriveFile[] {
+    const list = this.get(STORAGE_KEYS.GOOGLE_DRIVE_FILES, []);
+    return Array.isArray(list) ? list : [];
+  },
+  saveDriveFiles(files: GoogleDriveFile[]) {
+    const old = this.getDriveFiles();
+    this.set(STORAGE_KEYS.GOOGLE_DRIVE_FILES, files);
+    syncListToFirestoreWithDeletions('drive_files', files, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
+  },
+  addDriveFile(file: GoogleDriveFile) {
+    const list = this.getDriveFiles();
+    const existingIdx = list.findIndex(f => f.fileId === file.fileId || f.id === file.id);
+    if (existingIdx >= 0) {
+      list[existingIdx] = { ...file, updatedAt: new Date().toISOString() };
+    } else {
+      list.unshift(file);
+    }
+    this.saveDriveFiles(list);
+  },
+  updateDriveFile(id: string, updates: Partial<GoogleDriveFile>) {
+    const list = this.getDriveFiles().map(f => f.id === id || f.fileId === id ? { ...f, ...updates, updatedAt: new Date().toISOString() } : f);
+    this.saveDriveFiles(list);
+  },
+  deleteDriveFile(id: string, softDelete: boolean = true) {
+    if (softDelete) {
+      this.updateDriveFile(id, { isDeleted: true, deletedAt: new Date().toISOString() });
+    } else {
+      const list = this.getDriveFiles().filter(f => f.id !== id && f.fileId !== id);
+      this.saveDriveFiles(list);
+    }
+  },
+
+  // Google Drive Logging
+  getDriveLogs(): GoogleDriveLog[] {
+    const list = this.get(STORAGE_KEYS.GOOGLE_DRIVE_LOGS, []);
+    return Array.isArray(list) ? list : [];
+  },
+  saveDriveLogs(logs: GoogleDriveLog[]) {
+    const old = this.getDriveLogs();
+    this.set(STORAGE_KEYS.GOOGLE_DRIVE_LOGS, logs);
+    syncListToFirestoreWithDeletions('drive_logs', logs, old);
+    window.dispatchEvent(new Event('healnex_db_update'));
+  },
+  addDriveLog(log: GoogleDriveLog) {
+    const list = this.getDriveLogs();
+    list.unshift(log);
+    // Keep last 500 logs to prevent bloat
+    const trimmed = list.slice(0, 500);
+    this.saveDriveLogs(trimmed);
   }
 };

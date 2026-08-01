@@ -6,6 +6,7 @@ import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSetti
 import AdminCategoriesManager from './AdminCategoriesManager';
 import { AdminVerificationPanel } from './AdminVerificationPanel';
 import { AdminCategorizationPanel } from './AdminCategorizationPanel';
+import { GoogleDriveManager } from './GoogleDriveManager';
 import {
   TrendingUp,
   Users,
@@ -229,7 +230,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [pushTarget, setPushTarget] = useState('admin');
   const [pushType, setPushType] = useState('clinical_broadcast');
   
-  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit' | 'ai_categorization_audit'>('kpis');
+  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit' | 'ai_categorization_audit' | 'google_drive'>('kpis');
 
   // Promo Banners State
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>(dbLocal.getPromoBanners());
@@ -1632,10 +1633,20 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             <Sparkles className="w-4 h-4 text-emerald-600" />
             AI Categorization Audit
           </button>
+          <button
+            onClick={() => setActiveTab('google_drive')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'google_drive' ? 'bg-white text-teal-900 shadow-sm font-bold border border-teal-300' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Server className="w-4 h-4 text-teal-600" />
+            Google Drive Storage
+          </button>
         </div>
       </div>
 
       {/* tab view layouts */}
+      {activeTab === 'google_drive' && (
+        <GoogleDriveManager mode="admin" />
+      )}
       {activeTab === 'ai_categorization_audit' && (
         <AdminCategorizationPanel />
       )}
