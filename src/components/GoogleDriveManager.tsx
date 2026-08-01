@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { GoogleDriveFile, GoogleDriveLog, Product } from '../types';
 import { dbLocal } from '../db';
+import { uploadProductImageToCloudinary } from '../utils/cloudinary';
 import DriveImage from './DriveImage';
 import { 
   formatDriveFileName, 
@@ -205,6 +206,15 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
         // Process & compress canvas WebP
         const processed = await processImageForDrive(item.file);
         
+        // Also upload to Cloudinary for dual Cloudinary + Drive storage
+        let cloudUrl = '';
+        try {
+          const cloudRes = await uploadProductImageToCloudinary(item.file, `drive_storage/${uploadCategory}`);
+          cloudUrl = cloudRes.url;
+        } catch {
+          console.warn('Cloudinary secondary upload failed for drive file');
+        }
+
         // Auto-generate standardized filename
         const finalName = formatDriveFileName(uploadCategory, uploadProductName, uploadSku, Date.now() + completed);
 
@@ -232,7 +242,13 @@ export const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({
 
         const data = await res.json();
         if (data.success && data.files && data.files.length > 0) {
-          data.files.forEach((f: GoogleDriveFile) => dbLocal.addDriveFile(f));
+          data.files.forEach((f: GoogleDriveFile) => {
+            if (cloudUrl) {
+              f.cloudinaryUrl = cloudUrl;
+              f.directUrl = cloudUrl;
+            }
+            dbLocal.addDriveFile(f);
+          });
           data.logs.forEach((l: GoogleDriveLog) => dbLocal.addDriveLog(l));
         }
 

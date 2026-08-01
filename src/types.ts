@@ -661,6 +661,7 @@ export interface GoogleDriveFile {
   fileId: string;
   fileName: string;
   directUrl: string;
+  cloudinaryUrl?: string;
   thumbnailUrl?: string;
   mediumUrl?: string;
   mimeType: string;

@@ -48,6 +48,61 @@ export async function uploadVendorDocumentToCloudinary(file: File): Promise<Clou
   };
 }
 
+export async function uploadProductImageToCloudinary(file: File | string, folder = 'healnex_products'): Promise<CloudinaryUploadResult> {
+  const cloudName =
+    (import.meta as any).env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
+    (import.meta as any).env?.VITE_CLOUDINARY_CLOUD_NAME ||
+    'kpb5rcow';
+  const uploadPreset =
+    (import.meta as any).env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ||
+    (import.meta as any).env?.VITE_CLOUDINARY_UPLOAD_PRESET ||
+    'healnex_products';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', uploadPreset);
+  formData.append('folder', folder);
+
+  try {
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        url: data.secure_url || data.url,
+        public_id: data.public_id || '',
+        original_filename: data.original_filename || (typeof file === 'string' ? 'image' : file.name),
+        format: data.format,
+        resource_type: data.resource_type,
+      };
+    }
+  } catch (e) {
+    console.warn('[Cloudinary Direct Upload Warning]', e);
+  }
+
+  // Fallback via server route /api/cloudinary/upload
+  const serverRes = await fetch('/api/cloudinary/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileData: typeof file === 'string' ? file : undefined,
+      folder,
+    })
+  });
+
+  const data = await serverRes.json();
+  return {
+    url: data.secure_url,
+    public_id: data.public_id,
+    original_filename: typeof file === 'string' ? 'image' : file.name,
+    format: data.format || 'webp',
+    resource_type: 'image'
+  };
+}
+
 export async function uploadOrderDocumentToCloudinary(file: File, subFolder = 'order_payments'): Promise<CloudinaryUploadResult> {
   const cloudName =
     (import.meta as any).env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
-import { uploadVendorDocumentToCloudinary, uploadOrderDocumentToCloudinary } from '../utils/cloudinary';
+import { uploadVendorDocumentToCloudinary, uploadOrderDocumentToCloudinary, uploadProductImageToCloudinary } from '../utils/cloudinary';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation, SocialMediaLinks, DealOfDay } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
 import { AdminVerificationPanel } from './AdminVerificationPanel';
 import { AdminCategorizationPanel } from './AdminCategorizationPanel';
 import { GoogleDriveManager } from './GoogleDriveManager';
+import { AdminBulkProductImport } from './AdminBulkProductImport';
 import {
   TrendingUp,
   Users,
@@ -230,7 +231,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [pushTarget, setPushTarget] = useState('admin');
   const [pushType, setPushType] = useState('clinical_broadcast');
   
-  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit' | 'ai_categorization_audit' | 'google_drive'>('kpis');
+  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit' | 'ai_categorization_audit' | 'google_drive' | 'bulk_import'>('kpis');
 
   // Promo Banners State
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>(dbLocal.getPromoBanners());
@@ -1533,6 +1534,13 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             {pendingProductsCount > 0 && (
               <span className="bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">{pendingProductsCount}</span>
             )}
+          </button>
+          <button
+            onClick={() => setActiveTab('bulk_import')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'bulk_import' ? 'bg-white text-teal-900 shadow-sm font-bold border border-teal-300' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Zap className="w-4 h-4 text-teal-600" />
+            Bulk Product Import
           </button>
           <button
             onClick={() => setActiveTab('categories')}
@@ -2982,6 +2990,11 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
         <AdminCategoriesManager onRefresh={loadData} />
       )}
 
+      {/* Bulk Product Import & Image Link Converter tab */}
+      {activeTab === 'bulk_import' && (
+        <AdminBulkProductImport onRefreshCatalog={loadData} onNavigateToProducts={() => setActiveTab('products')} />
+      )}
+
       {/* Vendor Products Management tab */}
       {activeTab === 'products' && (() => {
         const uniqueVendors = Array.from(new Set(products.map(p => p.vendorName || 'Unknown Vendor'))).filter(Boolean);
@@ -3050,6 +3063,14 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('bulk_import')}
+                  className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl border border-teal-600 shadow-sm transition flex items-center gap-2 cursor-pointer"
+                >
+                  <Zap className="w-4 h-4 text-teal-300" />
+                  Bulk Product Import (CSV / Excel)
+                </button>
                 {pendingCount > 0 && (
                   <button
                     type="button"
@@ -5604,16 +5625,21 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              if (reader.result) {
-                                setSocialLinks({ ...socialLinks, appQrCodeUrl: reader.result as string });
-                              }
-                            };
-                            reader.readAsDataURL(file);
+                            try {
+                              const cloudRes = await uploadProductImageToCloudinary(file, 'app_qr_codes');
+                              setSocialLinks({ ...socialLinks, appQrCodeUrl: cloudRes.url });
+                            } catch {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                if (reader.result) {
+                                  setSocialLinks({ ...socialLinks, appQrCodeUrl: reader.result as string });
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
                           }
                         }}
                       />
@@ -6068,16 +6094,21 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                           type="file"
                           accept="image/*"
                           className="hidden"
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                if (reader.result) {
-                                  setBannerForm({ ...bannerForm, imageUrl: reader.result as string });
-                                }
-                              };
-                              reader.readAsDataURL(file);
+                              try {
+                                const cloudRes = await uploadProductImageToCloudinary(file, 'banners');
+                                setBannerForm({ ...bannerForm, imageUrl: cloudRes.url });
+                              } catch {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  if (reader.result) {
+                                    setBannerForm({ ...bannerForm, imageUrl: reader.result as string });
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
                             }
                           }}
                         />
@@ -6387,16 +6418,21 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                           type="file"
                           accept="image/*"
                           className="hidden"
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                if (reader.result) {
-                                  setEditingBannerModal({ ...editingBannerModal, imageUrl: reader.result as string });
-                                }
-                              };
-                              reader.readAsDataURL(file);
+                              try {
+                                const cloudRes = await uploadProductImageToCloudinary(file, 'banners');
+                                setEditingBannerModal({ ...editingBannerModal, imageUrl: cloudRes.url });
+                              } catch {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  if (reader.result) {
+                                    setEditingBannerModal({ ...editingBannerModal, imageUrl: reader.result as string });
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
                             }
                           }}
                         />
