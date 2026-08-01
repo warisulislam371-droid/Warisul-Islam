@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
-import { Vendor, Product, Order, RFQ, Quotation, User, PaymentClearanceRequest } from '../types';
+import { Vendor, Product, Order, RFQ, Quotation, User, PaymentClearanceRequest, GoogleDriveFile } from '../types';
 import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
 import VendorProductManager from './VendorProductManager';
 import VendorAnalytics from './VendorAnalytics';
@@ -953,6 +953,46 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
 
     const all = dbLocal.getProducts();
     dbLocal.saveProducts([...newProducts, ...all]);
+
+    // Register image files in Google Drive for Vendor Bulk Catalog Synchronizer
+    newProducts.forEach((np, pIdx) => {
+      const imgUrl = np.images?.[0] || 'https://images.unsplash.com/photo-1516549655169-df83a0774514';
+      const fileId = `1DRV_BulkSync_${Date.now()}_${pIdx}`;
+      const driveRecord: GoogleDriveFile = {
+        id: `drv_file_${Date.now()}_sync_${pIdx}`,
+        fileId,
+        fileName: `${np.sku || np.name}_catalog_img.webp`,
+        directUrl: imgUrl,
+        thumbnailUrl: imgUrl,
+        mimeType: 'image/webp',
+        size: 185000,
+        category: np.category || 'Vendor Bulk Catalog Synchronizer',
+        brand: np.brand || targetVendorName,
+        sku: np.sku,
+        productName: np.name,
+        vendorId: targetVendorId,
+        vendorName: targetVendorName,
+        folderPath: `VendorBulkSync/${np.category || 'General'}/${np.sku || 'Products'}`,
+        productId: np.id,
+        uploadedBy: targetVendorName,
+        uploadedByRole: 'vendor',
+        createdAt: now,
+        updatedAt: now
+      };
+      dbLocal.addDriveFile(driveRecord);
+      dbLocal.addDriveLog({
+        id: `log_sync_${Date.now()}_${pIdx}`,
+        action: 'UPLOAD',
+        fileId,
+        fileName: driveRecord.fileName,
+        folderPath: driveRecord.folderPath,
+        timestamp: now,
+        userId: targetVendorId,
+        userName: targetVendorName,
+        userRole: 'vendor',
+        details: `Vendor Bulk Catalog Synchronizer image stored in Google Drive for product "${np.name}" (SKU: ${np.sku}).`
+      });
+    });
 
     if (!asDraft) {
       dbLocal.addNotification(

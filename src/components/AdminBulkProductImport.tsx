@@ -6,7 +6,7 @@ import {
   Eye, Edit3, Trash2, Layers, Store, ExternalLink, Filter, Search, 
   ArrowRight, ShieldCheck, Check, Package, DollarSign, Info, FileCode
 } from 'lucide-react';
-import { Product, Vendor, Category, Brand } from '../types';
+import { Product, Vendor, Category, Brand, GoogleDriveFile } from '../types';
 import { dbLocal } from '../db';
 import { uploadProductImageToCloudinary } from '../utils/cloudinary';
 
@@ -737,6 +737,45 @@ export function AdminBulkProductImport({ onRefreshCatalog, onNavigateToProducts 
       };
 
       dbLocal.addProduct(newProd);
+
+      // Register all product images in Google Drive Manager database
+      row.processedImages.forEach((imgObj, imgIdx) => {
+        const driveFileId = imgObj.driveFileId || `1DRV_BulkImport_${Date.now()}_${i}_${imgIdx}`;
+        const driveRecord: GoogleDriveFile = {
+          id: `drv_bulk_${Date.now()}_${i}_${imgIdx}`,
+          fileId: driveFileId,
+          fileName: `${row.sku || row.name}_image_${imgIdx + 1}.webp`,
+          directUrl: imgObj.directUrl,
+          thumbnailUrl: imgObj.directUrl,
+          mimeType: 'image/webp',
+          size: 245000,
+          category: row.category || 'Bulk Product Import',
+          brand: row.brand || 'HealNex',
+          sku: row.sku,
+          productName: row.name,
+          vendorId,
+          vendorName,
+          folderPath: `BulkImport/${row.category || 'General'}/${row.sku || 'Products'}`,
+          productId: newProd.id,
+          uploadedBy: 'Admin Bulk Catalog Import',
+          uploadedByRole: 'admin',
+          createdAt: now,
+          updatedAt: now
+        };
+        dbLocal.addDriveFile(driveRecord);
+        dbLocal.addDriveLog({
+          id: `log_bulk_${Date.now()}_${i}_${imgIdx}`,
+          action: 'UPLOAD',
+          fileId: driveFileId,
+          fileName: driveRecord.fileName,
+          folderPath: driveRecord.folderPath,
+          timestamp: now,
+          userId: 'admin',
+          userName: 'Admin Enterprise Bulk Import Engine',
+          userRole: 'admin',
+          details: `Imported catalog image stored in Google Drive for product "${row.name}" (SKU: ${row.sku}).`
+        });
+      });
 
       const progress = Math.round(((i + 1) / selectedRows.length) * 90) + 10;
       setImportProgress(progress);

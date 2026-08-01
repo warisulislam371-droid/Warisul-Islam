@@ -689,6 +689,7 @@ export interface GoogleDriveLog {
   action: 'UPLOAD' | 'DELETE' | 'REPLACE' | 'MOVE' | 'RENAME' | 'RESTORE' | 'DOWNLOAD';
   fileId: string;
   fileName: string;
+  folderPath?: string;
   productId?: string;
   vendorId?: string;
   userId: string;

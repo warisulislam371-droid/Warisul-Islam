@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Product, Vendor, Category, Brand, CategoryRequest, BrandRequest, ProductSpecification, User } from '../types';
+import { Product, Vendor, Category, Brand, CategoryRequest, BrandRequest, ProductSpecification, User, GoogleDriveFile } from '../types';
 import { dbLocal } from '../db';
 import { uploadProductImageToCloudinary } from '../utils/cloudinary';
 import { detectCategoryAndSubcategory, detectCategoryWithAI, autoSortAndClassifyProducts } from '../utils/categorySorter';
@@ -1099,6 +1099,44 @@ export default function VendorProductManager({
       };
 
       dbLocal.addProduct(newProd);
+
+      // Register product images in Google Drive Manager database
+      const imgUrl = newProd.images?.[0] || 'https://images.unsplash.com/photo-1516549655169-df83a0774514';
+      const fileId = `1DRV_BulkImport_${Date.now()}_${newProd.sku}`;
+      const driveRecord: GoogleDriveFile = {
+        id: `drv_file_${Date.now()}_vblk_${newProd.sku}`,
+        fileId,
+        fileName: `${newProd.sku || newProd.name}_bulk_img.webp`,
+        directUrl: imgUrl,
+        thumbnailUrl: imgUrl,
+        mimeType: 'image/webp',
+        size: 210000,
+        category: newProd.category || 'Bulk Product Catalog Import',
+        brand: newProd.brand || vendor.companyName,
+        sku: newProd.sku,
+        productName: newProd.name,
+        vendorId: vendor.id,
+        vendorName: vendor.companyName,
+        folderPath: `VendorBulkImport/${newProd.category || 'General'}/${newProd.sku || 'Products'}`,
+        productId: newProd.id,
+        uploadedBy: vendor.companyName,
+        uploadedByRole: 'vendor',
+        createdAt: now,
+        updatedAt: now
+      };
+      dbLocal.addDriveFile(driveRecord);
+      dbLocal.addDriveLog({
+        id: `log_vblk_${Date.now()}_${newProd.sku}`,
+        action: 'UPLOAD',
+        fileId,
+        fileName: driveRecord.fileName,
+        folderPath: driveRecord.folderPath,
+        timestamp: now,
+        userId: vendor.id,
+        userName: vendor.companyName,
+        userRole: 'vendor',
+        details: `Vendor Bulk Import catalog image stored in Google Drive for product "${newProd.name}" (SKU: ${newProd.sku}).`
+      });
 
       dbLocal.addNotification(
         'admin',
