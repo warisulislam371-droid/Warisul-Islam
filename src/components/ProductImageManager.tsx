@@ -161,29 +161,37 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
 
     try {
       setIsUploading(true);
-      setStatusMessage({ type: 'info', text: 'Uploading optimized image to Cloudinary...' });
+      setStatusMessage({ type: 'info', text: 'Uploading compressed image to Cloudflare R2 Storage...' });
 
-      // Call Cloudinary API proxy / server helper
-      const response = await fetch('/api/cloudinary/upload', {
+      // Call Cloudflare R2 API Endpoint
+      const response = await fetch('/api/upload-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fileData: previewFile.compressedBase64,
-          folder: `products/${productId}`,
-          publicId: `prod_${productId}_${Date.now()}`
+          imageBase64: previewFile.compressedBase64,
+          fileName: previewFile.file.name,
+          contentType: 'image/webp',
+          category: 'equipment',
+          sku: productId || 'SKU001',
+          uploadedBy: vendorName,
+          productId
         })
       });
 
-      const cloudinaryData = await response.json();
+      if (!response.ok) {
+        throw new Error(`Cloudflare R2 Upload API returned status ${response.status}`);
+      }
+
+      const r2Data = await response.json();
 
       const newImageDoc: Omit<ProductImageAsset, 'id'> = {
         productId,
         vendorId,
-        cloudinaryPublicId: cloudinaryData.public_id || `pub_${Date.now()}`,
-        secureUrl: cloudinaryData.secure_url,
-        thumbnailUrl: cloudinaryData.thumbnail_url || cloudinaryData.secure_url,
+        cloudinaryPublicId: r2Data.storage_path || r2Data.public_id || `healnex/products/${Date.now()}`,
+        secureUrl: r2Data.image_url || r2Data.url,
+        thumbnailUrl: r2Data.thumbnail_url || r2Data.image_url || r2Data.url,
         fileName: previewFile.file.name,
-        fileSize: previewFile.compressedSize,
+        fileSize: r2Data.file_size || previewFile.compressedSize,
         originalSize: previewFile.originalSize,
         compressedSize: previewFile.compressedSize,
         format: 'webp',
@@ -201,20 +209,20 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
         productId,
         vendorId,
         action: 'Uploaded',
-        imageUrl: cloudinaryData.secure_url,
+        imageUrl: r2Data.image_url || r2Data.url,
         performedByRole: isAdminView ? 'admin' : 'vendor',
         performedByName: vendorName,
         timestamp: new Date().toISOString(),
-        note: `Uploaded image ${previewFile.file.name} (Compressed by ${Math.round(((previewFile.originalSize - previewFile.compressedSize) / previewFile.originalSize) * 100)}%)`
+        note: `Uploaded image to Cloudflare R2 Path: ${r2Data.storage_path}`
       });
 
-      setStatusMessage({ type: 'success', text: 'Image uploaded successfully to Cloudinary and stored in Firestore!' });
+      setStatusMessage({ type: 'success', text: 'Image uploaded successfully to Cloudflare R2 Storage CDN!' });
       setPreviewFile(null);
       setIsUploading(false);
     } catch (err: any) {
-      console.log('Upload error handled:', err);
+      console.log('R2 Upload error handled:', err);
       setIsUploading(false);
-      setStatusMessage({ type: 'error', text: 'Failed to complete image upload.' });
+      setStatusMessage({ type: 'error', text: 'Failed to complete Cloudflare R2 image upload.' });
     }
   };
 
@@ -329,9 +337,9 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
               <ImageIcon className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Product Image Assets & Cloudinary Gallery</h3>
+              <h3 className="text-lg font-bold text-slate-900">Product Image Assets & Cloudflare R2 Storage Gallery</h3>
               <p className="text-xs text-slate-500">
-                Upload up to 10 clinical-grade images with automatic canvas compression & Cloudinary hosting
+                Upload up to 10 clinical-grade images with automatic WebP conversion & Cloudflare R2 CDN hosting
               </p>
             </div>
           </div>
@@ -692,7 +700,7 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="text-base font-bold text-slate-900">Image Inspection & Cloudinary Metadata</h3>
+            <h3 className="text-base font-bold text-slate-900">Image Inspection & Cloudflare R2 Storage Metadata</h3>
 
             <div className="aspect-video bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border">
               <img src={selectedImageModal.secureUrl} alt="" className="max-h-full max-w-full object-contain" />
@@ -700,7 +708,7 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
 
             <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl text-xs">
               <div>
-                <span className="text-slate-400 block text-[10px]">Cloudinary Public ID</span>
+                <span className="text-slate-400 block text-[10px]">Cloudflare R2 Storage Path</span>
                 <span className="font-mono font-bold text-slate-700">{selectedImageModal.cloudinaryPublicId}</span>
               </div>
               <div>

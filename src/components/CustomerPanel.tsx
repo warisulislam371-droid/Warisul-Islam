@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbLocal } from '../db';
-import { uploadOrderDocumentToCloudinary } from '../utils/cloudinary';
+import { uploadOrderDocumentToR2 } from '../utils/r2Storage';
 import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderItem, PaymentSettings, PromoBanner, Vendor, PriceAlert } from '../types';
 import PriceAlertModal from './PriceAlertModal';
 import EnterpriseHomepage from './EnterpriseHomepage';
@@ -676,13 +676,13 @@ export default function CustomerPanel({
     }
     setManualProofFileName(file.name);
     setIsUploadingProof(true);
-    addToast(`Uploading ${file.name} to Cloudinary...`, 'info');
+    addToast(`Uploading ${file.name} to Cloudflare R2 Storage...`, 'info');
 
     try {
-      const cloudRes = await uploadOrderDocumentToCloudinary(file, 'payment_proofs');
+      const cloudRes = await uploadOrderDocumentToR2(file, 'payment_proofs');
       if (cloudRes.url) {
         setManualProofUrl(cloudRes.url);
-        addToast('Payment receipt uploaded to Cloudinary successfully!', 'success');
+        addToast('Payment receipt uploaded to Cloudflare R2 CDN successfully!', 'success');
       }
     } catch (err) {
       console.error('Cloudinary Order Upload Error:', err);

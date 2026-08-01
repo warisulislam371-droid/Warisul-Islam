@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Vendor, Category, Brand, CategoryRequest, BrandRequest, ProductSpecification, User } from '../types';
 import { dbLocal } from '../db';
+import { uploadProductImageToR2 } from '../utils/r2Storage';
 import { detectCategoryAndSubcategory, detectCategoryWithAI, autoSortAndClassifyProducts } from '../utils/categorySorter';
 import { AICategorizerCard } from './AICategorizerCard';
 import {
@@ -136,13 +137,10 @@ export default function VendorProductManager({
     setTimeout(() => setToastMessage(null), 4500);
   };
 
-  const handleCloudinaryUpload = async (files: FileList | null) => {
+  const handleR2Upload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setIsUploadingImage(true);
     setFormError('');
-
-    const cloudName = (import.meta as any).env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'kpb5rcow';
-    const uploadPreset = (import.meta as any).env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'healnex_products';
 
     const uploadedUrls: string[] = [];
     try {
@@ -154,25 +152,17 @@ export default function VendorProductManager({
           continue;
         }
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', uploadPreset);
+        const res = await uploadProductImageToR2(
+          file, 
+          formCategory || 'equipment', 
+          formSku || `SKU_${Date.now().toString(36).substring(4)}`, 
+          vendor.companyName || 'Vendor'
+        );
 
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Upload failed for ${file.name}: ${errText || res.statusText}`);
-        }
-
-        const data = await res.json();
-        if (data.secure_url) {
-          uploadedUrls.push(data.secure_url);
+        if (res.image_url || res.url) {
+          uploadedUrls.push(res.image_url || res.url);
         } else {
-          throw new Error(`No secure URL returned for ${file.name}`);
+          throw new Error(`No image URL returned from Cloudflare R2 for ${file.name}`);
         }
       }
 
@@ -203,14 +193,14 @@ export default function VendorProductManager({
           setSecondaryImages(sImgs);
         }
         showToast(uploadedUrls.length === 1 
-          ? 'Image uploaded successfully!' 
-          : `${uploadedUrls.length} images uploaded successfully!`
+          ? 'Image uploaded to Cloudflare R2 CDN successfully!' 
+          : `${uploadedUrls.length} images uploaded to Cloudflare R2 CDN!`
         );
       }
     } catch (err: any) {
-      console.error('Cloudinary upload error:', err);
+      console.error('Cloudflare R2 upload error:', err);
       setFormError(`Image upload failed: ${err.message || err}`);
-      showToast('Image upload failed. Please try again.');
+      showToast('Cloudflare R2 image upload failed. Please try again.');
     } finally {
       setIsUploadingImage(false);
     }
@@ -2722,7 +2712,7 @@ export default function VendorProductManager({
                     accept="image/*"
                     className="hidden"
                     disabled={isUploadingImage}
-                    onChange={(e) => handleCloudinaryUpload(e.target.files)}
+                    onChange={(e) => handleR2Upload(e.target.files)}
                   />
                 </div>
 

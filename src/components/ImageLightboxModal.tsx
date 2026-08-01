@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, ZoomIn, ZoomOut, RotateCcw, ChevronLeft, ChevronRight, 
   Maximize2, Minimize2, ShieldCheck, Tag, FileText, Check, 
-  Info, Sparkles, Building2, Layers, Flame
+  Info, Sparkles, Building2, Layers, Flame, ShoppingBag, 
+  Plus, CheckSquare, Square, Wrench, PackageCheck, Percent
 } from 'lucide-react';
 import { Product } from '../types';
+import { getCompatibleSparesAndConsumables, CompatibleSpareItem } from '../utils/compatibleSpares';
 
 interface ImageLightboxModalProps {
   isOpen: boolean;
@@ -29,13 +31,30 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showSpecs, setShowSpecs] = useState<boolean>(true);
 
+  // Frequently Bought With Carousel States
+  const [activeBottomTab, setActiveBottomTab] = useState<'frequently_bought' | 'angles'>('frequently_bought');
+  const [spares, setSpares] = useState<CompatibleSpareItem[]>([]);
+  const [selectedSpareIds, setSelectedSpareIds] = useState<string[]>([]);
+  const [addedItemIds, setAddedItemIds] = useState<Set<string>>(new Set());
+
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const carouselRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setActiveIdx(initialImageIndex);
     setZoomLevel(1);
     setPosition({ x: 0, y: 0 });
+
+    if (product) {
+      const list = getCompatibleSparesAndConsumables(product);
+      setSpares(list);
+      // Pre-select first 2 spares for bundle deal
+      setSelectedSpareIds(list.slice(0, 2).map(s => s.id));
+    } else {
+      setSpares([]);
+      setSelectedSpareIds([]);
+    }
   }, [product, initialImageIndex, isOpen]);
 
   // Keyboard controls
@@ -145,6 +164,64 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
     }
   };
 
+  const toggleSpareSelection = (id: string) => {
+    setSelectedSpareIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const selectedSparesList = spares.filter(s => selectedSpareIds.includes(s.id));
+
+  const mainSalePrice = product.salePrice || product.price || 0;
+  const mainMrpPrice = product.price || mainSalePrice;
+
+  const sparesSalePriceSum = selectedSparesList.reduce((acc, item) => acc + item.salePrice, 0);
+  const sparesMrpPriceSum = selectedSparesList.reduce((acc, item) => acc + item.price, 0);
+
+  // Extra 10% bundle discount on selected spare parts/consumables
+  const bundleDiscount = Math.round(sparesSalePriceSum * 0.10);
+  const totalBundleSalePrice = mainSalePrice + sparesSalePriceSum - bundleDiscount;
+  const totalBundleMrpPrice = mainMrpPrice + sparesMrpPriceSum;
+  const totalSavings = totalBundleMrpPrice - totalBundleSalePrice;
+
+  const handleAddSingleItem = (item: Product, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (onAddToCart) {
+      onAddToCart(item);
+      setAddedItemIds(prev => new Set(prev).add(item.id));
+      setTimeout(() => {
+        setAddedItemIds(prev => {
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
+      }, 2000);
+    }
+  };
+
+  const handleAddBundleToCart = () => {
+    if (!onAddToCart || !product) return;
+
+    onAddToCart(product);
+    setAddedItemIds(prev => new Set(prev).add(product.id));
+
+    selectedSparesList.forEach(s => {
+      onAddToCart(s);
+      setAddedItemIds(prev => new Set(prev).add(s.id));
+    });
+
+    setTimeout(() => {
+      setAddedItemIds(new Set());
+    }, 2000);
+  };
+
+  const scrollCarousel = (direction: 'left' | 'right') => {
+    if (carouselRef.current) {
+      const scrollAmount = direction === 'left' ? -300 : 300;
+      carouselRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col justify-between select-none animate-fade-in overflow-hidden">
       {/* Top Bar */}
@@ -225,7 +302,7 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
               transform: `scale(${zoomLevel}) translate(${position.x / zoomLevel}px, ${position.y / zoomLevel}px)`,
               transition: isDragging ? 'none' : 'transform 0.25s ease-out'
             }}
-            className="max-h-[75vh] max-w-[85vw] object-contain drop-shadow-2xl rounded-lg pointer-events-auto"
+            className="max-h-[70vh] max-w-[85vw] object-contain drop-shadow-2xl rounded-lg pointer-events-auto"
             draggable={false}
           />
 
@@ -353,6 +430,39 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
                 <p className="text-[10px] text-slate-400">Inclusive of all taxes ({product.gstRate}% GST) | HSN: {product.hsnCode}</p>
               </div>
 
+              {/* Compact Frequently Bought With Preview Box */}
+              {spares.length > 0 && (
+                <div className="p-3 bg-amber-950/30 border border-amber-500/30 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-amber-400 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" /> Compatible Spare Part
+                    </span>
+                    <span className="text-[9px] text-amber-300 font-bold bg-amber-500/20 px-1.5 py-0.5 rounded">
+                      Bundle Deal
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <img
+                      src={spares[0].images[0]}
+                      alt={spares[0].name}
+                      className="w-10 h-10 object-contain rounded-lg bg-slate-950 p-0.5 border border-slate-800 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <h5 className="text-[11px] font-bold text-slate-200 truncate">{spares[0].name}</h5>
+                      <span className="text-xs font-black text-emerald-400 font-mono">
+                        +₹{spares[0].salePrice.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <button
+                      onClick={(e) => handleAddSingleItem(spares[0], e)}
+                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-[10px] font-black shrink-0 transition"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Technical Specifications & Compliance */}
               <div className="space-y-2.5">
                 <h4 className="text-xs font-extrabold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -408,7 +518,7 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
 
             {/* Bottom Actions */}
             {onAddToCart && (
-              <div className="pt-4 border-t border-slate-800 mt-4">
+              <div className="pt-4 border-t border-slate-800 mt-4 space-y-2">
                 <button
                   onClick={() => {
                     onAddToCart(product);
@@ -416,7 +526,7 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
                   className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Add to Procurement Cart</span>
+                  <span>Add Main Unit to Cart</span>
                 </button>
               </div>
             )}
@@ -424,33 +534,229 @@ export const ImageLightboxModal: React.FC<ImageLightboxModalProps> = ({
         )}
       </div>
 
-      {/* Bottom Thumbnail Navigation Strip */}
-      {imagesList.length > 0 && (
-        <div className="p-3 bg-slate-900/90 border-t border-slate-800 flex items-center justify-center gap-3 z-20">
-          <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-1 scrollbar-thin">
-            {imagesList.map((imgUrl, idx) => (
-              <button
-                key={idx}
-                onClick={() => {
-                  setActiveIdx(idx);
-                  handleResetZoom();
-                }}
-                className={`w-14 h-14 rounded-xl border-2 overflow-hidden transition-all shrink-0 bg-slate-950 p-0.5 cursor-pointer ${
-                  activeIdx === idx
-                    ? 'border-emerald-400 ring-4 ring-emerald-500/20 scale-105 shadow-xl'
-                    : 'border-slate-800 hover:border-slate-600 opacity-60 hover:opacity-100'
-                }`}
-              >
-                <img
-                  src={imgUrl}
-                  alt={`Angle ${idx + 1}`}
-                  className="w-full h-full object-contain rounded-lg"
-                />
-              </button>
-            ))}
+      {/* Bottom Region: Frequently Bought With Carousel & Thumbnail Strip Tabs */}
+      <div className="bg-slate-900/95 border-t border-slate-800 z-20 shadow-2xl">
+        {/* Tab Header Navigation */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800/80 text-xs">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveBottomTab('frequently_bought')}
+              className={`px-3 py-1.5 rounded-xl font-extrabold transition flex items-center gap-2 cursor-pointer ${
+                activeBottomTab === 'frequently_bought'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Frequently Bought With ({spares.length} Spares &amp; Consumables)</span>
+              <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase tracking-wider">
+                10% Off Bundle
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveBottomTab('angles')}
+              className={`px-3 py-1.5 rounded-xl font-extrabold transition flex items-center gap-2 cursor-pointer ${
+                activeBottomTab === 'angles'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-md'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Image Angles ({imagesList.length})</span>
+            </button>
           </div>
+
+          {activeBottomTab === 'frequently_bought' && spares.length > 0 && (
+            <div className="hidden sm:flex items-center gap-2">
+              <button
+                onClick={() => scrollCarousel('left')}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer"
+                title="Scroll Left"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => scrollCarousel('right')}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer"
+                title="Scroll Right"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Tab Content 1: Frequently Bought With Carousel */}
+        {activeBottomTab === 'frequently_bought' && spares.length > 0 && (
+          <div className="p-3 flex flex-col md:flex-row items-stretch gap-3 max-w-full overflow-hidden">
+            {/* Scrollable Carousel Track */}
+            <div 
+              ref={carouselRef}
+              className="flex-1 flex items-center gap-3 overflow-x-auto scrollbar-thin py-1 pr-2 scroll-smooth"
+            >
+              {spares.map((spare) => {
+                const isSelected = selectedSpareIds.includes(spare.id);
+                const isAdded = addedItemIds.has(spare.id);
+
+                return (
+                  <div
+                    key={spare.id}
+                    onClick={() => toggleSpareSelection(spare.id)}
+                    className={`w-64 shrink-0 bg-slate-950/80 rounded-2xl p-3 border transition-all cursor-pointer relative group flex flex-col justify-between ${
+                      isSelected
+                        ? 'border-amber-500/50 ring-2 ring-amber-500/20 shadow-lg shadow-amber-500/5'
+                        : 'border-slate-800 hover:border-slate-700 opacity-80 hover:opacity-100'
+                    }`}
+                  >
+                    {/* Top Row: Checkbox & Type Badge */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`p-0.5 rounded transition ${isSelected ? 'text-amber-400' : 'text-slate-600'}`}>
+                          {isSelected ? <CheckSquare className="w-4 h-4 fill-amber-500/20" /> : <Square className="w-4 h-4" />}
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400">Include</span>
+                      </div>
+                      <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                        spare.isSparePart 
+                          ? 'bg-blue-500/10 text-blue-300 border-blue-500/20' 
+                          : 'bg-teal-500/10 text-teal-300 border-teal-500/20'
+                      }`}>
+                        {spare.isSparePart ? 'Spare Part' : 'Consumable'}
+                      </span>
+                    </div>
+
+                    {/* Item Details */}
+                    <div className="flex items-start gap-2.5 mb-2">
+                      <img
+                        src={spare.images[0]}
+                        alt={spare.name}
+                        className="w-12 h-12 object-contain rounded-xl bg-slate-900 p-1 border border-slate-800 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-bold text-slate-200 line-clamp-2 leading-tight group-hover:text-amber-300 transition">
+                          {spare.name}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium truncate">
+                          {spare.compatibilityNote || `Fits ${product.brand}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Price & Add Action */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 mt-auto">
+                      <div>
+                        <span className="text-xs font-black text-emerald-400 font-mono">
+                          ₹{spare.salePrice.toLocaleString('en-IN')}
+                        </span>
+                        {spare.price > spare.salePrice && (
+                          <span className="text-[10px] text-slate-500 line-through font-mono ml-1">
+                            ₹{spare.price.toLocaleString('en-IN')}
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={(e) => handleAddSingleItem(spare, e)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition flex items-center gap-1 cursor-pointer ${
+                          isAdded
+                            ? 'bg-emerald-500 text-slate-950'
+                            : 'bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-300 border border-slate-700'
+                        }`}
+                        title="Add item to cart"
+                      >
+                        {isAdded ? (
+                          <>
+                            <Check className="w-3 h-3" />
+                            <span>Added</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-3 h-3" />
+                            <span>Add</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bundle summary box */}
+            <div className="w-full md:w-72 bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 p-3.5 rounded-2xl border border-amber-500/30 shrink-0 flex flex-col justify-between shadow-xl">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" /> Bundle Deal Savings
+                  </span>
+                  <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] font-extrabold px-2 py-0.5 rounded-full">
+                    {selectedSpareIds.length + 1} Items Selected
+                  </span>
+                </div>
+
+                <div className="space-y-1 my-2">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-xs text-slate-400 font-medium">Combined Price:</span>
+                    <span className="text-base font-black text-emerald-400 font-mono">
+                      ₹{totalBundleSalePrice.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  {totalSavings > 0 && (
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 line-through font-mono">
+                        ₹{totalBundleMrpPrice.toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px]">
+                        Save ₹{totalSavings.toLocaleString('en-IN')} (10% Extra)
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {onAddToCart && (
+                <button
+                  onClick={handleAddBundleToCart}
+                  className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 rounded-xl font-black text-xs shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer mt-2"
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  <span>Add Main Unit + {selectedSpareIds.length} Spares to Cart</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab Content 2: Image Angles Gallery */}
+        {activeBottomTab === 'angles' && imagesList.length > 0 && (
+          <div className="p-3 flex items-center justify-center gap-3">
+            <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-1 scrollbar-thin">
+              {imagesList.map((imgUrl, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    setActiveIdx(idx);
+                    handleResetZoom();
+                  }}
+                  className={`w-14 h-14 rounded-xl border-2 overflow-hidden transition-all shrink-0 bg-slate-950 p-0.5 cursor-pointer ${
+                    activeIdx === idx
+                      ? 'border-emerald-400 ring-4 ring-emerald-500/20 scale-105 shadow-xl'
+                      : 'border-slate-800 hover:border-slate-600 opacity-60 hover:opacity-100'
+                  }`}
+                >
+                  <img
+                    src={imgUrl}
+                    alt={`Angle ${idx + 1}`}
+                    className="w-full h-full object-contain rounded-lg"
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
+

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
-import { uploadVendorDocumentToCloudinary, uploadOrderDocumentToCloudinary } from '../utils/cloudinary';
+import { uploadVendorDocumentToR2, uploadOrderDocumentToR2 } from '../utils/r2Storage';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation, SocialMediaLinks, DealOfDay } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
 import { AdminVerificationPanel } from './AdminVerificationPanel';
 import { AdminCategorizationPanel } from './AdminCategorizationPanel';
+import { AdminR2StoragePanel } from './AdminR2StoragePanel';
 import {
   TrendingUp,
   Users,
@@ -229,7 +230,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [pushTarget, setPushTarget] = useState('admin');
   const [pushType, setPushType] = useState('clinical_broadcast');
   
-  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit' | 'ai_categorization_audit'>('kpis');
+  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit' | 'ai_categorization_audit' | 'r2-storage'>('kpis');
 
   // Promo Banners State
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>(dbLocal.getPromoBanners());
@@ -1632,10 +1633,20 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             <Sparkles className="w-4 h-4 text-emerald-600" />
             AI Categorization Audit
           </button>
+          <button
+            onClick={() => setActiveTab('r2-storage')}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'r2-storage' ? 'bg-orange-600 text-white shadow-sm font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Server className="w-4 h-4 text-orange-500" />
+            Cloudflare R2 Storage
+          </button>
         </div>
       </div>
 
       {/* tab view layouts */}
+      {activeTab === 'r2-storage' && (
+        <AdminR2StoragePanel />
+      )}
       {activeTab === 'ai_categorization_audit' && (
         <AdminCategorizationPanel />
       )}
@@ -4044,7 +4055,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                     if (file) {
                                       try {
                                         addToast(`Uploading invoice ${file.name} to Cloudinary...`, 'info');
-                                        const res = await uploadOrderDocumentToCloudinary(file, 'invoices');
+                                        const res = await uploadOrderDocumentToR2(file, 'invoices');
                                         if (res.url) {
                                           const allOrders = dbLocal.getOrders();
                                           const idx = allOrders.findIndex(o => o.id === order.id);
@@ -7806,7 +7817,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                 if (file && selectedVendorDoc) {
                                   try {
                                     addToast(`Uploading ${file.name} to Cloudinary...`, 'info');
-                                    const cloudRes = await uploadVendorDocumentToCloudinary(file);
+                                    const cloudRes = await uploadVendorDocumentToR2(file);
                                     const cUrl = cloudRes.url;
                                     const updatedVendors = vendors.map(v => {
                                       if (v.id === selectedVendorDoc.id) {

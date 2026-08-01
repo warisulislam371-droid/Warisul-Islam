@@ -4,7 +4,7 @@ import {
   getFirestore, 
   doc, 
   getDocFromServer,
-  enableIndexedDbPersistence,
+  enableMultiTabIndexedDbPersistence,
   setLogLevel
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -21,21 +21,19 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-// Enable Offline Persistence for high resilience in browser environments
+// Enable Multi-Tab Offline Persistence for high resilience across multiple browser tabs
 if (typeof window !== 'undefined') {
-  try {
-    enableIndexedDbPersistence(db).catch((err) => {
-      if (err.code === 'failed-precondition') {
-        // Multiple tabs open, persistence can only be enabled in one tab at a time.
-        console.warn('Firestore persistence failed-precondition: multiple tabs open');
-      } else if (err.code === 'unimplemented') {
-        // The current browser does not support all of the features required to enable persistence
-        console.warn('Firestore persistence unimplemented: browser does not support');
-      }
-    });
-  } catch (e) {
-    console.error('Failed to initialize Firestore persistence:', e);
-  }
+  enableMultiTabIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      // Multiple tabs open without multi-tab persistence support, or persistence disabled
+      console.warn('Firestore multi-tab persistence failed-precondition:', err?.message || err);
+    } else if (err.code === 'unimplemented') {
+      // The current browser does not support all features required to enable persistence
+      console.warn('Firestore persistence unimplemented: browser does not support');
+    } else {
+      console.warn('Firestore persistence initialization notice:', err?.message || err);
+    }
+  });
 }
 
 export let isQuotaExceeded = false;

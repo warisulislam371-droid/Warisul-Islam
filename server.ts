@@ -19,6 +19,7 @@ import {
 
 import { categorizeProductLocally, auditProductsLocally } from './src/utils/medicalCategorizer';
 import { getCategorySeoUrl, getSubcategorySeoUrl, getProductSeoUrl } from './src/utils/seoUrls';
+import { uploadToR2, deleteFromR2, listR2Images } from './src/server/r2Service';
 
 dotenv.config();
 
@@ -692,33 +693,252 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
     }
   });
 
-  // Cloudinary Direct Upload Signed Endpoint Helper
-  app.post('/api/cloudinary/upload', async (req, res) => {
+  // =========================================================================
+  // Cloudflare R2 Storage Backend API Routes
+  // =========================================================================
+
+  /**
+   * POST /api/upload-image
+   * Receives image file, validates type/size, uploads to Cloudflare R2 bucket.
+   * Path format: healnex/products/{category}/{SKU}/{timestamp}-{filename}
+   */
+  app.post('/api/upload-image', async (req, res) => {
     try {
-      const { fileData, folder, publicId } = req.body;
-      const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'healnex-medbazar';
-      const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || 'healnex_products';
+      const { 
+        imageBase64, 
+        fileName = 'product.webp', 
+        contentType = 'image/webp',
+        category = 'general', 
+        sku = 'SKU000', 
+        uploadedBy = 'Vendor',
+        productId
+      } = req.body;
 
-      // In client mode / preview environment, generate simulated Cloudinary Asset response if credentials aren't set
-      const cleanPublicId = publicId || `healnex_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const mockCloudinaryUrl = `https://res.cloudinary.com/${cloudName}/image/upload/v1700000000/${folder || 'products'}/${cleanPublicId}.jpg`;
-      const mockThumbnailUrl = `https://res.cloudinary.com/${cloudName}/image/upload/c_thumb,w_300,h_300,g_face,q_auto,f_auto/v1700000000/${folder || 'products'}/${cleanPublicId}.jpg`;
+      if (!imageBase64) {
+        return res.status(400).json({ error: 'imageBase64 parameter is required for image upload.' });
+      }
 
-      // If data URL is sent, we return compressed secure URL payload
-      return res.json({
-        public_id: cleanPublicId,
-        secure_url: fileData && fileData.startsWith('data:image') ? fileData : mockCloudinaryUrl,
-        thumbnail_url: fileData && fileData.startsWith('data:image') ? fileData : mockThumbnailUrl,
-        format: 'webp',
-        bytes: Math.round((fileData || '').length * 0.75) || 250000,
-        width: 1200,
-        height: 1200,
-        created_at: new Date().toISOString()
+      // 1. Extract raw buffer from Data URL or Base64 string
+      const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
+      const imageBuffer = Buffer.from(cleanBase64, 'base64');
+
+      // 2. Validate file size (10MB Max Limit)
+      const MAX_BYTES = 10 * 1024 * 1024; // 10MB
+      if (imageBuffer.length > MAX_BYTES) {
+        return res.status(400).json({ error: 'Image file size exceeds the 10MB maximum limit.' });
+      }
+
+      // 3. Validate image MIME type
+      const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/gif', 'image/svg+xml'];
+      const mime = contentType.toLowerCase();
+      if (!allowedMimeTypes.some(t => mime.includes(t.split('/')[1]))) {
+        return res.status(400).json({ error: 'Invalid file format. Supported formats: JPG, PNG, WEBP, GIF, SVG.' });
+      }
+
+      // 4. Upload to Cloudflare R2 Bucket
+      const uploadResult = await uploadToR2({
+        buffer: imageBuffer,
+        fileName,
+        contentType: 'image/webp',
+        category,
+        sku,
+        uploadedBy
       });
+
+      // 5. Return required database & CDN asset structure
+      return res.json({
+        success: true,
+        product_id: productId || `prod_${Date.now()}`,
+        product_name: fileName.replace(/\.[^/.]+$/, ''),
+        SKU: uploadResult.sku,
+        category: uploadResult.category,
+        image_url: uploadResult.imageUrl,
+        image_gallery: [uploadResult.imageUrl],
+        thumbnail_url: uploadResult.thumbnailUrl,
+        uploaded_by: uploadResult.uploadedBy,
+        upload_date: uploadResult.uploadedAt,
+        storage_path: uploadResult.storagePath,
+        file_size: uploadResult.fileSize,
+        url: uploadResult.imageUrl,
+        public_id: uploadResult.storagePath
+      });
+
     } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Upload proxy failed' });
+      console.error('[API /api/upload-image Error]:', err?.message || err);
+      return res.status(500).json({ error: err?.message || 'Failed to upload image to Cloudflare R2 Storage.' });
     }
   });
+
+  /**
+   * DELETE /api/delete-image
+   * Removes image from Cloudflare R2 storage bucket & database reference
+   */
+  app.post('/api/delete-image', async (req, res) => {
+    try {
+      const { storage_path, image_url, product_id } = req.body;
+      const targetPath = storage_path || image_url;
+
+      if (!targetPath) {
+        return res.status(400).json({ error: 'storage_path or image_url is required to delete image.' });
+      }
+
+      const result = await deleteFromR2(targetPath);
+
+      return res.json({
+        success: true,
+        product_id: product_id || null,
+        storage_path: result.storagePath,
+        message: `Image successfully deleted from Cloudflare R2 bucket: ${result.storagePath}`
+      });
+
+    } catch (err: any) {
+      console.error('[API /api/delete-image Error]:', err?.message || err);
+      return res.status(500).json({ error: err?.message || 'Failed to delete image from Cloudflare R2.' });
+    }
+  });
+
+  /**
+   * PUT /api/update-image
+   * Replaces an existing image in Cloudflare R2 with new image
+   */
+  app.put('/api/update-image', async (req, res) => {
+    try {
+      const { 
+        old_storage_path, 
+        newImageBase64, 
+        fileName = 'replaced.webp', 
+        contentType = 'image/webp',
+        category = 'general', 
+        sku = 'SKU000',
+        product_id 
+      } = req.body;
+
+      if (!newImageBase64) {
+        return res.status(400).json({ error: 'newImageBase64 parameter is required.' });
+      }
+
+      // Delete old image if path provided
+      if (old_storage_path) {
+        await deleteFromR2(old_storage_path);
+      }
+
+      // Upload new image
+      const cleanBase64 = newImageBase64.replace(/^data:[^;]+;base64,/, '');
+      const imageBuffer = Buffer.from(cleanBase64, 'base64');
+
+      const uploadResult = await uploadToR2({
+        buffer: imageBuffer,
+        fileName,
+        contentType: contentType || 'image/webp',
+        category,
+        sku,
+        uploadedBy: 'System'
+      });
+
+      return res.json({
+        success: true,
+        product_id: product_id || null,
+        image_url: uploadResult.imageUrl,
+        thumbnail_url: uploadResult.thumbnailUrl,
+        storage_path: uploadResult.storagePath,
+        file_size: uploadResult.fileSize,
+        upload_date: uploadResult.uploadedAt
+      });
+
+    } catch (err: any) {
+      console.error('[API /api/update-image Error]:', err?.message || err);
+      return res.status(500).json({ error: err?.message || 'Failed to update image in Cloudflare R2.' });
+    }
+  });
+
+  /**
+   * GET /api/images
+   * Fetches product images and storage usage statistics from Cloudflare R2
+   */
+  app.get('/api/images', async (req, res) => {
+    try {
+      const prefix = (req.query.prefix as string) || 'healnex/';
+      const galleryData = await listR2Images(prefix);
+      return res.json({
+        success: true,
+        files: galleryData.files,
+        stats: galleryData.stats
+      });
+    } catch (err: any) {
+      console.error('[API /api/images Error]:', err?.message || err);
+      return res.status(500).json({ error: 'Failed to fetch R2 image gallery data.' });
+    }
+  });
+
+  /**
+   * POST /api/r2/upload-document
+   * Upload vendor verification documents or order invoices to Cloudflare R2
+   */
+  app.post('/api/r2/upload-document', async (req, res) => {
+    try {
+      const { fileData, fileName = 'document.pdf', contentType = 'application/pdf', folder = 'documents' } = req.body;
+
+      if (!fileData) {
+        return res.status(400).json({ error: 'fileData parameter is required.' });
+      }
+
+      const cleanBase64 = fileData.replace(/^data:[^;]+;base64,/, '');
+      const buffer = Buffer.from(cleanBase64, 'base64');
+
+      const result = await uploadToR2({
+        buffer,
+        fileName,
+        contentType: contentType || 'application/octet-stream',
+        folder,
+        uploadedBy: 'User'
+      });
+
+      return res.json({
+        success: true,
+        image_url: result.imageUrl,
+        url: result.imageUrl,
+        storage_path: result.storagePath,
+        public_id: result.storagePath,
+        file_size: result.fileSize,
+        uploaded_at: result.uploadedAt
+      });
+
+    } catch (err: any) {
+      console.error('[API /api/r2/upload-document Error]:', err?.message || err);
+      return res.status(500).json({ error: 'Failed to upload document to R2.' });
+    }
+  });
+
+  // Legacy Proxy Route Alias pointing directly to R2
+  app.post('/api/cloudinary/upload', async (req, res) => {
+    try {
+      const { fileData, folder = 'products', publicId } = req.body;
+      const cleanBase64 = (fileData || '').replace(/^data:[^;]+;base64,/, '');
+      const buffer = Buffer.from(cleanBase64, 'base64');
+
+      const uploadResult = await uploadToR2({
+        buffer: buffer.length > 0 ? buffer : Buffer.from('empty'),
+        fileName: `${publicId || 'image'}.webp`,
+        contentType: 'image/webp',
+        folder,
+        uploadedBy: 'Vendor'
+      });
+
+      return res.json({
+        public_id: uploadResult.storagePath,
+        secure_url: uploadResult.imageUrl,
+        thumbnail_url: uploadResult.thumbnailUrl,
+        format: 'webp',
+        bytes: uploadResult.fileSize,
+        width: 1200,
+        height: 1200,
+        created_at: uploadResult.uploadedAt
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'R2 Upload proxy failed' });
+    }
+  });
+
 
   // Dynamic SEO Sitemap endpoint (Main / Index)
   app.get('/sitemap.xml', async (req, res) => {

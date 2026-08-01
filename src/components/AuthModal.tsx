@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { User, Vendor } from '../types';
-import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
+import { uploadVendorDocumentToR2 } from '../utils/r2Storage';
 import { MARKETPLACE_LOGO } from '../assets/logo';
 import {
   Lock,
@@ -242,7 +242,7 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
     const generatedPreview = generateDocumentCanvas(docTitle, file.name, formattedSize);
 
     try {
-      const cloudRes = await uploadVendorDocumentToCloudinary(file);
+      const cloudRes = await uploadVendorDocumentToR2(file);
       const cUrl = cloudRes.url;
 
       setUploadedDocs(prev => ({

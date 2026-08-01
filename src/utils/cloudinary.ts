@@ -1,6 +1,7 @@
 /**
- * Utility for uploading vendor documents and files to Cloudinary.
+ * Cloudflare R2 Storage Adapter (Replaces legacy Cloudinary)
  */
+import { uploadVendorDocumentToR2, uploadOrderDocumentToR2, R2UploadResponse } from './r2Storage';
 
 export interface CloudinaryUploadResult {
   url: string;
@@ -11,76 +12,22 @@ export interface CloudinaryUploadResult {
 }
 
 export async function uploadVendorDocumentToCloudinary(file: File): Promise<CloudinaryUploadResult> {
-  const cloudName =
-    (import.meta as any).env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
-    (import.meta as any).env?.VITE_CLOUDINARY_CLOUD_NAME ||
-    'kpb5rcow';
-  const uploadPreset =
-    (import.meta as any).env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ||
-    (import.meta as any).env?.VITE_CLOUDINARY_UPLOAD_PRESET ||
-    'healnex_products';
-
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', uploadPreset);
-  formData.append('folder', 'vendor_documents');
-
-  // Use 'auto/upload' so Cloudinary accepts images, PDFs, raw docs
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Cloudinary Document Upload Error Response:', errorText);
-    throw new Error(`Cloudinary document upload failed with status ${response.status}`);
-  }
-
-  const data = await response.json();
-
+  const res: R2UploadResponse = await uploadVendorDocumentToR2(file);
   return {
-    url: data.secure_url || data.url,
-    public_id: data.public_id || '',
-    original_filename: data.original_filename || file.name,
-    format: data.format,
-    resource_type: data.resource_type,
+    url: res.image_url || res.url,
+    public_id: res.storage_path || res.public_id,
+    original_filename: res.original_filename || file.name,
+    format: res.format,
   };
 }
 
 export async function uploadOrderDocumentToCloudinary(file: File, subFolder = 'order_payments'): Promise<CloudinaryUploadResult> {
-  const cloudName =
-    (import.meta as any).env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
-    (import.meta as any).env?.VITE_CLOUDINARY_CLOUD_NAME ||
-    'kpb5rcow';
-  const uploadPreset =
-    (import.meta as any).env?.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ||
-    (import.meta as any).env?.VITE_CLOUDINARY_UPLOAD_PRESET ||
-    'healnex_products';
-
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', uploadPreset);
-  formData.append('folder', `orders/${subFolder}`);
-
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Cloudinary Order Document Upload Error Response:', errorText);
-    throw new Error(`Cloudinary order upload failed with status ${response.status}`);
-  }
-
-  const data = await response.json();
-
+  const res: R2UploadResponse = await uploadOrderDocumentToR2(file, subFolder);
   return {
-    url: data.secure_url || data.url,
-    public_id: data.public_id || '',
-    original_filename: data.original_filename || file.name,
-    format: data.format,
-    resource_type: data.resource_type,
+    url: res.image_url || res.url,
+    public_id: res.storage_path || res.public_id,
+    original_filename: res.original_filename || file.name,
+    format: res.format,
   };
 }
+
