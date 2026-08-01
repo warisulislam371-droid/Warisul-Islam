@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
-import { uploadVendorDocumentToCloudinary, uploadOrderDocumentToCloudinary, uploadProductImageToCloudinary } from '../utils/cloudinary';
+import { uploadVendorDocumentToCloudinary, uploadOrderDocumentToCloudinary } from '../utils/cloudinary';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation, SocialMediaLinks, DealOfDay } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
 import { AdminVerificationPanel } from './AdminVerificationPanel';
 import { AdminCategorizationPanel } from './AdminCategorizationPanel';
-import { GoogleDriveManager } from './GoogleDriveManager';
-import { AdminBulkProductImport } from './AdminBulkProductImport';
 import {
   TrendingUp,
   Users,
@@ -231,7 +229,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [pushTarget, setPushTarget] = useState('admin');
   const [pushType, setPushType] = useState('clinical_broadcast');
   
-  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit' | 'ai_categorization_audit' | 'google_drive' | 'bulk_import'>('kpis');
+  const [activeTab, setActiveTab] = useState<'kpis' | 'orders' | 'vendors' | 'products' | 'categories' | 'tickets' | 'audit' | 'payment-settings' | 'verify-payments' | 'vendor-payouts' | 'whatsapp-support' | 'banners' | 'commission-ledger' | 'commission-settings' | 'rfq-tenders' | 'verification_audit' | 'ai_categorization_audit'>('kpis');
 
   // Promo Banners State
   const [promoBanners, setPromoBanners] = useState<PromoBanner[]>(dbLocal.getPromoBanners());
@@ -1536,13 +1534,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             )}
           </button>
           <button
-            onClick={() => setActiveTab('bulk_import')}
-            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'bulk_import' ? 'bg-white text-teal-900 shadow-sm font-bold border border-teal-300' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            <Zap className="w-4 h-4 text-teal-600" />
-            Bulk Product Import
-          </button>
-          <button
             onClick={() => setActiveTab('categories')}
             className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'categories' ? 'bg-white text-slate-900 shadow-sm font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
           >
@@ -1641,20 +1632,10 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
             <Sparkles className="w-4 h-4 text-emerald-600" />
             AI Categorization Audit
           </button>
-          <button
-            onClick={() => setActiveTab('google_drive')}
-            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'google_drive' ? 'bg-white text-teal-900 shadow-sm font-bold border border-teal-300' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            <Server className="w-4 h-4 text-teal-600" />
-            Google Drive Storage
-          </button>
         </div>
       </div>
 
       {/* tab view layouts */}
-      {activeTab === 'google_drive' && (
-        <GoogleDriveManager mode="admin" />
-      )}
       {activeTab === 'ai_categorization_audit' && (
         <AdminCategorizationPanel />
       )}
@@ -2990,11 +2971,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
         <AdminCategoriesManager onRefresh={loadData} />
       )}
 
-      {/* Bulk Product Import & Image Link Converter tab */}
-      {activeTab === 'bulk_import' && (
-        <AdminBulkProductImport onRefreshCatalog={loadData} onNavigateToProducts={() => setActiveTab('products')} />
-      )}
-
       {/* Vendor Products Management tab */}
       {activeTab === 'products' && (() => {
         const uniqueVendors = Array.from(new Set(products.map(p => p.vendorName || 'Unknown Vendor'))).filter(Boolean);
@@ -3063,14 +3039,6 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('bulk_import')}
-                  className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl border border-teal-600 shadow-sm transition flex items-center gap-2 cursor-pointer"
-                >
-                  <Zap className="w-4 h-4 text-teal-300" />
-                  Bulk Product Import (CSV / Excel)
-                </button>
                 {pendingCount > 0 && (
                   <button
                     type="button"
@@ -4000,14 +3968,14 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         </div>
                       </div>
 
-                      {/* Right Column: Payment Proof Receipt Visual & Google Drive Invoice Manager */}
+                      {/* Right Column: Payment Proof Receipt Visual & Cloudinary Invoice Manager */}
                       <div className="p-6 bg-slate-50/80 flex flex-col justify-between items-center text-center">
                         <div className="w-full space-y-3">
                           <div className="flex items-center justify-between">
                             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider text-left">Uploaded Payment Proof</p>
-                            {(order.paymentProofUrl?.includes('cloudinary') || order.paymentProofUrl?.includes('drive') || order.paymentProofUrl?.includes('google')) && (
-                              <span className="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1">
-                                Google Drive Verified
+                            {order.paymentProofUrl?.includes('cloudinary') && (
+                              <span className="bg-sky-100 text-sky-800 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-sky-300 flex items-center gap-1">
+                                Cloudinary Verified
                               </span>
                             )}
                           </div>
@@ -4035,7 +4003,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                 </div>
                               </div>
                               <p className="text-[10px] text-slate-500 truncate max-w-[220px] mx-auto font-mono">
-                                {(order.paymentProofUrl.includes('cloudinary') || order.paymentProofUrl.includes('drive')) ? 'Google Drive Hosted Receipt' : 'receipt_screenshot.png'}
+                                {order.paymentProofUrl.includes('cloudinary') ? 'Cloudinary Hosted Receipt' : 'receipt_screenshot.png'}
                               </p>
                             </div>
                           ) : (
@@ -4045,9 +4013,9 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                             </div>
                           )}
 
-                          {/* Google Drive Invoice Attachment Section */}
+                          {/* Cloudinary Invoice Attachment Section */}
                           <div className="mt-4 pt-3 border-t border-slate-200 text-left space-y-2">
-                            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Google Drive Tax Invoice</p>
+                            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Cloudinary Tax Invoice</p>
                             {order.invoiceUrl ? (
                               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl p-2.5">
                                 <div className="flex items-center gap-2 overflow-hidden">
@@ -4075,7 +4043,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                     const file = e.target.files?.[0];
                                     if (file) {
                                       try {
-                                        addToast(`Uploading invoice ${file.name} to Google Drive...`, 'info');
+                                        addToast(`Uploading invoice ${file.name} to Cloudinary...`, 'info');
                                         const res = await uploadOrderDocumentToCloudinary(file, 'invoices');
                                         if (res.url) {
                                           const allOrders = dbLocal.getOrders();
@@ -4084,12 +4052,12 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                             allOrders[idx].invoiceUrl = res.url;
                                             dbLocal.saveOrders(allOrders);
                                             setOrders(allOrders);
-                                            addToast('Tax Invoice uploaded to Google Drive & attached to Order!', 'success');
+                                            addToast('Tax Invoice uploaded to Cloudinary & attached to Order!', 'success');
                                           }
                                         }
                                       } catch (err) {
                                         console.error(err);
-                                        addToast('Failed to upload invoice to Google Drive.', 'error');
+                                        addToast('Failed to upload invoice to Cloudinary.', 'error');
                                       }
                                     }
                                   }}
@@ -5625,21 +5593,16 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={async (e) => {
+                        onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            try {
-                              const cloudRes = await uploadProductImageToCloudinary(file, 'app_qr_codes');
-                              setSocialLinks({ ...socialLinks, appQrCodeUrl: cloudRes.url });
-                            } catch {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                if (reader.result) {
-                                  setSocialLinks({ ...socialLinks, appQrCodeUrl: reader.result as string });
-                                }
-                              };
-                              reader.readAsDataURL(file);
-                            }
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              if (reader.result) {
+                                setSocialLinks({ ...socialLinks, appQrCodeUrl: reader.result as string });
+                              }
+                            };
+                            reader.readAsDataURL(file);
                           }
                         }}
                       />
@@ -6094,21 +6057,16 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                           type="file"
                           accept="image/*"
                           className="hidden"
-                          onChange={async (e) => {
+                          onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              try {
-                                const cloudRes = await uploadProductImageToCloudinary(file, 'banners');
-                                setBannerForm({ ...bannerForm, imageUrl: cloudRes.url });
-                              } catch {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  if (reader.result) {
-                                    setBannerForm({ ...bannerForm, imageUrl: reader.result as string });
-                                  }
-                                };
-                                reader.readAsDataURL(file);
-                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                if (reader.result) {
+                                  setBannerForm({ ...bannerForm, imageUrl: reader.result as string });
+                                }
+                              };
+                              reader.readAsDataURL(file);
                             }
                           }}
                         />
@@ -6418,21 +6376,16 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                           type="file"
                           accept="image/*"
                           className="hidden"
-                          onChange={async (e) => {
+                          onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              try {
-                                const cloudRes = await uploadProductImageToCloudinary(file, 'banners');
-                                setEditingBannerModal({ ...editingBannerModal, imageUrl: cloudRes.url });
-                              } catch {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  if (reader.result) {
-                                    setEditingBannerModal({ ...editingBannerModal, imageUrl: reader.result as string });
-                                  }
-                                };
-                                reader.readAsDataURL(file);
-                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                if (reader.result) {
+                                  setEditingBannerModal({ ...editingBannerModal, imageUrl: reader.result as string });
+                                }
+                              };
+                              reader.readAsDataURL(file);
                             }
                           }}
                         />
@@ -7852,7 +7805,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                 const file = e.target.files?.[0];
                                 if (file && selectedVendorDoc) {
                                   try {
-                                    addToast(`Uploading ${file.name} to Google Drive...`, 'info');
+                                    addToast(`Uploading ${file.name} to Cloudinary...`, 'info');
                                     const cloudRes = await uploadVendorDocumentToCloudinary(file);
                                     const cUrl = cloudRes.url;
                                     const updatedVendors = vendors.map(v => {
@@ -7873,7 +7826,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                     loadData();
                                     const updatedCurrent = updatedVendors.find(v => v.id === selectedVendorDoc.id);
                                     if (updatedCurrent) setSelectedVendorDoc(updatedCurrent);
-                                    addToast('Vendor document uploaded to Google Drive successfully!', 'success');
+                                    addToast('Vendor document uploaded to Cloudinary successfully!', 'success');
                                   } catch (err: any) {
                                     console.error('Admin Document Cloudinary Upload Failed:', err);
                                     addToast('Cloudinary upload failed. Saving locally...', 'info');

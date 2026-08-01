@@ -19,7 +19,6 @@ import {
 
 import { categorizeProductLocally, auditProductsLocally } from './src/utils/medicalCategorizer';
 import { getCategorySeoUrl, getSubcategorySeoUrl, getProductSeoUrl } from './src/utils/seoUrls';
-import { googleDriveRouter } from './src/server/googleDriveRoutes';
 
 dotenv.config();
 
@@ -46,9 +45,6 @@ async function startServer() {
   app.set('trust proxy', true);
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-  // Google Drive Image Storage & Integration API
-  app.use('/api/drive', googleDriveRouter);
 
   const getRequestBaseUrl = (req: express.Request): string => {
     const host = req.get('x-forwarded-host') || req.get('host') || 'medbazarhelnex.shop';

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { User, Notification, Category, PriceAlert, Product } from '../types';
+import React, { useState, useEffect } from 'react';
+import { User, Notification, Category, PriceAlert } from '../types';
 import { dbLocal } from '../db';
 import { MARKETPLACE_LOGO } from '../assets/logo';
 import {
@@ -32,10 +32,7 @@ import {
   Layers,
   ArrowRight,
   TrendingDown,
-  Tag,
-  Award,
-  Flame,
-  Package
+  Tag
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -84,108 +81,6 @@ export default function Navbar({
   const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([]);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  // Real-time Predictive Search States & Refs
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const searchContainerRef = useRef<HTMLDivElement>(null);
-
-  // Database-backed predictive indexes
-  const [dbCategories, setDbCategories] = useState<Category[]>([]);
-  const [dbBrands, setDbBrands] = useState<{ name: string; salesCount: number; productCount: number; logo?: string }[]>([]);
-  const [dbProducts, setDbProducts] = useState<Product[]>([]);
-
-  useEffect(() => {
-    const loadSearchIndexes = () => {
-      const categoriesList = dbLocal.getCategories().filter(c => c.isActive !== false);
-      const productsList = dbLocal.getProducts().filter(p => p.status === 'Approved' || !p.status);
-      const ordersList = dbLocal.getOrders();
-      const brandsList = dbLocal.getBrands().filter(b => b.isActive !== false);
-
-      // Map to accumulate sales and catalog numbers per brand
-      const brandSalesMap: Record<string, { salesCount: number; productCount: number; logo?: string }> = {};
-
-      brandsList.forEach(b => {
-        brandSalesMap[b.name.trim()] = { salesCount: 0, productCount: 0, logo: b.logo };
-      });
-
-      productsList.forEach(p => {
-        const bName = p.brand ? p.brand.trim() : 'HealNex';
-        if (!brandSalesMap[bName]) {
-          brandSalesMap[bName] = { salesCount: 0, productCount: 0 };
-        }
-        brandSalesMap[bName].productCount += 1;
-      });
-
-      ordersList.forEach(order => {
-        order.items?.forEach(item => {
-          const prod = productsList.find(p => p.id === item.productId);
-          const bName = (prod?.brand || 'HealNex').trim();
-          if (!brandSalesMap[bName]) {
-            brandSalesMap[bName] = { salesCount: 0, productCount: 0 };
-          }
-          brandSalesMap[bName].salesCount += item.quantity || 1;
-        });
-      });
-
-      const compiledBrands = Object.entries(brandSalesMap).map(([name, data]) => ({
-        name,
-        salesCount: data.salesCount,
-        productCount: data.productCount,
-        logo: data.logo
-      })).sort((a, b) => (b.salesCount * 10 + b.productCount) - (a.salesCount * 10 + a.productCount));
-
-      setDbCategories(categoriesList);
-      setDbBrands(compiledBrands);
-      setDbProducts(productsList);
-    };
-
-    loadSearchIndexes();
-    window.addEventListener('healnex_db_update', loadSearchIndexes);
-    return () => window.removeEventListener('healnex_db_update', loadSearchIndexes);
-  }, []);
-
-  // Click outside & key listener for closing suggestions overlay
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
-        setShowSuggestions(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
-
-  // Filter real-time predictive suggestions based on user input
-  const trimmedQuery = searchQuery.trim().toLowerCase();
-
-  const filteredCategories = trimmedQuery
-    ? dbCategories.filter(cat =>
-        cat.name.toLowerCase().includes(trimmedQuery) ||
-        cat.subcategories?.some(sub => sub.toLowerCase().includes(trimmedQuery))
-      ).slice(0, 4)
-    : dbCategories.slice(0, 4);
-
-  const filteredBrands = trimmedQuery
-    ? dbBrands.filter(b => b.name.toLowerCase().includes(trimmedQuery)).slice(0, 4)
-    : dbBrands.slice(0, 4);
-
-  const filteredProducts = trimmedQuery
-    ? dbProducts.filter(p =>
-        p.name.toLowerCase().includes(trimmedQuery) ||
-        p.brand?.toLowerCase().includes(trimmedQuery) ||
-        p.category.toLowerCase().includes(trimmedQuery) ||
-        p.sku?.toLowerCase().includes(trimmedQuery)
-      ).slice(0, 4)
-    : [];
 
   const locations = [
     { city: 'Pune', pin: '411001' },
@@ -378,9 +273,9 @@ export default function Navbar({
           </div>
         </div>
 
-        {/* Search Bar - Center with Real-Time Predictive Suggestions */}
-        <div ref={searchContainerRef} className="flex-1 max-w-2xl relative hidden md:block">
-          <form onSubmit={(e) => { handleSearchSubmit(e); setShowSuggestions(false); }} className="flex items-center bg-[#F5F7FA] rounded-2xl border border-slate-300 focus-within:border-[#0F9D8A] focus-within:bg-white transition-all shadow-sm overflow-hidden h-12">
+        {/* Search Bar - Center */}
+        <div className="flex-1 max-w-2xl relative hidden md:block">
+          <form onSubmit={handleSearchSubmit} className="flex items-center bg-[#F5F7FA] rounded-2xl border border-slate-300 focus-within:border-[#0F9D8A] focus-within:bg-white transition-all shadow-sm overflow-hidden h-12">
             
             {/* Category Dropdown inside Search */}
             <select
@@ -401,35 +296,16 @@ export default function Navbar({
               ))}
             </select>
 
-            <div className="flex-1 flex items-center relative">
-              <input
-                type="text"
-                placeholder="Search Medical Equipment, Brands, Categories..."
-                value={searchQuery}
-                onFocus={() => setShowSuggestions(true)}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  onSearch(e.target.value);
-                  setShowSuggestions(true);
-                }}
-                className="w-full px-3 py-2 text-xs font-medium text-slate-800 outline-none bg-transparent placeholder-slate-400 font-sans"
-              />
-
-              {/* Clear search text button */}
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    onSearch('');
-                  }}
-                  className="p-1 mr-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition"
-                  title="Clear search"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+            <input
+              type="text"
+              placeholder="Search Medical Equipment, Brands, Categories..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                onSearch(e.target.value);
+              }}
+              className="w-full px-3 py-2 text-xs font-medium text-slate-800 outline-none bg-transparent placeholder-slate-400 font-sans"
+            />
 
             {/* Voice & Image Search Controls */}
             <div className="flex items-center gap-1.5 px-2">
@@ -462,187 +338,6 @@ export default function Navbar({
               </button>
             </div>
           </form>
-
-          {/* Real-time Predictive Search Suggestions Overlay */}
-          {showSuggestions && (
-            <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden font-sans text-slate-800 animate-in fade-in slide-in-from-top-2 duration-150">
-              
-              {/* Header Label */}
-              <div className="bg-slate-50/90 px-4 py-2 border-b border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <span className="flex items-center gap-1 text-teal-700">
-                  <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                  {trimmedQuery ? `Predictive Suggestions for "${searchQuery}"` : 'Popular Categories & Top-Selling Brands'}
-                </span>
-                <span className="text-[10px] text-slate-400 font-normal">Esc to close</span>
-              </div>
-
-              <div className="p-3 max-h-[460px] overflow-y-auto space-y-4">
-                
-                {/* 1. PRODUCT CATEGORIES SECTION */}
-                {filteredCategories.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
-                      <Layers className="w-3.5 h-3.5 text-teal-600" />
-                      <span>Product Categories</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                      {filteredCategories.map(cat => (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => {
-                            onCategorySelect(cat.name);
-                            onSearch('');
-                            setSearchQuery('');
-                            setShowSuggestions(false);
-                            onNavigate('marketplace');
-                          }}
-                          className="w-full text-left px-3 py-2 rounded-xl hover:bg-teal-50/70 border border-transparent hover:border-teal-200 transition flex items-center justify-between group cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2 overflow-hidden">
-                            <div className="w-7 h-7 rounded-lg bg-teal-100/60 text-teal-700 flex items-center justify-center shrink-0 group-hover:bg-teal-600 group-hover:text-white transition">
-                              <Layers className="w-3.5 h-3.5" />
-                            </div>
-                            <span className="text-xs font-bold text-slate-800 group-hover:text-teal-900 truncate">
-                              {cat.name}
-                            </span>
-                          </div>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-teal-600 transition shrink-0" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. TOP-SELLING BRANDS SECTION */}
-                {filteredBrands.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between px-2 py-1 mb-1">
-                      <div className="flex items-center gap-1.5 text-xs font-black text-slate-700 uppercase tracking-wider">
-                        <Award className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Top-Selling Brand Names</span>
-                      </div>
-                      <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Flame className="w-3 h-3 text-amber-500 fill-amber-500" />
-                        Verified OEM
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                      {filteredBrands.map(brand => (
-                        <button
-                          key={brand.name}
-                          type="button"
-                          onClick={() => {
-                            setSearchQuery(brand.name);
-                            onSearch(brand.name);
-                            setShowSuggestions(false);
-                            onNavigate('marketplace');
-                          }}
-                          className="w-full text-left px-3 py-2 rounded-xl hover:bg-amber-50/80 border border-transparent hover:border-amber-200 transition flex items-center justify-between group cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2 overflow-hidden">
-                            <div className="w-7 h-7 rounded-lg bg-amber-100/70 text-amber-800 flex items-center justify-center shrink-0 font-black text-xs group-hover:bg-amber-500 group-hover:text-white transition">
-                              {brand.name.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div className="overflow-hidden">
-                              <p className="text-xs font-bold text-slate-900 group-hover:text-amber-900 truncate">
-                                {brand.name}
-                              </p>
-                              <p className="text-[10px] text-slate-500 truncate">
-                                {brand.salesCount > 0 
-                                  ? `${brand.salesCount} Verified Orders • ${brand.productCount} Items`
-                                  : `${brand.productCount} Equipment Catalog Models`
-                                }
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md group-hover:bg-amber-200 group-hover:text-amber-900 transition shrink-0">
-                            Brand
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. MATCHING EQUIPMENT PRODUCTS */}
-                {trimmedQuery && filteredProducts.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-black text-slate-700 uppercase tracking-wider mb-1">
-                      <Package className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Matching Medical Equipment ({filteredProducts.length})</span>
-                    </div>
-                    <div className="space-y-1">
-                      {filteredProducts.map(p => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => {
-                            setSearchQuery(p.name);
-                            onSearch(p.name);
-                            setShowSuggestions(false);
-                            onNavigate('marketplace');
-                          }}
-                          className="w-full text-left p-2 rounded-xl hover:bg-sky-50/80 border border-transparent hover:border-sky-200 transition flex items-center justify-between group cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2.5 overflow-hidden">
-                            <img
-                              src={p.images?.[0] || 'https://images.unsplash.com/photo-1516549655169-df83a0774514'}
-                              alt={p.name}
-                              className="w-9 h-9 object-cover rounded-lg border border-slate-200 shrink-0"
-                            />
-                            <div className="overflow-hidden">
-                              <p className="text-xs font-bold text-slate-800 group-hover:text-sky-900 truncate">
-                                {p.name}
-                              </p>
-                              <p className="text-[10px] text-slate-500 flex items-center gap-2">
-                                <span className="font-semibold text-teal-700">{p.category}</span>
-                                <span>•</span>
-                                <span>By {p.brand || 'HealNex Verified'}</span>
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0 pl-2">
-                            <p className="text-xs font-black text-slate-900">
-                              ₹{p.price?.toLocaleString('en-IN')}
-                            </p>
-                            <p className="text-[9px] text-emerald-600 font-bold">In Stock</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* NO MATCH FALLBACK */}
-                {trimmedQuery && filteredCategories.length === 0 && filteredBrands.length === 0 && filteredProducts.length === 0 && (
-                  <div className="p-6 text-center text-slate-500">
-                    <Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                    <p className="text-xs font-bold text-slate-700">No exact matches found for "{searchQuery}"</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Press Enter to search the entire medical equipment marketplace catalog</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Footer CTA */}
-              {trimmedQuery && (
-                <div className="bg-slate-100 px-4 py-2 border-t border-slate-200 flex items-center justify-between text-xs">
-                  <span className="text-slate-600 font-medium">Search for <strong className="text-slate-900">"{searchQuery}"</strong></span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      handleSearchSubmit(e as any);
-                      setShowSuggestions(false);
-                    }}
-                    className="text-teal-700 hover:text-teal-900 font-extrabold flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>View All Marketplace Results</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Right Navigation & Utility Badges */}

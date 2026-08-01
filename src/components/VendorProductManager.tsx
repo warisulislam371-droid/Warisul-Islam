@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Product, Vendor, Category, Brand, CategoryRequest, BrandRequest, ProductSpecification, User, GoogleDriveFile } from '../types';
+import { Product, Vendor, Category, Brand, CategoryRequest, BrandRequest, ProductSpecification, User } from '../types';
 import { dbLocal } from '../db';
-import { uploadProductImageToCloudinary } from '../utils/cloudinary';
 import { detectCategoryAndSubcategory, detectCategoryWithAI, autoSortAndClassifyProducts } from '../utils/categorySorter';
 import { AICategorizerCard } from './AICategorizerCard';
 import {
@@ -142,6 +141,9 @@ export default function VendorProductManager({
     setIsUploadingImage(true);
     setFormError('');
 
+    const cloudName = (import.meta as any).env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'kpb5rcow';
+    const uploadPreset = (import.meta as any).env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'healnex_products';
+
     const uploadedUrls: string[] = [];
     try {
       for (let i = 0; i < files.length; i++) {
@@ -152,11 +154,25 @@ export default function VendorProductManager({
           continue;
         }
 
-        const driveRes = await uploadProductImageToCloudinary(file, 'products');
-        if (driveRes.url) {
-          uploadedUrls.push(driveRes.url);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', uploadPreset);
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Upload failed for ${file.name}: ${errText || res.statusText}`);
+        }
+
+        const data = await res.json();
+        if (data.secure_url) {
+          uploadedUrls.push(data.secure_url);
         } else {
-          throw new Error(`Failed to store ${file.name} in Google Drive`);
+          throw new Error(`No secure URL returned for ${file.name}`);
         }
       }
 
@@ -463,47 +479,6 @@ export default function VendorProductManager({
       }
       showToast(targetStatus === 'Draft' ? 'New draft product created.' : 'New product submitted for Admin approval!');
     }
-
-    // Register product images in Google Drive database
-    (updatedProd.images || []).forEach((imgUrl, imgIdx) => {
-      if (imgUrl && imgUrl.trim()) {
-        const fileId = `1DRV_Prod_${Date.now()}_${updatedProd.sku}_${imgIdx}`;
-        const driveRecord: GoogleDriveFile = {
-          id: `drv_file_${Date.now()}_${updatedProd.sku}_${imgIdx}`,
-          fileId,
-          fileName: `${updatedProd.sku || updatedProd.name}_img_${imgIdx + 1}.webp`,
-          directUrl: imgUrl,
-          thumbnailUrl: imgUrl,
-          mimeType: 'image/webp',
-          size: 215000,
-          category: updatedProd.category || 'Product Catalog',
-          brand: updatedProd.brand || vendor.companyName,
-          sku: updatedProd.sku,
-          productName: updatedProd.name,
-          vendorId: vendor.id,
-          vendorName: vendor.companyName,
-          folderPath: `VendorProducts/${updatedProd.category || 'General'}/${updatedProd.sku || 'Items'}`,
-          productId: updatedProd.id,
-          uploadedBy: vendor.companyName,
-          uploadedByRole: 'vendor',
-          createdAt: now,
-          updatedAt: now
-        };
-        dbLocal.addDriveFile(driveRecord);
-        dbLocal.addDriveLog({
-          id: `log_prod_${Date.now()}_${updatedProd.sku}_${imgIdx}`,
-          action: 'UPLOAD',
-          fileId,
-          fileName: driveRecord.fileName,
-          folderPath: driveRecord.folderPath,
-          timestamp: now,
-          userId: vendor.id,
-          userName: vendor.companyName,
-          userRole: 'vendor',
-          details: `Product catalog image stored in Google Drive for product "${updatedProd.name}" (SKU: ${updatedProd.sku}).`
-        });
-      }
-    });
 
     setShowProductModal(false);
     onRefresh();
@@ -1140,44 +1115,6 @@ export default function VendorProductManager({
       };
 
       dbLocal.addProduct(newProd);
-
-      // Register product images in Google Drive Manager database
-      const imgUrl = newProd.images?.[0] || 'https://images.unsplash.com/photo-1516549655169-df83a0774514';
-      const fileId = `1DRV_BulkImport_${Date.now()}_${newProd.sku}`;
-      const driveRecord: GoogleDriveFile = {
-        id: `drv_file_${Date.now()}_vblk_${newProd.sku}`,
-        fileId,
-        fileName: `${newProd.sku || newProd.name}_bulk_img.webp`,
-        directUrl: imgUrl,
-        thumbnailUrl: imgUrl,
-        mimeType: 'image/webp',
-        size: 210000,
-        category: newProd.category || 'Bulk Product Catalog Import',
-        brand: newProd.brand || vendor.companyName,
-        sku: newProd.sku,
-        productName: newProd.name,
-        vendorId: vendor.id,
-        vendorName: vendor.companyName,
-        folderPath: `VendorBulkImport/${newProd.category || 'General'}/${newProd.sku || 'Products'}`,
-        productId: newProd.id,
-        uploadedBy: vendor.companyName,
-        uploadedByRole: 'vendor',
-        createdAt: now,
-        updatedAt: now
-      };
-      dbLocal.addDriveFile(driveRecord);
-      dbLocal.addDriveLog({
-        id: `log_vblk_${Date.now()}_${newProd.sku}`,
-        action: 'UPLOAD',
-        fileId,
-        fileName: driveRecord.fileName,
-        folderPath: driveRecord.folderPath,
-        timestamp: now,
-        userId: vendor.id,
-        userName: vendor.companyName,
-        userRole: 'vendor',
-        details: `Vendor Bulk Import catalog image stored in Google Drive for product "${newProd.name}" (SKU: ${newProd.sku}).`
-      });
 
       dbLocal.addNotification(
         'admin',

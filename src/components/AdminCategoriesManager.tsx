@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Category, Brand, CategoryRequest, BrandRequest } from '../types';
 import { dbLocal } from '../db';
-import { uploadProductImageToCloudinary } from '../utils/cloudinary';
 import { autoSortAndClassifyProducts, sortCategoriesTaxonomy } from '../utils/categorySorter';
 import { GeminiCategoryAuditModal } from './GeminiCategoryAuditModal';
 import {
@@ -534,19 +533,14 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={async (e) => {
+                      onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          try {
-                            const res = await uploadProductImageToCloudinary(file, 'categories');
-                            setNewCatImage(res.url);
-                          } catch {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              if (reader.result) setNewCatImage(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
-                          }
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) setNewCatImage(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
                         }
                       }}
                     />
@@ -623,19 +617,14 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
                             type="file"
                             accept="image/*"
                             className="hidden"
-                            onChange={async (e) => {
+                            onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (file) {
-                                try {
-                                  const res = await uploadProductImageToCloudinary(file, 'categories');
-                                  setEditingCatImage(res.url);
-                                } catch {
-                                  const reader = new FileReader();
-                                  reader.onloadend = () => {
-                                    if (reader.result) setEditingCatImage(reader.result as string);
-                                  };
-                                  reader.readAsDataURL(file);
-                                }
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  if (reader.result) setEditingCatImage(reader.result as string);
+                                };
+                                reader.readAsDataURL(file);
                               }
                             }}
                           />
@@ -733,19 +722,14 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={async (e) => {
+                      onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          try {
-                            const res = await uploadProductImageToCloudinary(file, 'brands');
-                            setNewBrandLogo(res.url);
-                          } catch {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              if (reader.result) setNewBrandLogo(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
-                          }
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) setNewBrandLogo(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
                         }
                       }}
                     />
@@ -876,21 +860,16 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={async (e) => {
+                      onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          try {
-                            const res = await uploadProductImageToCloudinary(file, 'categories');
-                            setEditingCatModal({ ...editingCatModal, image: res.url });
-                          } catch {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              if (reader.result) {
-                                setEditingCatModal({ ...editingCatModal, image: reader.result as string });
-                              }
-                            };
-                            reader.readAsDataURL(file);
-                          }
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) {
+                              setEditingCatModal({ ...editingCatModal, image: reader.result as string });
+                            }
+                          };
+                          reader.readAsDataURL(file);
                         }
                       }}
                     />
@@ -989,21 +968,16 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={async (e) => {
+                      onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          try {
-                            const res = await uploadProductImageToCloudinary(file, 'brands');
-                            setEditingBrandModal({ ...editingBrandModal, logo: res.url });
-                          } catch {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              if (reader.result) {
-                                setEditingBrandModal({ ...editingBrandModal, logo: reader.result as string });
-                              }
-                            };
-                            reader.readAsDataURL(file);
-                          }
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) {
+                              setEditingBrandModal({ ...editingBrandModal, logo: reader.result as string });
+                            }
+                          };
+                          reader.readAsDataURL(file);
                         }
                       }}
                     />

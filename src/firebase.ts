@@ -19,7 +19,7 @@ try {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = (firebaseConfig as any).firestoreDatabaseId ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId) : getFirestore(app);
+const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Enable Offline Persistence for high resilience in browser environments
 if (typeof window !== 'undefined') {

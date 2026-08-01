@@ -911,18 +911,18 @@ export default function EnterpriseHomepage({
             <button
               key={cat.name}
               onClick={() => handleCategoryClick(cat.name)}
-              className="bg-white rounded-2xl border border-slate-200 p-4 text-center hover:shadow-2xl hover:shadow-teal-900/10 hover:border-[#0F9D8A] hover:-translate-y-1.5 hover:scale-[1.03] transition-all duration-300 group cursor-pointer flex flex-col items-center relative"
+              className="bg-white rounded-2xl border border-slate-200 p-4 text-center hover:shadow-xl hover:border-[#0F9D8A] transition duration-300 group cursor-pointer flex flex-col items-center"
             >
-              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-[#F5F7FA] p-2 mb-3 relative group-hover:scale-110 transition-transform duration-300">
+              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-[#F5F7FA] p-2 mb-3 relative group-hover:scale-105 transition-transform">
                 <img src={cat.image} alt={cat.displayName} className="w-full h-full object-cover rounded-xl" />
-                <span className="absolute bottom-1 right-1 text-sm bg-white/90 backdrop-blur-sm p-1 rounded-full shadow-md group-hover:bg-[#0F9D8A] group-hover:text-white transition-colors duration-300">
+                <span className="absolute bottom-1 right-1 text-sm bg-white/80 p-1 rounded-full shadow-sm">
                   {cat.icon}
                 </span>
               </div>
-              <h4 className="text-xs font-bold text-[#1F2937] group-hover:text-[#0F9D8A] transition-colors duration-200 leading-tight">
+              <h4 className="text-xs font-bold text-[#1F2937] group-hover:text-[#0F9D8A] transition leading-tight">
                 {cat.displayName}
               </h4>
-              <p className="text-[10px] text-slate-400 font-medium mt-1 group-hover:text-teal-700 transition-colors duration-200">{cat.count}</p>
+              <p className="text-[10px] text-slate-400 font-medium mt-1">{cat.count}</p>
             </button>
           ))}
         </div>

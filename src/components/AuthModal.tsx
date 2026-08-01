@@ -257,7 +257,7 @@ export default function AuthModal({ onClose, onLoginSuccess, addToast, isDarkMod
         }
       }));
 
-      addToast(`Uploaded ${file.name} to Google Drive successfully!`, 'success');
+      addToast(`Uploaded ${file.name} to Cloudinary successfully!`, 'success');
     } catch (err) {
       console.error('Cloudinary document upload failed:', err);
       const reader = new FileReader();

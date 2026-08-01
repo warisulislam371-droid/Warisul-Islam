@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
-import { Vendor, Product, Order, RFQ, Quotation, User, PaymentClearanceRequest, GoogleDriveFile } from '../types';
+import { Vendor, Product, Order, RFQ, Quotation, User, PaymentClearanceRequest } from '../types';
 import { uploadVendorDocumentToCloudinary } from '../utils/cloudinary';
 import VendorProductManager from './VendorProductManager';
 import VendorAnalytics from './VendorAnalytics';
 import { VendorVerificationWizard } from './VendorVerificationWizard';
 import { ProductImageManager } from './ProductImageManager';
-import { GoogleDriveManager } from './GoogleDriveManager';
 import {
   Store,
   Upload,
@@ -83,7 +82,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [clearanceRequests, setClearanceRequests] = useState<PaymentClearanceRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<'profile' | 'products' | 'bulk' | 'orders' | 'rfqs' | 'payouts' | 'analytics' | 'verification' | 'image_assets' | 'google_drive'>('analytics');
+  const [activeTab, setActiveTab] = useState<'profile' | 'products' | 'bulk' | 'orders' | 'rfqs' | 'payouts' | 'analytics' | 'verification' | 'image_assets'>('analytics');
 
   // Payout Clearance Request State
   const [reqAmount, setReqAmount] = useState<number>(0);
@@ -214,12 +213,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     let uploadedName = selectedResubmitFile.name;
 
     try {
-      addToast(`Uploading ${resubmitModalDoc.label} to Google Drive...`, 'info');
+      addToast(`Uploading ${resubmitModalDoc.label} to Cloudinary...`, 'info');
       const cloudRes = await uploadVendorDocumentToCloudinary(selectedResubmitFile);
       uploadedUrl = cloudRes.url;
     } catch (err: any) {
-      console.error('Google Drive Document Upload Failed:', err);
-      addToast('Google Drive upload failed. Saving file locally...', 'info');
+      console.error('Cloudinary Document Upload Failed:', err);
+      addToast('Cloudinary upload failed. Saving file locally...', 'info');
       await new Promise<void>((resolve) => {
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -954,46 +953,6 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     const all = dbLocal.getProducts();
     dbLocal.saveProducts([...newProducts, ...all]);
 
-    // Register image files in Google Drive for Vendor Bulk Catalog Synchronizer
-    newProducts.forEach((np, pIdx) => {
-      const imgUrl = np.images?.[0] || 'https://images.unsplash.com/photo-1516549655169-df83a0774514';
-      const fileId = `1DRV_BulkSync_${Date.now()}_${pIdx}`;
-      const driveRecord: GoogleDriveFile = {
-        id: `drv_file_${Date.now()}_sync_${pIdx}`,
-        fileId,
-        fileName: `${np.sku || np.name}_catalog_img.webp`,
-        directUrl: imgUrl,
-        thumbnailUrl: imgUrl,
-        mimeType: 'image/webp',
-        size: 185000,
-        category: np.category || 'Vendor Bulk Catalog Synchronizer',
-        brand: np.brand || targetVendorName,
-        sku: np.sku,
-        productName: np.name,
-        vendorId: targetVendorId,
-        vendorName: targetVendorName,
-        folderPath: `VendorBulkSync/${np.category || 'General'}/${np.sku || 'Products'}`,
-        productId: np.id,
-        uploadedBy: targetVendorName,
-        uploadedByRole: 'vendor',
-        createdAt: now,
-        updatedAt: now
-      };
-      dbLocal.addDriveFile(driveRecord);
-      dbLocal.addDriveLog({
-        id: `log_sync_${Date.now()}_${pIdx}`,
-        action: 'UPLOAD',
-        fileId,
-        fileName: driveRecord.fileName,
-        folderPath: driveRecord.folderPath,
-        timestamp: now,
-        userId: targetVendorId,
-        userName: targetVendorName,
-        userRole: 'vendor',
-        details: `Vendor Bulk Catalog Synchronizer image stored in Google Drive for product "${np.name}" (SKU: ${np.sku}).`
-      });
-    });
-
     if (!asDraft) {
       dbLocal.addNotification(
         'admin',
@@ -1368,12 +1327,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                                 let uploadedUrl = '';
                                 let uploadedName = file.name;
                                 try {
-                                  addToast(`Uploading ${docItem.label} to Google Drive...`, 'info');
+                                  addToast(`Uploading ${docItem.label} to Cloudinary...`, 'info');
                                   const cloudRes = await uploadVendorDocumentToCloudinary(file);
                                   uploadedUrl = cloudRes.url;
                                 } catch (err: any) {
-                                  console.error('Google Drive Document Upload Failed:', err);
-                                  addToast(`Google Drive upload failed. Saving locally...`, 'info');
+                                  console.error('Cloudinary Document Upload Failed:', err);
+                                  addToast(`Cloudinary upload failed. Saving locally...`, 'info');
                                   await new Promise<void>((resolve) => {
                                     const reader = new FileReader();
                                     reader.onload = (ev) => {
@@ -1544,13 +1503,6 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
             Cloudinary Image Manager
           </button>
           <button
-            onClick={() => setActiveTab('google_drive')}
-            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'google_drive' ? 'bg-white text-slate-950 shadow-sm font-bold text-teal-800' : 'text-slate-500 hover:bg-slate-50'}`}
-          >
-            <UploadCloud className="w-3.5 h-3.5 text-teal-600" />
-            Google Drive Storage
-          </button>
-          <button
             onClick={() => setActiveTab('payouts')}
             className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'payouts' ? 'bg-white text-slate-950 shadow-sm font-bold text-teal-800' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -1574,15 +1526,6 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
           vendorId={vendorProfile.id}
           userRole="vendor"
           onImagesUpdated={() => loadData()}
-        />
-      )}
-
-      {/* Google Drive Asset Storage Tab */}
-      {activeTab === 'google_drive' && vendorProfile && (
-        <GoogleDriveManager
-          mode="vendor"
-          vendorId={vendorProfile.id}
-          vendorName={vendorProfile.companyName || vendorProfile.ownerName}
         />
       )}
 
@@ -1783,12 +1726,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                             let uploadedUrl = '';
                             let uploadedName = file.name;
                             try {
-                              addToast(`Uploading ${docItem.label} to Google Drive...`, 'info');
+                              addToast(`Uploading ${docItem.label} to Cloudinary...`, 'info');
                               const cloudRes = await uploadVendorDocumentToCloudinary(file);
                               uploadedUrl = cloudRes.url;
                             } catch (err: any) {
-                              console.error('Google Drive Document Upload Failed:', err);
-                              addToast(`Google Drive upload failed. Saving locally...`, 'info');
+                              console.error('Cloudinary Document Upload Failed:', err);
+                              addToast(`Cloudinary upload failed. Saving locally...`, 'info');
                               await new Promise<void>((resolve) => {
                                 const reader = new FileReader();
                                 reader.onload = (ev) => {
