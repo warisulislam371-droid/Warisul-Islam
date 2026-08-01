@@ -13,7 +13,7 @@ import { uploadProductImageToCloudinary } from '../utils/cloudinary';
 interface ProcessedImageUrl {
   original: string;
   directUrl: string;
-  status: 'valid_direct' | 'converted_drive' | 'cloudinary' | 'fallback' | 'invalid';
+  status: 'valid_direct' | 'converted_drive' | 'cloudinary' | 'jsdelivr' | 'converted_github_jsdelivr' | 'fallback' | 'invalid';
   statusLabel: string;
   driveFileId?: string;
 }
@@ -68,6 +68,41 @@ export const convertToDirectImageUrl = (url: string): ProcessedImageUrl => {
   }
 
   const cleanUrl = url.trim().replace(/^["']|["']$/g, '');
+
+  // jsDelivr CDN Direct Link
+  if (cleanUrl.includes('cdn.jsdelivr.net')) {
+    return {
+      original: cleanUrl,
+      directUrl: cleanUrl,
+      status: 'jsdelivr',
+      statusLabel: 'jsDelivr CDN Direct Link'
+    };
+  }
+
+  // GitHub to jsDelivr CDN Conversion
+  const rawGithubMatch = cleanUrl.match(/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)/);
+  if (rawGithubMatch) {
+    const [, user, repo, branch, path] = rawGithubMatch;
+    const jsdelivrUrl = `https://cdn.jsdelivr.net/gh/${user}/${repo}@${branch}/${path}`;
+    return {
+      original: cleanUrl,
+      directUrl: jsdelivrUrl,
+      status: 'converted_github_jsdelivr',
+      statusLabel: 'GitHub Converted to jsDelivr CDN'
+    };
+  }
+
+  const githubBlobMatch = cleanUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/(?:blob|raw)\/([^\/]+)\/(.+)/);
+  if (githubBlobMatch) {
+    const [, user, repo, branch, path] = githubBlobMatch;
+    const jsdelivrUrl = `https://cdn.jsdelivr.net/gh/${user}/${repo}@${branch}/${path}`;
+    return {
+      original: cleanUrl,
+      directUrl: jsdelivrUrl,
+      status: 'converted_github_jsdelivr',
+      statusLabel: 'GitHub Converted to jsDelivr CDN'
+    };
+  }
 
   // Google Drive conversion
   const driveFileIdMatch = 
@@ -776,7 +811,7 @@ export function AdminBulkProductImport({ onRefreshCatalog, onNavigateToProducts 
           </h2>
 
           <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-            Upload product catalogs via CSV or Excel (.xlsx). The engine automatically validates image URLs, converts Google Drive share links and Cloudinary URLs into direct rendering links, calculates pricing &amp; commissions, and imports inventory seamlessly.
+            Upload product catalogs via CSV or Excel (.xlsx). The engine automatically validates image URLs, converts Google Drive share links, GitHub repositories via jsDelivr CDN, and Cloudinary URLs into direct rendering links, calculates pricing &amp; commissions, and imports inventory seamlessly.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -1113,9 +1148,21 @@ export function AdminBulkProductImport({ onRefreshCatalog, onNavigateToProducts 
                                   Google Drive Direct ({p.processedImages.length} img)
                                 </span>
                               )}
+                              {firstImg?.status === 'jsdelivr' && (
+                                <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  <LinkIcon className="w-3 h-3 text-indigo-600" />
+                                  jsDelivr CDN Direct ({p.processedImages.length} img)
+                                </span>
+                              )}
+                              {firstImg?.status === 'converted_github_jsdelivr' && (
+                                <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  <Sparkles className="w-3 h-3 text-purple-600" />
+                                  GitHub → jsDelivr CDN ({p.processedImages.length} img)
+                                </span>
+                              )}
                               {firstImg?.status === 'cloudinary' && (
                                 <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                  <CloudinaryIcon className="w-3 h-3 text-teal-600" />
+                                  <ImageIcon className="w-3 h-3 text-teal-600" />
                                   Cloudinary Direct ({p.processedImages.length} img)
                                 </span>
                               )}

@@ -676,13 +676,13 @@ export default function CustomerPanel({
     }
     setManualProofFileName(file.name);
     setIsUploadingProof(true);
-    addToast(`Uploading ${file.name} to Cloudinary...`, 'info');
+    addToast(`Uploading ${file.name} to Google Drive...`, 'info');
 
     try {
       const cloudRes = await uploadOrderDocumentToCloudinary(file, 'payment_proofs');
       if (cloudRes.url) {
         setManualProofUrl(cloudRes.url);
-        addToast('Payment receipt uploaded to Cloudinary successfully!', 'success');
+        addToast('Payment receipt uploaded to Google Drive successfully!', 'success');
       }
     } catch (err) {
       console.error('Cloudinary Order Upload Error:', err);

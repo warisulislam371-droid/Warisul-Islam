@@ -214,12 +214,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     let uploadedName = selectedResubmitFile.name;
 
     try {
-      addToast(`Uploading ${resubmitModalDoc.label} to Cloudinary...`, 'info');
+      addToast(`Uploading ${resubmitModalDoc.label} to Google Drive...`, 'info');
       const cloudRes = await uploadVendorDocumentToCloudinary(selectedResubmitFile);
       uploadedUrl = cloudRes.url;
     } catch (err: any) {
-      console.error('Cloudinary Document Upload Failed:', err);
-      addToast('Cloudinary upload failed. Saving file locally...', 'info');
+      console.error('Google Drive Document Upload Failed:', err);
+      addToast('Google Drive upload failed. Saving file locally...', 'info');
       await new Promise<void>((resolve) => {
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -1328,12 +1328,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                                 let uploadedUrl = '';
                                 let uploadedName = file.name;
                                 try {
-                                  addToast(`Uploading ${docItem.label} to Cloudinary...`, 'info');
+                                  addToast(`Uploading ${docItem.label} to Google Drive...`, 'info');
                                   const cloudRes = await uploadVendorDocumentToCloudinary(file);
                                   uploadedUrl = cloudRes.url;
                                 } catch (err: any) {
-                                  console.error('Cloudinary Document Upload Failed:', err);
-                                  addToast(`Cloudinary upload failed. Saving locally...`, 'info');
+                                  console.error('Google Drive Document Upload Failed:', err);
+                                  addToast(`Google Drive upload failed. Saving locally...`, 'info');
                                   await new Promise<void>((resolve) => {
                                     const reader = new FileReader();
                                     reader.onload = (ev) => {
@@ -1743,12 +1743,12 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                             let uploadedUrl = '';
                             let uploadedName = file.name;
                             try {
-                              addToast(`Uploading ${docItem.label} to Cloudinary...`, 'info');
+                              addToast(`Uploading ${docItem.label} to Google Drive...`, 'info');
                               const cloudRes = await uploadVendorDocumentToCloudinary(file);
                               uploadedUrl = cloudRes.url;
                             } catch (err: any) {
-                              console.error('Cloudinary Document Upload Failed:', err);
-                              addToast(`Cloudinary upload failed. Saving locally...`, 'info');
+                              console.error('Google Drive Document Upload Failed:', err);
+                              addToast(`Google Drive upload failed. Saving locally...`, 'info');
                               await new Promise<void>((resolve) => {
                                 const reader = new FileReader();
                                 reader.onload = (ev) => {

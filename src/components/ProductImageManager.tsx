@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { ProductImageAsset, ProductImageUploadHistory } from '../types';
 import { db } from '../firebase';
+import { uploadProductImageToCloudinary } from '../utils/cloudinary';
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 
 interface ProductImageManagerProps {
@@ -161,27 +162,19 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
 
     try {
       setIsUploading(true);
-      setStatusMessage({ type: 'info', text: 'Uploading optimized image to Cloudinary...' });
+      setStatusMessage({ type: 'info', text: 'Uploading optimized image to Google Drive...' });
 
-      // Call Cloudinary API proxy / server helper
-      const response = await fetch('/api/cloudinary/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileData: previewFile.compressedBase64,
-          folder: `products/${productId}`,
-          publicId: `prod_${productId}_${Date.now()}`
-        })
-      });
-
-      const cloudinaryData = await response.json();
+      const driveRes = await uploadProductImageToCloudinary(
+        previewFile.compressedBase64,
+        `products/${productId}`
+      );
 
       const newImageDoc: Omit<ProductImageAsset, 'id'> = {
         productId,
         vendorId,
-        cloudinaryPublicId: cloudinaryData.public_id || `pub_${Date.now()}`,
-        secureUrl: cloudinaryData.secure_url,
-        thumbnailUrl: cloudinaryData.thumbnail_url || cloudinaryData.secure_url,
+        cloudinaryPublicId: driveRes.public_id || `pub_${Date.now()}`,
+        secureUrl: driveRes.url,
+        thumbnailUrl: driveRes.url,
         fileName: previewFile.file.name,
         fileSize: previewFile.compressedSize,
         originalSize: previewFile.originalSize,
@@ -201,14 +194,14 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
         productId,
         vendorId,
         action: 'Uploaded',
-        imageUrl: cloudinaryData.secure_url,
+        imageUrl: driveRes.url,
         performedByRole: isAdminView ? 'admin' : 'vendor',
         performedByName: vendorName,
         timestamp: new Date().toISOString(),
-        note: `Uploaded image ${previewFile.file.name} (Compressed by ${Math.round(((previewFile.originalSize - previewFile.compressedSize) / previewFile.originalSize) * 100)}%)`
+        note: `Uploaded image ${previewFile.file.name} to Google Drive (Compressed by ${Math.round(((previewFile.originalSize - previewFile.compressedSize) / previewFile.originalSize) * 100)}%)`
       });
 
-      setStatusMessage({ type: 'success', text: 'Image uploaded successfully to Cloudinary and stored in Firestore!' });
+      setStatusMessage({ type: 'success', text: 'Image uploaded successfully to Google Drive!' });
       setPreviewFile(null);
       setIsUploading(false);
     } catch (err: any) {
