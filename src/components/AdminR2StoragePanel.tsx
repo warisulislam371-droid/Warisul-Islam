@@ -109,20 +109,20 @@ export const AdminR2StoragePanel: React.FC = () => {
       )}
 
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="bg-white/20 backdrop-blur-md px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest text-orange-200">
-                Primary Storage Engine
+              <span className="bg-white/20 backdrop-blur-md px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest text-blue-200">
+                Primary Image Storage
               </span>
               <span className="bg-emerald-500/30 text-emerald-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-400/30 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Cloudflare R2 Active
+                <CheckCircle2 className="w-3 h-3" /> Cloudinary CDN Active
               </span>
             </div>
-            <h2 className="text-2xl font-black tracking-tight">Cloudflare R2 Image & Asset Storage System</h2>
-            <p className="text-orange-100 text-xs mt-1 max-w-2xl leading-relaxed">
-              Centralized zero-egress-cost storage for HealNex Medi Bazar product images, vendor compliance documents, and payment receipts.
+            <h2 className="text-2xl font-black tracking-tight">Cloudinary Media & Asset Storage System</h2>
+            <p className="text-blue-100 text-xs mt-1 max-w-2xl leading-relaxed">
+              Centralized Cloudinary media storage for HealNex Medi Bazar product images, vendor compliance documents, and payment receipts.
             </p>
           </div>
           <button 
@@ -136,39 +136,39 @@ export const AdminR2StoragePanel: React.FC = () => {
         </div>
       </div>
 
-      {/* R2 Storage Stats Cards */}
+      {/* Cloudinary Storage Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Hosted Media</span>
-            <div className="p-2 bg-orange-50 text-orange-600 rounded-xl">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
               <ImageIcon className="w-5 h-5" />
             </div>
           </div>
           <div className="text-2xl font-black text-slate-900">{stats.totalFiles} Assets</div>
-          <span className="text-[11px] font-semibold text-emerald-600 mt-1 block">100% Hosted in R2 Bucket</span>
+          <span className="text-[11px] font-semibold text-emerald-600 mt-1 block">100% Stored in Cloudinary</span>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Storage Consumed</span>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
               <HardDrive className="w-5 h-5" />
             </div>
           </div>
           <div className="text-2xl font-black text-slate-900">{stats.totalSizeMB}</div>
-          <span className="text-[11px] font-semibold text-slate-500 mt-1 block">Zero Egress Bandwidth Fees</span>
+          <span className="text-[11px] font-semibold text-slate-500 mt-1 block">Auto Format & Optimization</span>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">R2 Bucket Name</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Cloud Name</span>
             <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
               <Server className="w-5 h-5" />
             </div>
           </div>
-          <div className="text-sm font-black text-slate-900 truncate font-mono">{stats.bucketName}</div>
-          <span className="text-[11px] font-semibold text-purple-600 mt-1 block">S3 Compatible Endpoint</span>
+          <div className="text-sm font-black text-slate-900 truncate font-mono">{stats.cloudName || stats.bucketName || 'healnex-medibazar'}</div>
+          <span className="text-[11px] font-semibold text-purple-600 mt-1 block">Cloudinary Cloud Infrastructure</span>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -178,25 +178,26 @@ export const AdminR2StoragePanel: React.FC = () => {
               <ExternalLink className="w-5 h-5" />
             </div>
           </div>
-          <div className="text-xs font-black text-slate-900 truncate font-mono">{stats.publicCdnUrl}</div>
-          <span className="text-[11px] font-semibold text-emerald-600 mt-1 block">Edge Accelerated CDN</span>
+          <div className="text-xs font-black text-slate-900 truncate font-mono">{stats.publicCdnUrl || 'https://res.cloudinary.com'}</div>
+          <span className="text-[11px] font-semibold text-emerald-600 mt-1 block">Global Cloudinary CDN</span>
         </div>
       </div>
 
-      {/* R2 Storage Path Specification Info */}
+      {/* Cloudinary Storage Path Specification Info */}
       <div className="bg-slate-900 text-slate-200 p-5 rounded-2xl border border-slate-800 space-y-3">
         <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-orange-400 shrink-0" />
-          <h4 className="text-xs font-bold uppercase tracking-wider text-white">Required Cloudflare R2 Storage Path Specification</h4>
+          <Info className="w-4 h-4 text-blue-400 shrink-0" />
+          <h4 className="text-xs font-bold uppercase tracking-wider text-white">Cloudinary Storage Path & Public ID Format</h4>
         </div>
-        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-xs text-orange-300 break-all">
-          healnex/products/<span className="text-amber-400">{'{category}'}</span>/<span className="text-amber-400">{'{SKU}'}</span>/<span className="text-amber-400">{'{timestamp}'}</span>-<span className="text-amber-400">{'{filename}'}</span>
+        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-xs text-blue-300 break-all">
+          healnex/products/<span className="text-amber-400">{'{category}'}</span>/<span className="text-amber-400">{'{SKU}'}</span>/<span className="text-amber-400">{'{timestamp}'}</span>_<span className="text-amber-400">{'{filename}'}</span>
         </div>
         <div className="text-[11px] text-slate-400 flex flex-col md:flex-row gap-2 md:gap-6">
-          <span><strong>Example:</strong> <code className="text-slate-300">healnex/products/ultrasound/USG001/1722512345-machine.webp</code></span>
-          <span><strong>CDN URL:</strong> <code className="text-emerald-400">https://cdn.healnex.com/healnex/products/ultrasound/USG001/1722512345-machine.webp</code></span>
+          <span><strong>Example Public ID:</strong> <code className="text-slate-300">healnex/products/ultrasound/USG001/1722512345_machine</code></span>
+          <span><strong>Cloudinary CDN URL:</strong> <code className="text-emerald-400">https://res.cloudinary.com/healnex-medibazar/image/upload/f_auto,q_auto/v1/healnex/...</code></span>
         </div>
       </div>
+
 
       {/* Admin Upload Section */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">

@@ -20,6 +20,7 @@ import {
 import { categorizeProductLocally, auditProductsLocally } from './src/utils/medicalCategorizer';
 import { getCategorySeoUrl, getSubcategorySeoUrl, getProductSeoUrl } from './src/utils/seoUrls';
 import { uploadToR2, deleteFromR2, listR2Images } from './src/server/r2Service';
+import { uploadToCloudinary, deleteFromCloudinary, listCloudinaryImages } from './src/server/cloudinaryService';
 
 dotenv.config();
 
@@ -699,8 +700,7 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
 
   /**
    * POST /api/upload-image
-   * Receives image file, validates type/size, uploads to Cloudflare R2 bucket.
-   * Path format: healnex/products/{category}/{SKU}/{timestamp}-{filename}
+   * Receives image file, validates type/size, uploads to Cloudinary CDN storage.
    */
   app.post('/api/upload-image', async (req, res) => {
     try {
@@ -735,17 +735,17 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
         return res.status(400).json({ error: 'Invalid file format. Supported formats: JPG, PNG, WEBP, GIF, SVG.' });
       }
 
-      // 4. Upload to Cloudflare R2 Bucket
-      const uploadResult = await uploadToR2({
+      // 4. Upload to Cloudinary CDN Storage Engine
+      const uploadResult = await uploadToCloudinary({
         buffer: imageBuffer,
         fileName,
-        contentType: 'image/webp',
+        contentType: contentType || 'image/webp',
         category,
         sku,
         uploadedBy
       });
 
-      // 5. Return required database & CDN asset structure
+      // 5. Return database & Cloudinary CDN asset response
       return res.json({
         success: true,
         product_id: productId || `prod_${Date.now()}`,
@@ -757,54 +757,57 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
         thumbnail_url: uploadResult.thumbnailUrl,
         uploaded_by: uploadResult.uploadedBy,
         upload_date: uploadResult.uploadedAt,
-        storage_path: uploadResult.storagePath,
+        storage_path: uploadResult.publicId,
+        public_id: uploadResult.publicId,
         file_size: uploadResult.fileSize,
         url: uploadResult.imageUrl,
-        public_id: uploadResult.storagePath
+        provider: 'Cloudinary'
       });
 
     } catch (err: any) {
       console.error('[API /api/upload-image Error]:', err?.message || err);
-      return res.status(500).json({ error: err?.message || 'Failed to upload image to Cloudflare R2 Storage.' });
+      return res.status(500).json({ error: err?.message || 'Failed to upload image to Cloudinary Storage.' });
     }
   });
 
   /**
    * DELETE /api/delete-image
-   * Removes image from Cloudflare R2 storage bucket & database reference
+   * Removes image from Cloudinary storage bucket & database reference
    */
   app.post('/api/delete-image', async (req, res) => {
     try {
-      const { storage_path, image_url, product_id } = req.body;
-      const targetPath = storage_path || image_url;
+      const { storage_path, public_id, image_url, product_id } = req.body;
+      const targetPath = public_id || storage_path || image_url;
 
       if (!targetPath) {
         return res.status(400).json({ error: 'storage_path or image_url is required to delete image.' });
       }
 
-      const result = await deleteFromR2(targetPath);
+      const result = await deleteFromCloudinary(targetPath);
 
       return res.json({
         success: true,
         product_id: product_id || null,
-        storage_path: result.storagePath,
-        message: `Image successfully deleted from Cloudflare R2 bucket: ${result.storagePath}`
+        storage_path: result.publicId,
+        public_id: result.publicId,
+        message: `Image successfully deleted from Cloudinary CDN: ${result.publicId}`
       });
 
     } catch (err: any) {
       console.error('[API /api/delete-image Error]:', err?.message || err);
-      return res.status(500).json({ error: err?.message || 'Failed to delete image from Cloudflare R2.' });
+      return res.status(500).json({ error: err?.message || 'Failed to delete image from Cloudinary.' });
     }
   });
 
   /**
    * PUT /api/update-image
-   * Replaces an existing image in Cloudflare R2 with new image
+   * Replaces an existing image in Cloudinary with new image
    */
   app.put('/api/update-image', async (req, res) => {
     try {
       const { 
         old_storage_path, 
+        old_public_id,
         newImageBase64, 
         fileName = 'replaced.webp', 
         contentType = 'image/webp',
@@ -818,15 +821,16 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
       }
 
       // Delete old image if path provided
-      if (old_storage_path) {
-        await deleteFromR2(old_storage_path);
+      const targetOldPath = old_public_id || old_storage_path;
+      if (targetOldPath) {
+        await deleteFromCloudinary(targetOldPath);
       }
 
       // Upload new image
       const cleanBase64 = newImageBase64.replace(/^data:[^;]+;base64,/, '');
       const imageBuffer = Buffer.from(cleanBase64, 'base64');
 
-      const uploadResult = await uploadToR2({
+      const uploadResult = await uploadToCloudinary({
         buffer: imageBuffer,
         fileName,
         contentType: contentType || 'image/webp',
@@ -840,25 +844,27 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
         product_id: product_id || null,
         image_url: uploadResult.imageUrl,
         thumbnail_url: uploadResult.thumbnailUrl,
-        storage_path: uploadResult.storagePath,
+        storage_path: uploadResult.publicId,
+        public_id: uploadResult.publicId,
         file_size: uploadResult.fileSize,
-        upload_date: uploadResult.uploadedAt
+        upload_date: uploadResult.uploadedAt,
+        provider: 'Cloudinary'
       });
 
     } catch (err: any) {
       console.error('[API /api/update-image Error]:', err?.message || err);
-      return res.status(500).json({ error: err?.message || 'Failed to update image in Cloudflare R2.' });
+      return res.status(500).json({ error: err?.message || 'Failed to update image in Cloudinary.' });
     }
   });
 
   /**
    * GET /api/images
-   * Fetches product images and storage usage statistics from Cloudflare R2
+   * Fetches product images and storage usage statistics from Cloudinary
    */
   app.get('/api/images', async (req, res) => {
     try {
       const prefix = (req.query.prefix as string) || 'healnex/';
-      const galleryData = await listR2Images(prefix);
+      const galleryData = await listCloudinaryImages(prefix);
       return res.json({
         success: true,
         files: galleryData.files,
@@ -866,13 +872,13 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
       });
     } catch (err: any) {
       console.error('[API /api/images Error]:', err?.message || err);
-      return res.status(500).json({ error: 'Failed to fetch R2 image gallery data.' });
+      return res.status(500).json({ error: 'Failed to fetch Cloudinary image gallery data.' });
     }
   });
 
   /**
-   * POST /api/r2/upload-document
-   * Upload vendor verification documents or order invoices to Cloudflare R2
+   * POST /api/r2/upload-document & POST /api/cloudinary/upload
+   * Upload vendor verification documents, order payment proofs or catalog photos to Cloudinary
    */
   app.post('/api/r2/upload-document', async (req, res) => {
     try {
@@ -885,7 +891,7 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
       const cleanBase64 = fileData.replace(/^data:[^;]+;base64,/, '');
       const buffer = Buffer.from(cleanBase64, 'base64');
 
-      const result = await uploadToR2({
+      const result = await uploadToCloudinary({
         buffer,
         fileName,
         contentType: contentType || 'application/octet-stream',
@@ -897,26 +903,26 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
         success: true,
         image_url: result.imageUrl,
         url: result.imageUrl,
-        storage_path: result.storagePath,
-        public_id: result.storagePath,
+        storage_path: result.publicId,
+        public_id: result.publicId,
         file_size: result.fileSize,
-        uploaded_at: result.uploadedAt
+        uploaded_at: result.uploadedAt,
+        provider: 'Cloudinary'
       });
 
     } catch (err: any) {
       console.error('[API /api/r2/upload-document Error]:', err?.message || err);
-      return res.status(500).json({ error: 'Failed to upload document to R2.' });
+      return res.status(500).json({ error: 'Failed to upload document to Cloudinary.' });
     }
   });
 
-  // Legacy Proxy Route Alias pointing directly to R2
   app.post('/api/cloudinary/upload', async (req, res) => {
     try {
       const { fileData, folder = 'products', publicId } = req.body;
       const cleanBase64 = (fileData || '').replace(/^data:[^;]+;base64,/, '');
       const buffer = Buffer.from(cleanBase64, 'base64');
 
-      const uploadResult = await uploadToR2({
+      const uploadResult = await uploadToCloudinary({
         buffer: buffer.length > 0 ? buffer : Buffer.from('empty'),
         fileName: `${publicId || 'image'}.webp`,
         contentType: 'image/webp',
@@ -925,19 +931,22 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
       });
 
       return res.json({
-        public_id: uploadResult.storagePath,
+        public_id: uploadResult.publicId,
         secure_url: uploadResult.imageUrl,
+        url: uploadResult.imageUrl,
         thumbnail_url: uploadResult.thumbnailUrl,
         format: 'webp',
         bytes: uploadResult.fileSize,
         width: 1200,
         height: 1200,
-        created_at: uploadResult.uploadedAt
+        created_at: uploadResult.uploadedAt,
+        provider: 'Cloudinary'
       });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || 'R2 Upload proxy failed' });
+      res.status(500).json({ error: err?.message || 'Cloudinary Upload failed' });
     }
   });
+
 
 
   // Dynamic SEO Sitemap endpoint (Main / Index)

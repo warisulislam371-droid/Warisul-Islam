@@ -197,14 +197,14 @@ export default function VendorProductManager({
           setSecondaryImages(sImgs);
         }
         showToast(uploadedUrls.length === 1 
-          ? 'Image uploaded to Cloudflare R2 CDN successfully!' 
-          : `${uploadedUrls.length} images uploaded to Cloudflare R2 CDN!`
+          ? 'Image uploaded to Cloudinary CDN successfully!' 
+          : `${uploadedUrls.length} images uploaded to Cloudinary CDN!`
         );
       }
     } catch (err: any) {
-      console.error('Cloudflare R2 upload error:', err);
+      console.error('Cloudinary upload error:', err);
       setFormError(`Image upload failed: ${err.message || err}`);
-      showToast('Cloudflare R2 image upload failed. Please try again.');
+      showToast('Cloudinary image upload failed. Please try again.');
     } finally {
       setIsUploadingImage(false);
     }

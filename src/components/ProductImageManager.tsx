@@ -213,16 +213,16 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
         performedByRole: isAdminView ? 'admin' : 'vendor',
         performedByName: vendorName,
         timestamp: new Date().toISOString(),
-        note: `Uploaded image to Cloudflare R2 Path: ${r2Data.storage_path}`
+        note: `Uploaded image to Cloudinary CDN Path: ${r2Data.public_id || r2Data.storage_path}`
       });
 
-      setStatusMessage({ type: 'success', text: 'Image uploaded successfully to Cloudflare R2 Storage CDN!' });
+      setStatusMessage({ type: 'success', text: 'Image uploaded successfully to Cloudinary Storage CDN!' });
       setPreviewFile(null);
       setIsUploading(false);
     } catch (err: any) {
-      console.log('R2 Upload error handled:', err);
+      console.log('Cloudinary Upload error handled:', err);
       setIsUploading(false);
-      setStatusMessage({ type: 'error', text: 'Failed to complete Cloudflare R2 image upload.' });
+      setStatusMessage({ type: 'error', text: 'Failed to complete Cloudinary image upload.' });
     }
   };
 

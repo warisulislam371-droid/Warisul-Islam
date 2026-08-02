@@ -7,7 +7,9 @@ import AdminCategoriesManager from './AdminCategoriesManager';
 import { AdminVerificationPanel } from './AdminVerificationPanel';
 import { AdminCategorizationPanel } from './AdminCategorizationPanel';
 import { AdminR2StoragePanel } from './AdminR2StoragePanel';
+import AdminBulkProductUploadModal from './AdminBulkProductUploadModal';
 import {
+  UploadCloud,
   TrendingUp,
   Users,
   Briefcase,
@@ -658,6 +660,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [showAddVendorModal, setShowAddVendorModal] = useState<boolean>(false);
   const [editingVendorModal, setEditingVendorModal] = useState<Vendor | null>(null);
   const [viewingVendorCatalogModal, setViewingVendorCatalogModal] = useState<Vendor | null>(null);
+  const [showAdminBulkUploadModal, setShowAdminBulkUploadModal] = useState<boolean>(false);
+  const [adminBulkUploadPreselectedVendorId, setAdminBulkUploadPreselectedVendorId] = useState<string | undefined>(undefined);
   const [vendorForm, setVendorForm] = useState<{
     companyName: string;
     ownerName: string;
@@ -2288,13 +2292,26 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 Manage medical equipment suppliers, register new B2B partners, edit commission rates, and review regulatory documents.
               </p>
             </div>
-            <button
-              onClick={handleOpenAddVendor}
-              className="bg-teal-700 hover:bg-teal-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition self-start md:self-center shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              + Add New Vendor Partner
-            </button>
+            <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+              <button
+                onClick={() => {
+                  setAdminBulkUploadPreselectedVendorId(undefined);
+                  setShowAdminBulkUploadModal(true);
+                }}
+                className="bg-teal-50 hover:bg-teal-100 text-teal-800 font-extrabold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs border border-teal-200 transition cursor-pointer"
+                title="Bulk upload catalog products to any vendor name"
+              >
+                <UploadCloud className="w-4 h-4 text-teal-600" />
+                Bulk Upload Products
+              </button>
+              <button
+                onClick={handleOpenAddVendor}
+                className="bg-teal-700 hover:bg-teal-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                + Add New Vendor Partner
+              </button>
+            </div>
           </div>
 
           {/* Pending KYC Resubmission Approval Alert Banner */}
@@ -2478,6 +2495,17 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                             >
                               <ShieldCheck className={`w-3.5 h-3.5 ${(v.isVerifiedSeller || v.trustSeal) ? 'text-teal-600' : 'text-slate-400'}`} />
                               {(v.isVerifiedSeller || v.trustSeal) ? 'Verified' : 'Verify Seller'}
+                            </button>
+                             <button
+                              onClick={() => {
+                                setAdminBulkUploadPreselectedVendorId(v.id);
+                                setShowAdminBulkUploadModal(true);
+                              }}
+                              className="bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition cursor-pointer"
+                              title={`Bulk upload products directly for ${v.companyName}`}
+                            >
+                              <UploadCloud className="w-3 h-3 text-teal-600" />
+                              Bulk Upload
                             </button>
                             <button
                               onClick={() => handleOpenEditVendor(v)}
@@ -3056,6 +3084,19 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminBulkUploadPreselectedVendorId(undefined);
+                    setShowAdminBulkUploadModal(true);
+                  }}
+                  className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl border border-teal-600 shadow-sm transition flex items-center gap-2 cursor-pointer"
+                  title="Admin Master Tool: Bulk upload CSV products directly to any vendor name"
+                >
+                  <UploadCloud className="w-4 h-4 text-teal-200" />
+                  Bulk Upload Products to Vendor
+                </button>
+
                 {pendingCount > 0 && (
                   <button
                     type="button"
@@ -8750,6 +8791,18 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
         </div>
       );
     })()}
+
+    {/* Admin Bulk Upload Modal */}
+    <AdminBulkProductUploadModal
+      isOpen={showAdminBulkUploadModal}
+      onClose={() => setShowAdminBulkUploadModal(false)}
+      vendors={vendors}
+      preSelectedVendorId={adminBulkUploadPreselectedVendorId}
+      onSuccess={(count, targetVendorName) => {
+        loadData();
+        addToast(`Successfully bulk imported ${count} products for "${targetVendorName}"!`, 'success');
+      }}
+    />
     </>
   );
 }
