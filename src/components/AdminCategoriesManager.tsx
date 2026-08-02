@@ -221,9 +221,11 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
 
   const handleDeleteCategory = (id: string, name: string) => {
     if (confirm(`Remove category "${name}"?`)) {
-      dbLocal.saveCategories(categories.filter(c => c.id !== id));
+      dbLocal.removeCategory(id);
+      dbLocal.removeCategory(name);
       showToast(`Removed category "${name}".`);
       loadData();
+      if (onRefresh) onRefresh();
     }
   };
 

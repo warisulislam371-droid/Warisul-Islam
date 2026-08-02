@@ -36,7 +36,8 @@ import {
   ZoomIn,
   Flame,
   Bell,
-  TrendingDown
+  TrendingDown,
+  Trash2
 } from 'lucide-react';
 import { ImageLightboxModal } from './ImageLightboxModal';
 
@@ -223,7 +224,11 @@ export default function EnterpriseHomepage({
     return () => clearInterval(slideTimer);
   }, [slidesToDisplay.length]);
 
-  const sidebarCategories = [
+  const removedCategories = useMemo(() => {
+    return new Set((dbLocal.getRemovedCategories() || []).map(s => s.toLowerCase()));
+  }, [categories]);
+
+  const rawSidebarCategories = [
     { name: "Diagnostic Equipment", icon: "🔬" },
     { name: "Patient Monitoring", icon: "📊" },
     { name: "ECG Machines", icon: "📈" },
@@ -246,6 +251,10 @@ export default function EnterpriseHomepage({
     { name: "Spare Parts & Accessories", icon: "⚙️" }
   ];
 
+  const sidebarCategories = useMemo(() => {
+    return rawSidebarCategories.filter(sc => !removedCategories.has(sc.name.trim().toLowerCase()));
+  }, [removedCategories]);
+
   const allCategoryCards = useMemo(() => {
     const list: { name: string; displayName: string; count: string; image: string; icon: string }[] = [];
     const seen = new Set<string>();
@@ -267,7 +276,7 @@ export default function EnterpriseHomepage({
       categories.forEach(cat => {
         if (!cat.name || cat.isActive === false) return;
         const key = cat.name.trim().toLowerCase();
-        if (seen.has(key)) return;
+        if (seen.has(key) || removedCategories.has(key)) return;
         seen.add(key);
 
         const count = products.filter(p =>
@@ -289,7 +298,7 @@ export default function EnterpriseHomepage({
     products.forEach(p => {
       if (!p.category) return;
       const key = p.category.trim().toLowerCase();
-      if (!seen.has(key)) {
+      if (!seen.has(key) && !removedCategories.has(key)) {
         seen.add(key);
         const count = products.filter(item => item.category.trim().toLowerCase() === key).length;
         const preset = defaultPresetMap[key];
@@ -303,8 +312,28 @@ export default function EnterpriseHomepage({
       }
     });
 
+    // Add remaining default preset categories if not yet present and not removed
+    rawSidebarCategories.forEach(sc => {
+      const key = sc.name.trim().toLowerCase();
+      if (!seen.has(key) && !removedCategories.has(key)) {
+        seen.add(key);
+        const count = products.filter(p =>
+          (p.category || '').trim().toLowerCase() === key ||
+          (p.subcategory || '').trim().toLowerCase() === key
+        ).length;
+        const preset = defaultPresetMap[key];
+        list.push({
+          name: sc.name.trim(),
+          displayName: sc.name.trim(),
+          count: `${count} Products`,
+          image: preset?.image || 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=400',
+          icon: sc.icon || '🩺'
+        });
+      }
+    });
+
     return list;
-  }, [categories, products]);
+  }, [categories, products, removedCategories]);
 
   // Static Category Sliders for all core medical domains
   const staticCategorySections = useMemo(() => {
@@ -908,11 +937,26 @@ export default function EnterpriseHomepage({
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
           {allCategoryCards.map((cat) => (
-            <button
+            <div
               key={cat.name}
               onClick={() => handleCategoryClick(cat.name)}
-              className="bg-white rounded-2xl border border-slate-200 p-4 text-center hover:shadow-xl hover:border-[#0F9D8A] transition duration-300 group cursor-pointer flex flex-col items-center"
+              className="bg-white rounded-2xl border border-slate-200 p-4 text-center hover:shadow-xl hover:border-[#0F9D8A] transition duration-300 group cursor-pointer flex flex-col items-center relative"
             >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`Remove category "${cat.displayName}"?`)) {
+                    dbLocal.removeCategory(cat.name);
+                    addToast(`Removed category "${cat.displayName}"`, 'info');
+                  }
+                }}
+                title={`Remove ${cat.displayName} category`}
+                className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-100 hover:bg-rose-500 text-slate-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100 z-10"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+
               <div className="w-20 h-20 rounded-2xl overflow-hidden bg-[#F5F7FA] p-2 mb-3 relative group-hover:scale-105 transition-transform">
                 <img src={cat.image} alt={cat.displayName} className="w-full h-full object-cover rounded-xl" />
                 <span className="absolute bottom-1 right-1 text-sm bg-white/80 p-1 rounded-full shadow-sm">
@@ -923,7 +967,7 @@ export default function EnterpriseHomepage({
                 {cat.displayName}
               </h4>
               <p className="text-[10px] text-slate-400 font-medium mt-1">{cat.count}</p>
-            </button>
+            </div>
           ))}
         </div>
       </section>

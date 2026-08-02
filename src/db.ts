@@ -1151,13 +1151,40 @@ export const dbLocal = {
   // Dynamic Categories
   getCategories(): Category[] {
     const list = this.get(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
-    return Array.isArray(list) && list.length > 0 ? list : INITIAL_CATEGORIES;
+    const removed: string[] = this.get('healnex_removed_categories', []);
+    const removedSet = new Set(removed.map(s => s.toLowerCase()));
+    
+    if (Array.isArray(list) && list.length > 0) {
+      return list.filter(c => c.isActive !== false && !removedSet.has((c.name || '').toLowerCase()) && !removedSet.has((c.id || '').toLowerCase()));
+    }
+    return INITIAL_CATEGORIES.filter(c => !removedSet.has((c.name || '').toLowerCase()) && !removedSet.has((c.id || '').toLowerCase()));
   },
   saveCategories(categories: Category[]) {
     const old = this.getCategories();
     this.set(STORAGE_KEYS.CATEGORIES, categories);
     syncListToFirestoreWithDeletions('categories', categories, old);
     window.dispatchEvent(new Event('healnex_db_update'));
+  },
+  removeCategory(categoryNameOrId: string) {
+    if (!categoryNameOrId) return;
+    const nameLower = categoryNameOrId.trim().toLowerCase();
+    
+    // Save to removed list key to ensure static fallbacks and presets also skip it
+    const removed: string[] = this.get('healnex_removed_categories', []);
+    if (!removed.map(s => s.toLowerCase()).includes(nameLower)) {
+      removed.push(nameLower);
+      this.set('healnex_removed_categories', removed);
+    }
+
+    const currentList = this.get(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    const filtered = currentList.filter(c => 
+      c.id !== categoryNameOrId && 
+      (c.name || '').trim().toLowerCase() !== nameLower
+    );
+    this.saveCategories(filtered);
+  },
+  getRemovedCategories(): string[] {
+    return this.get('healnex_removed_categories', []);
   },
 
   // Dynamic Brands
