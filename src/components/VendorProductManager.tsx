@@ -34,7 +34,8 @@ import {
   Box,
   Globe,
   Wand2,
-  FolderTree
+  FolderTree,
+  RefreshCw
 } from 'lucide-react';
 
 interface VendorProductManagerProps {
@@ -72,6 +73,9 @@ export default function VendorProductManager({
   const [importProducts, setImportProducts] = useState<any[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [importSyncMode, setImportSyncMode] = useState<'upsert' | 'append'>('upsert');
+  const [importSearchQuery, setImportSearchQuery] = useState('');
+  const [importFilterTab, setImportFilterTab] = useState<'all' | 'valid' | 'error'>('all');
 
   // New Category / Brand Request Form State
   const [reqCatName, setReqCatName] = useState('');
@@ -1050,78 +1054,131 @@ export default function VendorProductManager({
       dbLocal.saveBrands(currentBrands);
     }
 
+    const existingProducts = dbLocal.getProducts();
+    let updatedCount = 0;
+    let createdCount = 0;
+
     validProds.forEach(prod => {
       const commissionAmount = Math.round((prod.vendorPrice * effectiveCommissionRate) / 100 * 100) / 100;
       const finalPrice = prod.vendorPrice + commissionAmount;
       const vendorPayout = prod.vendorPrice;
 
-      const newProd: Product = {
-        id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        vendorId: vendor.id,
-        vendorName: vendor.companyName,
-        name: prod.name,
-        sku: prod.sku,
-        modelNumber: prod.modelNumber || `MOD-${Math.floor(1000 + Math.random() * 9000)}`,
-        brand: prod.brand,
-        category: prod.category,
-        subcategory: prod.subcategory,
-        description: prod.shortDescription || prod.name,
-        shortDescription: prod.shortDescription,
-        fullDescription: prod.fullDescription,
-        price: finalPrice,
-        mrp: prod.mrp || finalPrice * 1.2,
-        salePrice: finalPrice,
-        wholesalePrice: prod.wholesalePrice,
-        moq: prod.minOrderQty,
-        stockQuantity: prod.stockQuantity,
-        hsnCode: prod.hsnCode,
-        gstRate: prod.gstRate,
-        warranty: prod.warranty,
-        countryOfOrigin: prod.countryOfOrigin,
-        unit: prod.unit,
-        images: prod.images,
-        imageMetadata: prod.imageMetadata,
-        pricingTiers: prod.pricingTiers,
-        specifications: [],
-        
-        vendorPrice: prod.vendorPrice,
-        commissionRate: effectiveCommissionRate,
-        commissionAmount,
-        finalPrice,
-        vendorPayout,
+      // Match existing product by vendorId and SKU if in upsert mode
+      const existingProd = importSyncMode === 'upsert'
+        ? existingProducts.find(p => p.vendorId === vendor.id && p.sku.toLowerCase() === prod.sku.toLowerCase())
+        : null;
 
-        status: 'Pending',
-        published: false,
-        isActive: false,
-        approvedBy: '',
-        approvedAt: null,
-        publishedAt: null,
-        rejectedAt: null,
-        rejectReason: '',
-        rejectionReason: '',
-        createdAt: now,
-        updatedAt: now,
-        performance: { views: 0, inquiries: 0, sales: 0 }
-      };
+      if (existingProd) {
+        // Synchronize and update existing SKU entry
+        const updatedProd: Product = {
+          ...existingProd,
+          name: prod.name || existingProd.name,
+          modelNumber: prod.modelNumber || existingProd.modelNumber,
+          brand: prod.brand || existingProd.brand,
+          category: prod.category || existingProd.category,
+          subcategory: prod.subcategory || existingProd.subcategory,
+          description: prod.shortDescription || prod.name || existingProd.description,
+          shortDescription: prod.shortDescription || existingProd.shortDescription,
+          fullDescription: prod.fullDescription || existingProd.fullDescription,
+          price: finalPrice,
+          mrp: prod.mrp || finalPrice * 1.2,
+          salePrice: finalPrice,
+          wholesalePrice: prod.wholesalePrice || existingProd.wholesalePrice,
+          moq: prod.minOrderQty || existingProd.moq,
+          stockQuantity: prod.stockQuantity,
+          hsnCode: prod.hsnCode || existingProd.hsnCode,
+          gstRate: prod.gstRate !== undefined ? prod.gstRate : existingProd.gstRate,
+          warranty: prod.warranty || existingProd.warranty,
+          countryOfOrigin: prod.countryOfOrigin || existingProd.countryOfOrigin,
+          unit: prod.unit || existingProd.unit,
+          images: prod.images && prod.images.length > 0 ? prod.images : existingProd.images,
+          imageMetadata: prod.imageMetadata && prod.imageMetadata.length > 0 ? prod.imageMetadata : existingProd.imageMetadata,
+          pricingTiers: prod.pricingTiers && prod.pricingTiers.length > 0 ? prod.pricingTiers : existingProd.pricingTiers,
+          vendorPrice: prod.vendorPrice,
+          commissionRate: effectiveCommissionRate,
+          commissionAmount,
+          finalPrice,
+          vendorPayout,
+          updatedAt: now
+        };
 
-      dbLocal.addProduct(newProd);
+        dbLocal.updateProduct(updatedProd.id, updatedProd);
+        updatedCount++;
+      } else {
+        // Create new catalog product entry
+        const newProd: Product = {
+          id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          vendorId: vendor.id,
+          vendorName: vendor.companyName,
+          name: prod.name,
+          sku: prod.sku,
+          modelNumber: prod.modelNumber || `MOD-${Math.floor(1000 + Math.random() * 9000)}`,
+          brand: prod.brand,
+          category: prod.category,
+          subcategory: prod.subcategory,
+          description: prod.shortDescription || prod.name,
+          shortDescription: prod.shortDescription,
+          fullDescription: prod.fullDescription,
+          price: finalPrice,
+          mrp: prod.mrp || finalPrice * 1.2,
+          salePrice: finalPrice,
+          wholesalePrice: prod.wholesalePrice,
+          moq: prod.minOrderQty,
+          stockQuantity: prod.stockQuantity,
+          hsnCode: prod.hsnCode,
+          gstRate: prod.gstRate,
+          warranty: prod.warranty,
+          countryOfOrigin: prod.countryOfOrigin,
+          unit: prod.unit,
+          images: prod.images,
+          imageMetadata: prod.imageMetadata,
+          pricingTiers: prod.pricingTiers,
+          specifications: [],
+          
+          vendorPrice: prod.vendorPrice,
+          commissionRate: effectiveCommissionRate,
+          commissionAmount,
+          finalPrice,
+          vendorPayout,
 
-      dbLocal.addNotification(
-        'admin',
-        `Bulk Product Upload: ${newProd.name}`,
-        `Vendor "${vendor.companyName}" uploaded product "${newProd.name}" (SKU: ${newProd.sku}) via Bulk Import.`,
-        'info'
-      );
+          status: 'Pending',
+          published: false,
+          isActive: false,
+          approvedBy: '',
+          approvedAt: null,
+          publishedAt: null,
+          rejectedAt: null,
+          rejectReason: '',
+          rejectionReason: '',
+          createdAt: now,
+          updatedAt: now,
+          performance: { views: 0, inquiries: 0, sales: 0 }
+        };
+
+        dbLocal.addProduct(newProd);
+        createdCount++;
+
+        dbLocal.addNotification(
+          'admin',
+          `Bulk Product Upload: ${newProd.name}`,
+          `Vendor "${vendor.companyName}" uploaded product "${newProd.name}" (SKU: ${newProd.sku}) via Bulk Import.`,
+          'info'
+        );
+      }
     });
+
+    const summaryText = updatedCount > 0
+      ? `Bulk catalog sync complete: ${createdCount} new items created, ${updatedCount} existing SKUs updated.`
+      : `Successfully imported ${createdCount} products into your catalog.`;
 
     dbLocal.addNotification(
       vendor.id,
-      `Bulk Import Completed`,
-      `Successfully imported ${validProds.length} products to your catalog. They are awaiting Admin review.`,
+      `Bulk Catalog Import & Sync Completed`,
+      `${summaryText} Newly created items are awaiting Admin review.`,
       'success'
     );
 
-    showToast(`Successfully imported ${validProds.length} products!`);
+    showToast(summaryText);
     setImportProducts([]);
     setShowBulkImportModal(false);
     onRefresh();
@@ -1932,8 +1989,11 @@ export default function VendorProductManager({
                   <Upload className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold">Bulk Product Catalog Import</h3>
-                  <p className="text-[11px] text-slate-400">Upload multiple medical instruments, set wholesale tiers, and map product images instantly.</p>
+                  <h3 className="text-base font-extrabold flex items-center gap-2">
+                    <span>Vendor Bulk Catalog Synchronizer</span>
+                    <span className="bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">CSV Auto-Map</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Upload CSV catalogs, update existing SKU stock & prices in bulk, map wholesale tiers, and auto-classify equipment.</p>
                 </div>
               </div>
               <button 
@@ -1950,9 +2010,9 @@ export default function VendorProductManager({
               {/* Instructions and Download Template Row */}
               <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="space-y-1">
-                  <h4 className="font-extrabold text-slate-800 text-sm">Download the Official CSV Template</h4>
+                  <h4 className="font-extrabold text-slate-800 text-sm">Download Official CSV Catalog Template</h4>
                   <p className="text-slate-500 leading-relaxed max-w-xl">
-                    Ensure your columns match our format, including custom headers for <strong className="text-teal-800">pricing tiers</strong> (e.g., <code>10:1500;50:1400</code>) and <strong className="text-teal-800">image metadata/alts</strong>.
+                    Ensure columns match our format, including custom headers for <strong className="text-teal-800">pricing tiers</strong> (e.g., <code>10:1500;50:1400</code>) and <strong className="text-teal-800">image metadata/alts</strong>.
                   </p>
                 </div>
                 <button
@@ -1964,13 +2024,62 @@ export default function VendorProductManager({
                 </button>
               </div>
 
+              {/* Sync Mode Selection */}
+              <div className="space-y-2">
+                <label className="font-extrabold text-slate-800 text-xs block">Select Catalog Synchronization Strategy:</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setImportSyncMode('upsert')}
+                    className={`p-4 rounded-2xl border text-left transition flex items-start gap-3 cursor-pointer ${
+                      importSyncMode === 'upsert'
+                        ? 'border-teal-600 bg-teal-50/30 shadow-sm ring-2 ring-teal-600/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${importSyncMode === 'upsert' ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                      <RefreshCw className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>Upsert & Synchronize SKUs</span>
+                        <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.5 rounded">Recommended</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                        Update prices, stock, images, and tier discounts for matching SKUs in your current catalog; add non-existing SKUs as new entries.
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setImportSyncMode('append')}
+                    className={`p-4 rounded-2xl border text-left transition flex items-start gap-3 cursor-pointer ${
+                      importSyncMode === 'append'
+                        ? 'border-teal-600 bg-teal-50/30 shadow-sm ring-2 ring-teal-600/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl mt-0.5 shrink-0 ${importSyncMode === 'append' ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                      <Plus className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-slate-900 text-xs">Append as New Items Only</div>
+                      <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                        Always create brand new catalog entries for all valid rows in the file, automatically appending unique SKU suffixes if duplicates exist.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               {/* Drag and Drop Zone */}
               <div
                 onDragEnter={handleDrag}
                 onDragOver={handleDrag}
                 onDragLeave={handleDrag}
                 onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-2xl p-8 text-center transition flex flex-col items-center justify-center gap-3 cursor-pointer ${
+                className={`border-2 border-dashed rounded-2xl p-7 text-center transition flex flex-col items-center justify-center gap-3 cursor-pointer ${
                   dragActive 
                     ? 'border-teal-600 bg-teal-50/20' 
                     : 'border-slate-200 hover:border-teal-500 hover:bg-slate-50/30'
@@ -1989,7 +2098,7 @@ export default function VendorProductManager({
                   }}
                 />
                 <div className="p-3 bg-slate-100 text-slate-600 rounded-2xl">
-                  <Upload className="w-6 h-6" />
+                  <Upload className="w-6 h-6 text-teal-700" />
                 </div>
                 <div>
                   <p className="font-extrabold text-slate-800 text-sm">Drag & drop your populated CSV here</p>
@@ -2008,98 +2117,189 @@ export default function VendorProductManager({
               )}
 
               {/* Parsed Products Table Preview */}
-              {importProducts.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                      <span>Import Preview</span>
-                      <span className="bg-slate-100 text-slate-600 font-mono text-xs px-2.5 py-0.5 rounded-full border border-slate-200">
-                        {importProducts.filter(p => p.isValid).length} / {importProducts.length} Valid Rows
-                      </span>
-                    </h4>
-                    <p className="text-[11px] text-slate-400 font-medium">Please review records below before finalizing imports.</p>
-                  </div>
+              {importProducts.length > 0 && (() => {
+                const validRows = importProducts.filter(p => p.isValid);
+                const invalidRows = importProducts.filter(p => !p.isValid);
 
-                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
-                    <div className="overflow-x-auto max-h-[32vh]">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-slate-900 text-white font-bold border-b border-slate-100 text-[10px] uppercase tracking-wider">
-                            <th className="p-3 pl-4">Row</th>
-                            <th className="p-3">Status</th>
-                            <th className="p-3">SKU</th>
-                            <th className="p-3">Product Name</th>
-                            <th className="p-3">Brand</th>
-                            <th className="p-3">Category</th>
-                            <th className="p-3 text-right">Vendor Price (₹)</th>
-                            <th className="p-3">Tiers</th>
-                            <th className="p-3">Images</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 text-[11px]">
-                          {importProducts.map((p, index) => (
-                            <React.Fragment key={index}>
-                              <tr className={`hover:bg-slate-50/50 ${!p.isValid ? 'bg-rose-50/20' : ''}`}>
-                                <td className="p-3 pl-4 font-mono font-bold text-slate-400">#{p.rowNumber}</td>
-                                <td className="p-3">
-                                  {p.isValid ? (
-                                    <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 font-extrabold px-2.5 py-1 rounded-full border border-emerald-100">
-                                      <Check className="w-3 h-3" /> Valid
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 font-extrabold px-2.5 py-1 rounded-full border border-rose-100">
-                                      <X className="w-3 h-3" /> Error
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="p-3 font-mono font-bold text-slate-700">{p.sku}</td>
-                                <td className="p-3 font-extrabold text-slate-900 max-w-xs truncate" title={p.name}>{p.name}</td>
-                                <td className="p-3 font-semibold text-slate-600">{p.brand}</td>
-                                <td className="p-3 text-slate-500">{p.category}</td>
-                                <td className="p-3 text-right font-mono font-black text-slate-900">
-                                  ₹{(p.vendorPrice || 0).toLocaleString('en-IN')}
-                                </td>
-                                <td className="p-3">
-                                  {p.pricingTiers && p.pricingTiers.length > 0 ? (
-                                    <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md border border-indigo-100" title={p.pricingTiers.map((t: any) => `${t.minQty}+: ₹${t.price}`).join(', ')}>
-                                      {p.pricingTiers.length} tiers
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400">-</span>
-                                  )}
-                                </td>
-                                <td className="p-3">
-                                  {p.imageMetadata && p.imageMetadata.length > 0 ? (
-                                    <span className="bg-sky-50 text-sky-700 font-bold px-2 py-0.5 rounded-md border border-sky-100" title={p.imageMetadata.map((m: any) => m.alt).join(', ')}>
-                                      {p.imageMetadata.length} imgs
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400">-</span>
-                                  )}
-                                </td>
-                              </tr>
-                              {!p.isValid && p.errors && p.errors.length > 0 && (
-                                <tr className="bg-rose-50/10">
-                                  <td colSpan={9} className="p-3 pl-12 bg-rose-50/30 border-b border-rose-100">
-                                    <div className="flex flex-col gap-1">
-                                      {p.errors.map((err: string, errIdx: number) => (
-                                        <div key={errIdx} className="text-rose-600 font-bold flex items-center gap-1.5">
-                                          <AlertCircle className="w-3 h-3" />
-                                          <span>{err}</span>
+                // Compute SKU update count vs create count in preview
+                const vendorProds = dbLocal.getProducts().filter(p => p.vendorId === vendor.id);
+                const existingSkusSet = new Set(vendorProds.map(p => p.sku.toLowerCase()));
+                const skusToUpdateCount = importSyncMode === 'upsert'
+                  ? validRows.filter(p => existingSkusSet.has(p.sku.toLowerCase())).length
+                  : 0;
+                const newSkusCount = validRows.length - skusToUpdateCount;
+
+                const filteredPreview = importProducts.filter(p => {
+                  if (importFilterTab === 'valid' && !p.isValid) return false;
+                  if (importFilterTab === 'error' && p.isValid) return false;
+                  if (importSearchQuery.trim()) {
+                    const q = importSearchQuery.toLowerCase();
+                    return p.name.toLowerCase().includes(q) ||
+                           p.sku.toLowerCase().includes(q) ||
+                           p.brand.toLowerCase().includes(q) ||
+                           p.category.toLowerCase().includes(q);
+                  }
+                  return true;
+                });
+
+                return (
+                  <div className="space-y-4">
+
+                    {/* Impact Summary Pill Badges */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between">
+                        <span className="text-slate-500 font-semibold text-[11px]">Total Rows</span>
+                        <span className="font-mono font-black text-slate-900 text-xs">{importProducts.length}</span>
+                      </div>
+                      <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl flex items-center justify-between">
+                        <span className="text-emerald-700 font-semibold text-[11px]">Valid Rows</span>
+                        <span className="font-mono font-black text-emerald-900 text-xs">{validRows.length}</span>
+                      </div>
+                      <div className="bg-teal-50 border border-teal-200 p-3 rounded-xl flex items-center justify-between">
+                        <span className="text-teal-700 font-semibold text-[11px]">New Items to Create</span>
+                        <span className="font-mono font-black text-teal-900 text-xs">{newSkusCount}</span>
+                      </div>
+                      <div className="bg-indigo-50 border border-indigo-200 p-3 rounded-xl flex items-center justify-between">
+                        <span className="text-indigo-700 font-semibold text-[11px]">Existing SKUs to Update</span>
+                        <span className="font-mono font-black text-indigo-900 text-xs">{skusToUpdateCount}</span>
+                      </div>
+                    </div>
+
+                    {/* Preview Controls Header */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setImportFilterTab('all')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                            importFilterTab === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          All ({importProducts.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImportFilterTab('valid')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                            importFilterTab === 'valid' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Valid ({validRows.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImportFilterTab('error')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                            importFilterTab === 'error' ? 'bg-white text-rose-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Errors ({invalidRows.length})
+                        </button>
+                      </div>
+
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search preview rows..."
+                          value={importSearchQuery}
+                          onChange={(e) => setImportSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-teal-600"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Table */}
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+                      <div className="overflow-x-auto max-h-[32vh]">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-900 text-white font-bold border-b border-slate-100 text-[10px] uppercase tracking-wider">
+                              <th className="p-3 pl-4">Row</th>
+                              <th className="p-3">Status / Action</th>
+                              <th className="p-3">SKU</th>
+                              <th className="p-3">Product Name</th>
+                              <th className="p-3">Brand</th>
+                              <th className="p-3">Category</th>
+                              <th className="p-3 text-right">Vendor Price (₹)</th>
+                              <th className="p-3">Tiers</th>
+                              <th className="p-3">Images</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-[11px]">
+                            {filteredPreview.map((p, index) => {
+                              const isExistingSku = importSyncMode === 'upsert' && existingSkusSet.has(p.sku.toLowerCase());
+                              return (
+                                <React.Fragment key={index}>
+                                  <tr className={`hover:bg-slate-50/50 ${!p.isValid ? 'bg-rose-50/20' : ''}`}>
+                                    <td className="p-3 pl-4 font-mono font-bold text-slate-400">#{p.rowNumber}</td>
+                                    <td className="p-3">
+                                      {p.isValid ? (
+                                        isExistingSku ? (
+                                          <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 font-extrabold px-2.5 py-1 rounded-full border border-indigo-100" title="This SKU already exists and will be updated">
+                                            <RefreshCw className="w-3 h-3" /> Update SKU
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 font-extrabold px-2.5 py-1 rounded-full border border-emerald-100">
+                                            <Check className="w-3 h-3" /> New Item
+                                          </span>
+                                        )
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 font-extrabold px-2.5 py-1 rounded-full border border-rose-100">
+                                          <X className="w-3 h-3" /> Error
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="p-3 font-mono font-bold text-slate-700">{p.sku}</td>
+                                    <td className="p-3 font-extrabold text-slate-900 max-w-xs truncate" title={p.name}>{p.name}</td>
+                                    <td className="p-3 font-semibold text-slate-600">{p.brand}</td>
+                                    <td className="p-3 text-slate-500">{p.category}</td>
+                                    <td className="p-3 text-right font-mono font-black text-slate-900">
+                                      ₹{(p.vendorPrice || 0).toLocaleString('en-IN')}
+                                    </td>
+                                    <td className="p-3">
+                                      {p.pricingTiers && p.pricingTiers.length > 0 ? (
+                                        <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md border border-indigo-100" title={p.pricingTiers.map((t: any) => `${t.minQty}+: ₹${t.price}`).join(', ')}>
+                                          {p.pricingTiers.length} tiers
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-400">-</span>
+                                      )}
+                                    </td>
+                                    <td className="p-3">
+                                      {p.imageMetadata && p.imageMetadata.length > 0 ? (
+                                        <span className="bg-sky-50 text-sky-700 font-bold px-2 py-0.5 rounded-md border border-sky-100" title={p.imageMetadata.map((m: any) => m.alt).join(', ')}>
+                                          {p.imageMetadata.length} imgs
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-400">-</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                  {!p.isValid && p.errors && p.errors.length > 0 && (
+                                    <tr className="bg-rose-50/10">
+                                      <td colSpan={9} className="p-3 pl-12 bg-rose-50/30 border-b border-rose-100">
+                                        <div className="flex flex-col gap-1">
+                                          {p.errors.map((err: string, errIdx: number) => (
+                                            <div key={errIdx} className="text-rose-600 font-bold flex items-center gap-1.5">
+                                              <AlertCircle className="w-3 h-3" />
+                                              <span>{err}</span>
+                                            </div>
+                                          ))}
                                         </div>
-                                      ))}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </tbody>
-                      </table>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
             </div>
 
@@ -2125,7 +2325,7 @@ export default function VendorProductManager({
                   }`}
                 >
                   <Check className="w-4 h-4 stroke-[2.5]" />
-                  <span>Confirm and Import ({importProducts.filter(p => p.isValid).length} Products)</span>
+                  <span>Execute Synchronizer ({importProducts.filter(p => p.isValid).length} Products)</span>
                 </button>
               </div>
             </div>
