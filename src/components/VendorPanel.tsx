@@ -6,6 +6,7 @@ import VendorProductManager from './VendorProductManager';
 import VendorAnalytics from './VendorAnalytics';
 import { VendorVerificationWizard } from './VendorVerificationWizard';
 import { ProductImageManager } from './ProductImageManager';
+import VendorBulkUploadModule from './VendorBulkUploadModule';
 import {
   Store,
   Upload,
@@ -1819,6 +1820,21 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
 
       {/* Bulk Catalog Upload Tab */}
       {activeTab === 'bulk' && (
+        <div className="max-w-6xl mx-auto animate-fade-in">
+          <VendorBulkUploadModule
+            currentUser={currentUser}
+            vendor={vendorProfile}
+            addToast={addToast}
+            onSuccess={() => {
+              loadData();
+              setActiveTab('products');
+            }}
+            onOpenVerification={() => setIsVerificationWizardOpen(true)}
+          />
+        </div>
+      )}
+
+      {false && activeTab === 'bulk' && (
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-6xl mx-auto animate-fade-in space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-100">
             <div className="flex items-center gap-3">

@@ -650,3 +650,27 @@ export interface ProductImageUploadHistory {
   timestamp: string;
   note?: string;
 }
+
+export interface BulkImportLog {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  fileName: string;
+  fileType: 'csv' | 'xlsx' | 'zip';
+  totalRecords: number;
+  successfulRecords: number;
+  failedRecords: number;
+  skippedRecords: number;
+  updatedRecords: number;
+  duplicateHandling: 'Skip Existing' | 'Update Existing' | 'Create New Copy';
+  status: 'In Progress' | 'Completed' | 'Failed' | 'Completed with Errors';
+  errorReport?: {
+    rowNumber: number;
+    sku: string;
+    productName: string;
+    error: string;
+    suggestion: string;
+  }[];
+  createdAt: string;
+  completedAt?: string;
+}
