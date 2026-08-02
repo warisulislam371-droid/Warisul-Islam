@@ -1,4 +1,4 @@
-import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, PriceAlert, SocialMediaLinks, DealOfDay, BulkImportLog } from './types';
+import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, PriceAlert, SocialMediaLinks, DealOfDay } from './types';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_BLOGS, DEFAULT_SUPER_ADMIN, INITIAL_BRANDS } from './data';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from './utils/sliceQrSvg';
 import { 
@@ -268,8 +268,7 @@ const STORAGE_KEYS = {
   BRAND_REQUESTS: 'healnex_brand_requests',
   PRICE_ALERTS: 'healnex_price_alerts',
   SOCIAL_LINKS: 'healnex_social_links',
-  DEAL_OF_DAY: 'healnex_deal_of_day',
-  BULK_IMPORT_LOGS: 'healnex_bulk_import_logs'
+  DEAL_OF_DAY: 'healnex_deal_of_day'
 };
 
 export const DEFAULT_DEAL_OF_DAY: DealOfDay = {
@@ -1278,17 +1277,5 @@ export const dbLocal = {
     if (updated) {
       this.savePriceAlerts(alerts);
     }
-  },
-
-  // Bulk Product Import History Logs
-  getBulkImportLogs(): BulkImportLog[] {
-    const list = this.get(STORAGE_KEYS.BULK_IMPORT_LOGS, []);
-    return Array.isArray(list) ? list : [];
-  },
-  saveBulkImportLogs(logs: BulkImportLog[]) {
-    const old = this.getBulkImportLogs();
-    this.set(STORAGE_KEYS.BULK_IMPORT_LOGS, logs);
-    syncListToFirestoreWithDeletions('bulkImportLogs', logs, old);
-    window.dispatchEvent(new Event('healnex_db_update'));
   }
 };
