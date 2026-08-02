@@ -1051,7 +1051,10 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   // Calculations
   const totalRevenue = orders.reduce((sum, o) => sum + o.finalAmount, 0);
   const pendingVendorsCount = vendors.filter(v => v.status === 'Pending' || v.status === 'Pending Approval').length;
-  const pendingProductsCount = products.filter(p => p.status === 'Pending').length;
+  const pendingProductsCount = products.filter(p => {
+    const s = (p.status || '').toLowerCase();
+    return !p.status || s === 'pending' || s === 'pending approval' || s === 'pending audit' || s === 'pending_approval';
+  }).length;
   const activeRfqsCount = dbLocal.getRfqs().filter(r => r.status === 'Open').length;
   const openTicketsCount = tickets.filter(t => t.status !== 'Closed').length;
   const pendingPaymentsCount = orders.filter(o => o.status === 'Awaiting Payment Verification').length;
@@ -2992,7 +2995,10 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
         // Statistics computations
         const totalCount = products.length;
-        const pendingCount = products.filter(p => p.status?.toLowerCase() === 'pending').length;
+        const pendingCount = products.filter(p => {
+          const s = (p.status || '').toLowerCase();
+          return !p.status || s === 'pending' || s === 'pending approval' || s === 'pending audit' || s === 'pending_approval';
+        }).length;
         const approvedCount = products.filter(p => p.status?.toLowerCase() === 'approved').length;
         const publishedCount = products.filter(p => p.published === true).length;
         const rejectedCount = products.filter(p => p.status?.toLowerCase() === 'rejected').length;
@@ -3010,7 +3016,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
           if (productStatusFilter !== 'All') {
             const statLower = p.status?.toLowerCase() || '';
             if (productStatusFilter === 'Pending') {
-              matchesStatus = statLower === 'pending';
+              matchesStatus = !p.status || statLower === 'pending' || statLower === 'pending approval' || statLower === 'pending audit' || statLower === 'pending_approval';
             } else if (productStatusFilter === 'Approved') {
               matchesStatus = statLower === 'approved';
             } else if (productStatusFilter === 'Published') {
@@ -3066,6 +3072,43 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 </div>
               </div>
             </div>
+
+            {/* Pending Audit Alert Banner */}
+            {pendingCount > 0 && (
+              <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0">
+                    <Clock className="w-5 h-5 text-amber-800 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-amber-950 flex items-center gap-2">
+                      <span>{pendingCount} Bulk / Vendor Product(s) Pending Admin Approval</span>
+                      <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider">Awaiting QC Review</span>
+                    </h4>
+                    <p className="text-xs text-amber-800 font-medium mt-0.5">
+                      Vendors have uploaded new catalog items or imported bulk CSV products. These are currently hidden from customers until approved.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setProductStatusFilter('Pending')}
+                    className="bg-white hover:bg-amber-100 text-amber-900 font-bold text-xs px-3.5 py-2 rounded-xl border border-amber-300 transition cursor-pointer"
+                  >
+                    Filter Pending ({pendingCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApproveAllPendingProducts}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Approve All ({pendingCount})
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Quick KPI & Status Filters Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -3300,11 +3343,12 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                           year: 'numeric'
                         }) : 'Unknown Date';
 
-                        const isApproved = p.status?.toLowerCase() === 'approved';
-                        const isPending = p.status?.toLowerCase() === 'pending';
-                        const isRejected = p.status?.toLowerCase() === 'rejected';
-                        const isChangesRequested = p.status?.toLowerCase() === 'changesrequested' || p.status?.toLowerCase() === 'needs_changes';
-                        const isDraft = p.status?.toLowerCase() === 'draft';
+                        const statLower = (p.status || '').toLowerCase();
+                        const isApproved = statLower === 'approved';
+                        const isPending = !p.status || statLower === 'pending' || statLower === 'pending approval' || statLower === 'pending audit' || statLower === 'pending_approval';
+                        const isRejected = statLower === 'rejected';
+                        const isChangesRequested = statLower === 'changesrequested' || statLower === 'needs_changes';
+                        const isDraft = statLower === 'draft';
                         const isSelected = selectedProductIds.includes(p.id);
 
                         return (

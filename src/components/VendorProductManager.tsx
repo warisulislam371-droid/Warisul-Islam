@@ -212,7 +212,16 @@ export default function VendorProductManager({
 
   // Filtered products
   const filteredProducts = products.filter(p => {
-    if (activeTab !== 'All' && p.status !== activeTab) return false;
+    if (activeTab !== 'All') {
+      const statLower = (p.status || '').toLowerCase();
+      if (activeTab === 'Pending') {
+        if (statLower !== 'pending' && statLower !== 'pending approval' && statLower !== 'pending audit' && statLower !== 'pending_approval') {
+          return false;
+        }
+      } else if (p.status !== activeTab && statLower !== activeTab.toLowerCase()) {
+        return false;
+      }
+    }
     if (filterCategory && p.category !== filterCategory) return false;
     if (filterBrand && p.brand !== filterBrand) return false;
     if (searchQuery.trim()) {
@@ -226,6 +235,11 @@ export default function VendorProductManager({
       if (!match) return false;
     }
     return true;
+  });
+
+  const pendingProductsList = products.filter(p => {
+    const s = (p.status || '').toLowerCase();
+    return s === 'pending' || s === 'pending approval' || s === 'pending audit' || s === 'pending_approval';
   });
 
   const openAddModal = () => {
@@ -580,6 +594,7 @@ export default function VendorProductManager({
 
     showToast(`Successfully submitted ${selectedDraftProducts.length} draft product(s) for Admin approval!`);
     setSelectedProductIds([]);
+    setActiveTab('Pending');
     onRefresh();
   };
 
@@ -1181,6 +1196,7 @@ export default function VendorProductManager({
     showToast(summaryText);
     setImportProducts([]);
     setShowBulkImportModal(false);
+    setActiveTab('Pending');
     onRefresh();
   };
 
@@ -1346,6 +1362,33 @@ export default function VendorProductManager({
         </div>
       </div>
 
+      {/* Pending Products Audit Notice Banner */}
+      {pendingProductsList.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5 text-amber-800 animate-pulse" />
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-amber-950 flex items-center gap-2">
+                <span>Pending Approval Queue ({pendingProductsList.length} items)</span>
+                <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-bold">Awaiting Admin Quality Audit</span>
+              </h4>
+              <p className="text-xs text-amber-800 font-medium mt-0.5">
+                Bulk imported CSV products & submitted catalog items are under Admin review. They will automatically be published live to customers upon approval.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('Pending')}
+            className="bg-amber-800 hover:bg-amber-900 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition shadow-2xs cursor-pointer shrink-0"
+          >
+            View Pending Products ({pendingProductsList.length})
+          </button>
+        </div>
+      )}
+
       {/* Draft Products Banner & Batch Select Control */}
       {draftProducts.length > 0 && (
         <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
@@ -1418,7 +1461,12 @@ export default function VendorProductManager({
             {(['All', 'Approved', 'Pending', 'Draft', 'Rejected'] as const).map(tab => {
               const count = tab === 'All' 
                 ? products.length 
-                : products.filter(p => p.status === tab).length;
+                : tab === 'Pending'
+                  ? products.filter(p => {
+                      const s = (p.status || '').toLowerCase();
+                      return s === 'pending' || s === 'pending approval' || s === 'pending audit' || s === 'pending_approval';
+                    }).length
+                  : products.filter(p => p.status === tab).length;
               return (
                 <button
                   key={tab}

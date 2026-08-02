@@ -960,9 +960,11 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
         `Vendor ${vendorProfile.companyName} uploaded ${newProducts.length} new products in bulk for verification.`,
         'product_submitted'
       );
-      addToast(`Successfully submitted ${newProducts.length} bulk products for admin audit!`, 'success');
+      addToast(`Successfully submitted ${newProducts.length} bulk products for admin audit! Navigating to Products list.`, 'success');
+      setActiveTab('products');
     } else {
-      addToast(`Saved ${newProducts.length} products as Drafts!`, 'success');
+      addToast(`Saved ${newProducts.length} products as Drafts! Navigating to Products list.`, 'success');
+      setActiveTab('products');
     }
 
     setBulkStatus('');
