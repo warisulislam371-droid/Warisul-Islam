@@ -3,6 +3,7 @@ import { Category, Brand, CategoryRequest, BrandRequest } from '../types';
 import { dbLocal } from '../db';
 import { autoSortAndClassifyProducts, sortCategoriesTaxonomy } from '../utils/categorySorter';
 import { GeminiCategoryAuditModal } from './GeminiCategoryAuditModal';
+import { AICategoryManager } from './AICategoryManager';
 import {
   Tag,
   Plus,
@@ -33,7 +34,7 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
   const [brands, setBrands] = useState<Brand[]>([]);
   const [catRequests, setCatRequests] = useState<CategoryRequest[]>([]);
   const [brandRequests, setBrandRequests] = useState<BrandRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<'requests' | 'categories' | 'brands'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'categories' | 'brands' | 'ai_subcategories'>('requests');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // New Category / Brand direct creation states
@@ -314,6 +315,15 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
             }`}
           >
             All Brands ({brands.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('ai_subcategories')}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+              activeTab === 'ai_subcategories' ? 'bg-emerald-600 text-white shadow-sm' : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            AI Subcategories Engine
           </button>
         </div>
       </div>
@@ -804,6 +814,11 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tab 4: AI Subcategories Engine */}
+      {activeTab === 'ai_subcategories' && (
+        <AICategoryManager onRefresh={onRefresh} />
       )}
 
       {/* Modal: Edit Category */}

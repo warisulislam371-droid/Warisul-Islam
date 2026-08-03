@@ -94,6 +94,7 @@ export interface Product {
   brand: string;
   category: string;
   subcategory: string;
+  subcategoryId?: string;
   description: string;
   specifications: ProductSpecification[];
   price: number;
@@ -159,16 +160,56 @@ export interface Product {
   rating?: number;
 }
 
+export interface Subcategory {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  name: string;
+  slug: string;
+  description?: string;
+  keywords: string[];
+  synonyms: string[];
+  productCount: number;
+  createdByAi: boolean;
+  approved: boolean;
+  status: 'Active' | 'Pending Approval' | 'Rejected';
+  createdAt: string;
+  updatedAt?: string;
+  
+  // SEO Metadata
+  seoTitle?: string;
+  metaDescription?: string;
+  seoSlug?: string;
+  canonicalUrl?: string;
+  breadcrumb?: Array<{ name: string; url: string }>;
+  schemaJsonLd?: Record<string, any>;
+  openGraphTags?: { title?: string; description?: string; image?: string; url?: string };
+}
+
 export interface Category {
   id: string;
   name: string;
+  slug?: string;
   iconName?: string; // lucide icon name mapping
   icon?: string;
   subcategories?: string[];
+  subcategoryObjects?: Subcategory[];
   description?: string;
   image?: string;
+  parent_id?: string;
+  product_count?: number;
   isActive?: boolean;
   createdAt?: string;
+  updatedAt?: string;
+
+  // SEO Metadata
+  seoTitle?: string;
+  metaDescription?: string;
+  seoSlug?: string;
+  canonicalUrl?: string;
+  breadcrumb?: Array<{ name: string; url: string }>;
+  schemaJsonLd?: Record<string, any>;
+  openGraphTags?: { title?: string; description?: string; image?: string; url?: string };
 }
 
 export interface Brand {
