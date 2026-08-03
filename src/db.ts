@@ -659,7 +659,7 @@ const DEFAULT_CLEARANCE_REQUESTS: PaymentClearanceRequest[] = [
 export const dbLocal = {
   get<T>(key: string, defaultValue: T): T {
     try {
-      const data = localStorage.getItem(key) ?? memoryCache[key];
+      const data = memoryCache[key] ?? localStorage.getItem(key);
       return data ? JSON.parse(data) : defaultValue;
     } catch {
       const data = memoryCache[key];
@@ -811,7 +811,24 @@ export const dbLocal = {
   },
 
   // Products
-  getProducts(): Product[] { return this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS); },
+  getProducts(): Product[] {
+    const rawProducts = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
+    const list = Array.isArray(rawProducts) ? rawProducts : INITIAL_PRODUCTS;
+    const defaultFallbackImage = 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800';
+    return list.map(p => {
+      let cleanedImages: string[] = [];
+      if (Array.isArray(p.images) && p.images.length > 0) {
+        cleanedImages = p.images.filter((img): img is string => typeof img === 'string' && img.trim().length > 0);
+      }
+      if (cleanedImages.length === 0) {
+        cleanedImages = [defaultFallbackImage];
+      }
+      return {
+        ...p,
+        images: cleanedImages
+      };
+    });
+  },
   saveProducts(products: Product[]) {
     const old = this.getProducts();
     this.set(STORAGE_KEYS.PRODUCTS, products);
