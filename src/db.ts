@@ -1,6 +1,7 @@
 import { User, Vendor, Product, Order, RFQ, Quotation, SupportTicket, Blog, Notification, Review, WhatsAppSettings, WhatsAppClickLog, Category, Brand, CategoryRequest, BrandRequest, PriceAlert, SocialMediaLinks, DealOfDay } from './types';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_BLOGS, DEFAULT_SUPER_ADMIN, INITIAL_BRANDS } from './data';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from './utils/sliceQrSvg';
+import { categorizeProductLocally } from './utils/medicalCategorizer';
 import { 
   collection, 
   doc, 
@@ -699,8 +700,9 @@ export const dbLocal = {
     if (!localStorage.getItem(STORAGE_KEYS.BRAND_REQUESTS)) this.set(STORAGE_KEYS.BRAND_REQUESTS, []);
     if (!localStorage.getItem(STORAGE_KEYS.SOCIAL_LINKS)) this.set(STORAGE_KEYS.SOCIAL_LINKS, [DEFAULT_SOCIAL_LINKS]);
     
-    // Auto-approve all pending audit products
+    // Auto-approve all pending audit products and auto-audit categories/subcategories
     this.approveAllPendingProducts();
+    this.autoAuditAndRepairCategories();
 
     // Do not auto-login by default to allow showing login screen on startup
     this.set(STORAGE_KEYS.CURRENT_USER, null);
@@ -1334,6 +1336,117 @@ export const dbLocal = {
       mergedCount,
       duplicateNames,
       totalUniqueRemaining: mergedList.length
+    };
+  },
+  autoAuditAndRepairCategories(): {
+    mergedDuplicates: number;
+    fixedProductsCount: number;
+    subcategoriesAdded: number;
+    totalCategories: number;
+    details: string[];
+  } {
+    // 1. First merge any duplicate categories in storage
+    const mergeRes = this.mergeDuplicateCategories();
+
+    // 2. Fetch active categories & products
+    const categories = this.getCategories();
+    const rawProducts = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
+    const products = Array.isArray(rawProducts) ? rawProducts : INITIAL_PRODUCTS;
+
+    const categoryNameMap = new Map<string, Category>();
+    categories.forEach(c => {
+      if (c && c.name) categoryNameMap.set(c.name.trim().toLowerCase(), c);
+    });
+
+    let fixedProductsCount = 0;
+    let subcategoriesAdded = 0;
+    const details: string[] = [];
+
+    // 3. Audit all products using medical taxonomy categorizer engine
+    const updatedProducts = products.map(p => {
+      if (!p || !p.name) return p;
+
+      const localCat = categorizeProductLocally({
+        name: p.name,
+        brand: p.brand,
+        description: p.description,
+        specifications: p.specifications,
+        sku: p.sku
+      });
+
+      const currentCat = (p.category || '').trim();
+      const currentSub = (p.subcategory || '').trim();
+      const recCat = localCat.mainCategory;
+      const recSub = localCat.subcategory;
+
+      let needsFix = false;
+      let newCat = currentCat;
+      let newSub = currentSub;
+
+      if (!currentCat || currentCat === 'Uncategorized' || currentCat === 'General') {
+        newCat = recCat;
+        newSub = recSub || currentSub;
+        needsFix = true;
+        details.push(`Auto-categorized "${p.name}" -> "${newCat}" (${newSub})`);
+      } else if (!categoryNameMap.has(currentCat.toLowerCase())) {
+        newCat = recCat;
+        newSub = recSub || currentSub;
+        needsFix = true;
+        details.push(`Reassigned non-existent category for "${p.name}" -> "${newCat}"`);
+      } else if (!currentSub && recSub) {
+        newSub = recSub;
+        needsFix = true;
+        details.push(`Auto-assigned missing subcategory "${newSub}" to "${p.name}"`);
+      }
+
+      if (needsFix) {
+        fixedProductsCount++;
+        return {
+          ...p,
+          category: newCat,
+          subcategory: newSub
+        };
+      }
+      return p;
+    });
+
+    if (fixedProductsCount > 0) {
+      this.saveProducts(updatedProducts);
+    }
+
+    // 4. Ensure all subcategories present on active products exist in parent Category subcategory list
+    const currentProds = (this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[]) || [];
+    const updatedCategories = categories.map(cat => {
+      const catLower = (cat.name || '').trim().toLowerCase();
+      const subSet = new Set((cat.subcategories || []).map(s => (s || '').trim()).filter(Boolean));
+
+      currentProds.forEach(p => {
+        if (p && (p.category || '').trim().toLowerCase() === catLower && p.subcategory && p.subcategory.trim()) {
+          const subTrim = p.subcategory.trim();
+          if (!subSet.has(subTrim) && subTrim.toLowerCase() !== 'general' && subTrim.toLowerCase() !== 'other') {
+            subSet.add(subTrim);
+            subcategoriesAdded++;
+            details.push(`Added missing subcategory "${subTrim}" to Category "${cat.name}"`);
+          }
+        }
+      });
+
+      return {
+        ...cat,
+        subcategories: Array.from(subSet)
+      };
+    });
+
+    if (subcategoriesAdded > 0 || mergeRes.mergedCount > 0) {
+      this.saveCategories(updatedCategories);
+    }
+
+    return {
+      mergedDuplicates: mergeRes.mergedCount,
+      fixedProductsCount,
+      subcategoriesAdded,
+      totalCategories: updatedCategories.length,
+      details
     };
   },
   removeCategory(categoryNameOrId: string) {

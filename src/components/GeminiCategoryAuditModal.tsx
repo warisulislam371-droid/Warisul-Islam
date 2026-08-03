@@ -122,12 +122,12 @@ export const GeminiCategoryAuditModal: React.FC<GeminiCategoryAuditModalProps> =
   };
 
   const handleMergeCategories = () => {
-    const res = dbLocal.mergeDuplicateCategories();
-    if (res.mergedCount > 0) {
-      showToast(`Successfully merged ${res.mergedCount} duplicate category entries! Total unique categories remaining: ${res.totalUniqueRemaining}.`);
-    } else {
-      showToast(`All ${res.totalUniqueRemaining} categories are clean & unique. No duplicate categories found.`);
-    }
+    const res = dbLocal.autoAuditAndRepairCategories();
+    let msg = `Category Audit Complete: ${res.totalCategories} active clean categories.`;
+    if (res.mergedDuplicates > 0) msg += ` Merged ${res.mergedDuplicates} duplicate entries.`;
+    if (res.fixedProductsCount > 0) msg += ` Re-assigned ${res.fixedProductsCount} products.`;
+    if (res.subcategoriesAdded > 0) msg += ` Synced ${res.subcategoriesAdded} subcategories.`;
+    showToast(msg);
     runCategoryAudit();
     if (onAuditCompleted) onAuditCompleted();
   };

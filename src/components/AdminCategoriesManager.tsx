@@ -183,12 +183,12 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
   };
 
   const handleMergeDuplicates = () => {
-    const res = dbLocal.mergeDuplicateCategories();
-    if (res.mergedCount > 0) {
-      showToast(`Successfully merged ${res.mergedCount} duplicate category entries! Total unique categories remaining: ${res.totalUniqueRemaining}.`);
-    } else {
-      showToast(`All ${res.totalUniqueRemaining} categories are clean and unique. No duplicate categories found!`);
-    }
+    const res = dbLocal.autoAuditAndRepairCategories();
+    let msg = `Category Audit Complete: ${res.totalCategories} active clean categories.`;
+    if (res.mergedDuplicates > 0) msg += ` Merged ${res.mergedDuplicates} duplicates.`;
+    if (res.fixedProductsCount > 0) msg += ` Auto-categorized ${res.fixedProductsCount} products.`;
+    if (res.subcategoriesAdded > 0) msg += ` Synced ${res.subcategoriesAdded} subcategories.`;
+    showToast(msg);
     loadData();
     if (onRefresh) onRefresh();
   };
