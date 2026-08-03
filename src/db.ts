@@ -1171,16 +1171,170 @@ export const dbLocal = {
     const removed: string[] = this.get('healnex_removed_categories', []);
     const removedSet = new Set(removed.map(s => s.toLowerCase()));
     
+    let baseCategories: Category[] = [];
     if (Array.isArray(list) && list.length > 0) {
-      return list.filter(c => c.isActive !== false && !removedSet.has((c.name || '').toLowerCase()) && !removedSet.has((c.id || '').toLowerCase()));
+      baseCategories = list.filter(c => c && c.isActive !== false && !removedSet.has((c.name || '').toLowerCase()) && !removedSet.has((c.id || '').toLowerCase()));
+    } else {
+      baseCategories = INITIAL_CATEGORIES.filter(c => c && !removedSet.has((c.name || '').toLowerCase()) && !removedSet.has((c.id || '').toLowerCase()));
     }
-    return INITIAL_CATEGORIES.filter(c => !removedSet.has((c.name || '').toLowerCase()) && !removedSet.has((c.id || '').toLowerCase()));
+
+    // On-the-fly deduplication by normalized category name
+    const categoryMap = new Map<string, Category>();
+    for (const cat of baseCategories) {
+      if (!cat || !cat.name || !cat.name.trim()) continue;
+      const key = cat.name.trim().toLowerCase();
+      if (!categoryMap.has(key)) {
+        categoryMap.set(key, { ...cat, subcategories: Array.isArray(cat.subcategories) ? [...cat.subcategories] : [] });
+      } else {
+        const existing = categoryMap.get(key)!;
+        const mergedSubs = Array.from(new Set([
+          ...(existing.subcategories || []),
+          ...(cat.subcategories || [])
+        ].map(s => (s || '').trim()).filter(Boolean)));
+
+        categoryMap.set(key, {
+          ...existing,
+          subcategories: mergedSubs,
+          description: existing.description || cat.description,
+          iconName: existing.iconName || cat.iconName,
+          image: existing.image || cat.image,
+          icon: existing.icon || cat.icon
+        });
+      }
+    }
+    baseCategories = Array.from(categoryMap.values());
+
+    // Auto calculate product counts dynamically
+    try {
+      const rawProducts = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
+      const products = Array.isArray(rawProducts) ? rawProducts : INITIAL_PRODUCTS;
+
+      return baseCategories.map(cat => {
+        const catKey = (cat.name || '').trim().toLowerCase();
+        const subSet = new Set((cat.subcategories || []).map(s => s.trim().toLowerCase()));
+
+        const count = products.filter(p => {
+          const pCat = (p.category || '').trim().toLowerCase();
+          const pSub = (p.subcategory || '').trim().toLowerCase();
+          if (pCat === catKey || pSub === catKey) return true;
+          if (subSet.has(pSub) || subSet.has(pCat)) return true;
+          if (pCat && (pCat.includes(catKey) || catKey.includes(pCat))) return true;
+          return false;
+        }).length;
+
+        return {
+          ...cat,
+          product_count: count
+        };
+      });
+    } catch {
+      return baseCategories;
+    }
   },
   saveCategories(categories: Category[]) {
     const old = this.getCategories();
     this.set(STORAGE_KEYS.CATEGORIES, categories);
     syncListToFirestoreWithDeletions('categories', categories, old);
     window.dispatchEvent(new Event('healnex_db_update'));
+  },
+  mergeDuplicateCategories(): { mergedCount: number; duplicateNames: string[]; totalUniqueRemaining: number } {
+    const rawList = this.get(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES) as Category[];
+    const removed: string[] = this.get('healnex_removed_categories', []);
+    const removedSet = new Set(removed.map(s => s.toLowerCase()));
+
+    const activeList = (Array.isArray(rawList) ? rawList : INITIAL_CATEGORIES).filter(
+      c => c && c.name && c.isActive !== false && !removedSet.has(c.name.trim().toLowerCase()) && !removedSet.has((c.id || '').toLowerCase())
+    );
+
+    const nameGroups = new Map<string, Category[]>();
+    for (const cat of activeList) {
+      const key = cat.name.trim().toLowerCase();
+      if (!nameGroups.has(key)) {
+        nameGroups.set(key, []);
+      }
+      nameGroups.get(key)!.push(cat);
+    }
+
+    let mergedCount = 0;
+    const duplicateNames: string[] = [];
+    const mergedList: Category[] = [];
+
+    for (const [key, group] of nameGroups.entries()) {
+      if (group.length === 1) {
+        mergedList.push(group[0]);
+      } else {
+        mergedCount += (group.length - 1);
+        const displayName = group[0].name.trim();
+        duplicateNames.push(displayName);
+
+        const canonicalId = group[0].id || `cat-${key.replace(/[^a-z0-9]/g, '-')}`;
+        const mergedSubSet = new Set<string>();
+        let bestDescription = '';
+        let bestIconName = '';
+        let bestIcon = '';
+        let bestImage = '';
+
+        for (const cat of group) {
+          if (Array.isArray(cat.subcategories)) {
+            cat.subcategories.forEach(s => {
+              if (s && s.trim()) mergedSubSet.add(s.trim());
+            });
+          }
+          if (!bestDescription && cat.description) bestDescription = cat.description;
+          if (!bestIconName && cat.iconName) bestIconName = cat.iconName;
+          if (!bestIcon && cat.icon) bestIcon = cat.icon;
+          if (!bestImage && cat.image) bestImage = cat.image;
+        }
+
+        const canonicalCat: Category = {
+          ...group[0],
+          id: canonicalId,
+          name: displayName,
+          subcategories: Array.from(mergedSubSet),
+          description: bestDescription || group[0].description,
+          iconName: bestIconName || group[0].iconName,
+          icon: bestIcon || group[0].icon,
+          image: bestImage || group[0].image,
+          isActive: true
+        };
+
+        mergedList.push(canonicalCat);
+
+        // Update products referencing merged duplicate category names
+        try {
+          const rawProds = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
+          if (Array.isArray(rawProds) && rawProds.length > 0) {
+            const groupNames = new Set(group.map(g => (g.name || '').trim().toLowerCase()));
+
+            let prodsUpdated = false;
+            const updatedProds = rawProds.map(p => {
+              const pCatLower = (p.category || '').trim().toLowerCase();
+              if (groupNames.has(pCatLower)) {
+                prodsUpdated = true;
+                return {
+                  ...p,
+                  category: displayName
+                };
+              }
+              return p;
+            });
+
+            if (prodsUpdated) {
+              this.saveProducts(updatedProds);
+            }
+          }
+        } catch (e) {
+          console.warn('Error updating products during category merge:', e);
+        }
+      }
+    }
+
+    this.saveCategories(mergedList);
+    return {
+      mergedCount,
+      duplicateNames,
+      totalUniqueRemaining: mergedList.length
+    };
   },
   removeCategory(categoryNameOrId: string) {
     if (!categoryNameOrId) return;

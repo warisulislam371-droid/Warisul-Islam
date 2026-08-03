@@ -119,6 +119,18 @@ export const AICategoryManager: React.FC<{ onRefresh?: () => void }> = ({ onRefr
     }
   };
 
+  // Merge Category Duplicates
+  const handleMergeCategoryDuplicates = () => {
+    const res = dbLocal.mergeDuplicateCategories();
+    if (res.mergedCount > 0) {
+      showToast(`Successfully merged ${res.mergedCount} duplicate category entries! Total clean unique categories: ${res.totalUniqueRemaining}.`);
+    } else {
+      showToast(`All ${res.totalUniqueRemaining} categories are clean and unique. No duplicate categories found!`);
+    }
+    loadData();
+    if (onRefresh) onRefresh();
+  };
+
   // Approve Subcategory
   const handleApproveSub = (subId: string) => {
     const subs = getAllSubcategories();
@@ -308,6 +320,14 @@ export const AICategoryManager: React.FC<{ onRefresh?: () => void }> = ({ onRefr
         </div>
 
         <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <button
+            onClick={handleMergeCategoryDuplicates}
+            className="px-3.5 py-2.5 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-100 font-bold text-xs rounded-xl border border-emerald-700/60 flex items-center gap-1.5 transition cursor-pointer"
+            title="Automatically detect and merge categories sharing the same name"
+          >
+            <Combine className="w-4 h-4 text-emerald-300" />
+            Merge Duplicate Categories
+          </button>
           <button
             onClick={handleRecalculateCounts}
             className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"

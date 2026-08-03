@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Product, Category, Brand, Review, Vendor, DealOfDay, PromoBanner } from '../types';
 import { dbLocal } from '../db';
 import {
@@ -251,12 +251,39 @@ export default function EnterpriseHomepage({
     { name: "Spare Parts & Accessories", icon: "⚙️" }
   ];
 
+  const getCategoryCount = useCallback((catName: string, subcategories?: string[]) => {
+    if (!catName || !products) return 0;
+    const catLower = catName.trim().toLowerCase();
+    const subSet = new Set((subcategories || []).map(s => s.trim().toLowerCase()));
+
+    return products.filter(p => {
+      const pCat = (p.category || '').trim().toLowerCase();
+      const pSub = (p.subcategory || '').trim().toLowerCase();
+
+      if (pCat === catLower || pSub === catLower) return true;
+      if (subSet.has(pSub) || subSet.has(pCat)) return true;
+      if (pCat && (pCat.includes(catLower) || catLower.includes(pCat))) return true;
+      if (pSub && (pSub.includes(catLower) || catLower.includes(pSub))) return true;
+
+      return false;
+    }).length;
+  }, [products]);
+
   const sidebarCategories = useMemo(() => {
-    return rawSidebarCategories.filter(sc => !removedCategories.has(sc.name.trim().toLowerCase()));
-  }, [removedCategories]);
+    return rawSidebarCategories
+      .filter(sc => !removedCategories.has(sc.name.trim().toLowerCase()))
+      .map(sc => {
+        const catObj = categories?.find(c => c.name.trim().toLowerCase() === sc.name.trim().toLowerCase());
+        const count = getCategoryCount(sc.name, catObj?.subcategories);
+        return {
+          ...sc,
+          count
+        };
+      });
+  }, [removedCategories, rawSidebarCategories, categories, getCategoryCount]);
 
   const allCategoryCards = useMemo(() => {
-    const list: { name: string; displayName: string; count: string; image: string; icon: string }[] = [];
+    const list: { name: string; displayName: string; count: string; rawCount: number; image: string; icon: string }[] = [];
     const seen = new Set<string>();
 
     const defaultPresetMap: Record<string, { image: string; icon: string }> = {
@@ -279,16 +306,14 @@ export default function EnterpriseHomepage({
         if (seen.has(key) || removedCategories.has(key)) return;
         seen.add(key);
 
-        const count = products.filter(p =>
-          (p.category || '').trim().toLowerCase() === key ||
-          (p.subcategory || '').trim().toLowerCase() === key
-        ).length;
+        const count = getCategoryCount(cat.name, cat.subcategories);
 
         const preset = defaultPresetMap[key];
         list.push({
           name: cat.name.trim(),
           displayName: cat.name.trim(),
-          count: `${count} Products`,
+          count: `${count} ${count === 1 ? 'Product' : 'Products'}`,
+          rawCount: count,
           image: cat.image || preset?.image || 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=400',
           icon: cat.icon || preset?.icon || '🩺'
         });
@@ -300,12 +325,13 @@ export default function EnterpriseHomepage({
       const key = p.category.trim().toLowerCase();
       if (!seen.has(key) && !removedCategories.has(key)) {
         seen.add(key);
-        const count = products.filter(item => item.category.trim().toLowerCase() === key).length;
+        const count = getCategoryCount(p.category);
         const preset = defaultPresetMap[key];
         list.push({
           name: p.category.trim(),
           displayName: p.category.trim(),
-          count: `${count} Products`,
+          count: `${count} ${count === 1 ? 'Product' : 'Products'}`,
+          rawCount: count,
           image: preset?.image || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400',
           icon: preset?.icon || '🔬'
         });
@@ -317,15 +343,14 @@ export default function EnterpriseHomepage({
       const key = sc.name.trim().toLowerCase();
       if (!seen.has(key) && !removedCategories.has(key)) {
         seen.add(key);
-        const count = products.filter(p =>
-          (p.category || '').trim().toLowerCase() === key ||
-          (p.subcategory || '').trim().toLowerCase() === key
-        ).length;
+        const catObj = categories?.find(c => c.name.trim().toLowerCase() === key);
+        const count = getCategoryCount(sc.name, catObj?.subcategories);
         const preset = defaultPresetMap[key];
         list.push({
           name: sc.name.trim(),
           displayName: sc.name.trim(),
-          count: `${count} Products`,
+          count: `${count} ${count === 1 ? 'Product' : 'Products'}`,
+          rawCount: count,
           image: preset?.image || 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=400',
           icon: sc.icon || '🩺'
         });
@@ -333,7 +358,7 @@ export default function EnterpriseHomepage({
     });
 
     return list;
-  }, [categories, products, removedCategories]);
+  }, [categories, products, removedCategories, getCategoryCount]);
 
   // Static Category Sliders for all core medical domains
   const staticCategorySections = useMemo(() => {
@@ -657,15 +682,24 @@ export default function EnterpriseHomepage({
               <li key={cat.name}>
                 <button
                   onClick={() => handleCategoryClick(cat.name)}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between hover:bg-[#F5F7FA] ${
+                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between hover:bg-[#F5F7FA] group ${
                     selectedCategoryName === cat.name ? 'bg-[#0F9D8A]/10 text-[#0F9D8A] font-bold' : 'text-slate-700'
                   }`}
                 >
-                  <span className="flex items-center gap-2">
-                    <span>{cat.icon}</span>
-                    <span className="truncate max-w-[150px]">{cat.name}</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="shrink-0">{cat.icon}</span>
+                    <span className="truncate">{cat.name}</span>
                   </span>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition ${
+                      selectedCategoryName === cat.name
+                        ? 'bg-[#0F9D8A] text-white'
+                        : 'bg-slate-100 group-hover:bg-[#0F9D8A]/20 group-hover:text-[#0F9D8A] text-slate-500'
+                    }`}>
+                      {cat.count}
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0F9D8A]" />
+                  </div>
                 </button>
               </li>
             ))}
@@ -966,7 +1000,9 @@ export default function EnterpriseHomepage({
               <h4 className="text-xs font-bold text-[#1F2937] group-hover:text-[#0F9D8A] transition leading-tight">
                 {cat.displayName}
               </h4>
-              <p className="text-[10px] text-slate-400 font-medium mt-1">{cat.count}</p>
+              <span className="text-[10px] bg-slate-100 group-hover:bg-[#0F9D8A]/10 text-slate-600 group-hover:text-[#0F9D8A] font-black px-2.5 py-0.5 rounded-full mt-1.5 transition border border-slate-200/60 shadow-2xs">
+                {cat.count}
+              </span>
             </div>
           ))}
         </div>

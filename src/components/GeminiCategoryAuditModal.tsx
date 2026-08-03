@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, CheckCircle2, AlertTriangle, RefreshCw, X, ShieldCheck, Tag, ArrowRight, Wand2, Layers, FileCheck, Check, AlertCircle, FileSpreadsheet } from 'lucide-react';
+import { Sparkles, CheckCircle2, AlertTriangle, RefreshCw, X, ShieldCheck, Tag, ArrowRight, Wand2, Layers, FileCheck, Check, AlertCircle, FileSpreadsheet, Combine } from 'lucide-react';
 import { dbLocal } from '../db';
 import { CatalogCategoryAuditReport, ProductCategoryAuditResult } from '../utils/medicalCategorizer';
 
@@ -119,6 +119,17 @@ export const GeminiCategoryAuditModal: React.FC<GeminiCategoryAuditModalProps> =
     } finally {
       setIsApplyingAll(false);
     }
+  };
+
+  const handleMergeCategories = () => {
+    const res = dbLocal.mergeDuplicateCategories();
+    if (res.mergedCount > 0) {
+      showToast(`Successfully merged ${res.mergedCount} duplicate category entries! Total unique categories remaining: ${res.totalUniqueRemaining}.`);
+    } else {
+      showToast(`All ${res.totalUniqueRemaining} categories are clean & unique. No duplicate categories found.`);
+    }
+    runCategoryAudit();
+    if (onAuditCompleted) onAuditCompleted();
   };
 
   if (!isOpen) return null;
@@ -244,16 +255,26 @@ export const GeminiCategoryAuditModal: React.FC<GeminiCategoryAuditModalProps> =
                     {auditReport.summaryInsight}
                   </p>
                 </div>
-                {pendingIssuesCount > 0 && (
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
                   <button
-                    onClick={handleApplyAllFixes}
-                    disabled={isApplyingAll}
-                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold rounded-xl shadow transition flex items-center gap-1.5 shrink-0"
+                    onClick={handleMergeCategories}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl shadow transition flex items-center gap-1.5 shrink-0"
+                    title="Merge duplicate categories with identical names across database"
                   >
-                    <Wand2 className={`w-4 h-4 ${isApplyingAll ? 'animate-spin' : ''}`} />
-                    <span>Auto-Apply All AI Fixes ({pendingIssuesCount})</span>
+                    <Combine className="w-4 h-4 text-emerald-100" />
+                    <span>Merge Category Duplicates</span>
                   </button>
-                )}
+                  {pendingIssuesCount > 0 && (
+                    <button
+                      onClick={handleApplyAllFixes}
+                      disabled={isApplyingAll}
+                      className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold rounded-xl shadow transition flex items-center gap-1.5 shrink-0"
+                    >
+                      <Wand2 className={`w-4 h-4 ${isApplyingAll ? 'animate-spin' : ''}`} />
+                      <span>Auto-Apply All AI Fixes ({pendingIssuesCount})</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Interactive Filter Pills */}

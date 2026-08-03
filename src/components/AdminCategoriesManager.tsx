@@ -182,6 +182,17 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
     loadData();
   };
 
+  const handleMergeDuplicates = () => {
+    const res = dbLocal.mergeDuplicateCategories();
+    if (res.mergedCount > 0) {
+      showToast(`Successfully merged ${res.mergedCount} duplicate category entries! Total unique categories remaining: ${res.totalUniqueRemaining}.`);
+    } else {
+      showToast(`All ${res.totalUniqueRemaining} categories are clean and unique. No duplicate categories found!`);
+    }
+    loadData();
+    if (onRefresh) onRefresh();
+  };
+
   // Direct Create Brand
   const handleCreateBrand = (e: React.FormEvent) => {
     e.preventDefault();
@@ -575,7 +586,17 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
 
           {/* Categories List */}
           <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-100 pb-3">Active Categories ({categories.length})</h3>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 gap-2 flex-wrap">
+              <h3 className="text-sm font-extrabold text-slate-900">Active Categories ({categories.length})</h3>
+              <button
+                onClick={handleMergeDuplicates}
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 border border-emerald-200/80 shadow-2xs"
+                title="Find and merge duplicate categories with identical names"
+              >
+                <Wand2 className="w-3.5 h-3.5 text-emerald-600" />
+                Merge Duplicate Categories
+              </button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
               {categories.map(c => (
                 <div key={c.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between gap-3">
