@@ -318,24 +318,45 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
     setVendorProfile(profile);
 
     const targetVendorId = profile ? profile.id : currentUser.id;
+    const compName = (profile?.companyName || currentUser.companyName || currentUser.name || '').trim().toLowerCase();
 
-    const prods = dbLocal.getProducts().filter(p => p.vendorId === currentUser.id || p.vendorId === targetVendorId);
+    const prods = dbLocal.getProducts().filter(p => {
+      if (p.vendorId === currentUser.id || p.vendorId === targetVendorId) return true;
+      if (compName && p.vendorName && p.vendorName.trim().toLowerCase() === compName) return true;
+      return false;
+    });
     setProducts(prods);
 
-    const ords = dbLocal.getOrders().filter(o => 
-      (o.vendorId === currentUser.id || o.vendorId === targetVendorId) && 
-      !['Pending Payment', 'Payment Submitted', 'Awaiting Payment Verification'].includes(o.status)
-    );
+    const ords = dbLocal.getOrders().filter(o => {
+      const matchVendorId = o.vendorId === currentUser.id || o.vendorId === targetVendorId;
+      const matchVendorName = Boolean(compName && o.vendorName && o.vendorName.trim().toLowerCase() === compName);
+      const matchItems = Boolean(o.items && o.items.some(item => 
+        item.vendorId === currentUser.id || 
+        item.vendorId === targetVendorId || 
+        (compName && item.vendorName && item.vendorName.trim().toLowerCase() === compName)
+      ));
+      const isVendorMatch = matchVendorId || matchVendorName || matchItems;
+      const isVisibleStatus = !['Pending Payment', 'Payment Submitted', 'Awaiting Payment Verification'].includes(o.status);
+      return isVendorMatch && isVisibleStatus;
+    });
     setOrders(ords);
 
     // RFQs are public if approved or already quoted
-    const openRfqs = dbLocal.getRfqs().filter(r => r.status === 'OPEN_TO_VENDORS' || r.status === 'QUOTED');
+    const openRfqs = dbLocal.getRfqs().filter(r => ['OPEN_TO_VENDORS', 'QUOTED', 'Open', 'IN_PROGRESS', 'APPROVED_BY_ADMIN'].includes(r.status));
     setRfqs(openRfqs);
 
-    const quotes = dbLocal.getQuotations().filter(q => q.vendorId === currentUser.id || q.vendorId === targetVendorId);
+    const quotes = dbLocal.getQuotations().filter(q => 
+      q.vendorId === currentUser.id || 
+      q.vendorId === targetVendorId ||
+      Boolean(compName && q.companyName && q.companyName.trim().toLowerCase() === compName)
+    );
     setQuotations(quotes);
 
-    const clrs = dbLocal.getClearanceRequests().filter(c => c.vendorId === currentUser.id || c.vendorId === targetVendorId);
+    const clrs = dbLocal.getClearanceRequests().filter(c => 
+      c.vendorId === currentUser.id || 
+      c.vendorId === targetVendorId ||
+      Boolean(compName && c.vendorName && c.vendorName.trim().toLowerCase() === compName)
+    );
     setClearanceRequests(clrs);
   };
 
@@ -488,7 +509,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
 
     const finalProduct: Product = {
       id: editingProductId || `prod-${Date.now()}`,
-      vendorId: currentUser.id,
+      vendorId: vendorProfile?.id || currentUser.id,
       vendorName: vendorProfile.companyName,
       name: editorData.name || 'Unnamed Product',
       sku: editorData.sku || `SKU-${Date.now().toString().slice(-6)}`,

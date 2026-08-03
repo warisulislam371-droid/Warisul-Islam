@@ -835,6 +835,27 @@ export default function CustomerPanel({
         );
       });
 
+      // Decrement product inventory stock
+      const allProducts = dbLocal.getProducts();
+      let inventoryChanged = false;
+      const updatedProducts = allProducts.map(p => {
+        const boughtItem = cart.find(item => item.product.id === p.id);
+        if (boughtItem && boughtItem.quantity > 0) {
+          inventoryChanged = true;
+          const currentQty = p.stockQuantity !== undefined ? p.stockQuantity : 10;
+          const newQty = Math.max(0, currentQty - boughtItem.quantity);
+          return {
+            ...p,
+            stockQuantity: newQty,
+            outOfStock: newQty <= 0
+          };
+        }
+        return p;
+      });
+      if (inventoryChanged) {
+        dbLocal.saveProducts(updatedProducts);
+      }
+
       const currentOrders = dbLocal.getOrders();
       dbLocal.saveOrders([...createdOrdersList, ...currentOrders]);
 
