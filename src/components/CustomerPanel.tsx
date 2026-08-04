@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { dbLocal } from '../db';
 import { uploadOrderDocumentToR2 } from '../utils/r2Storage';
 import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderItem, PaymentSettings, PromoBanner, Vendor, PriceAlert } from '../types';
+import { isCategoryMatch } from '../utils/categoryMatcher';
 import PriceAlertModal from './PriceAlertModal';
 import EnterpriseHomepage from './EnterpriseHomepage';
 import {
@@ -438,12 +439,7 @@ export default function CustomerPanel({
 
     // 1. Filter out non-matching products
     const matched = products.filter(p => {
-      const matchesCategory = (selectedCategoryName && selectedCategoryName.trim().toLowerCase() !== 'all')
-        ? (
-            (p.category || '').trim().toLowerCase() === selectedCategoryName.trim().toLowerCase() ||
-            (Boolean(p.subcategory) && (p.subcategory || '').trim().toLowerCase() === selectedCategoryName.trim().toLowerCase())
-          )
-        : true;
+      const matchesCategory = isCategoryMatch(p, selectedCategoryName, categories);
 
       const matchesBrand = filterBrand ? p.brand.toLowerCase() === filterBrand.toLowerCase() || p.brand.toLowerCase().includes(filterBrand.toLowerCase()) : true;
       const matchesPrice = p.salePrice <= filterPriceRange;
@@ -572,7 +568,7 @@ export default function CustomerPanel({
     }
 
     return sorted;
-  }, [products, searchQuery, selectedCategoryName, filterBrand, filterPriceRange, filterMoq, aiSearchResults, filterTrustSealOnly, vendors, filterMinRating, filterInStockOnly, filterCountry, sortBy]);
+  }, [products, categories, searchQuery, selectedCategoryName, filterBrand, filterPriceRange, filterMoq, aiSearchResults, filterTrustSealOnly, vendors, filterMinRating, filterInStockOnly, filterCountry, sortBy]);
 
   const handleToggleWishlist = (id: string) => {
     let updated: string[];
