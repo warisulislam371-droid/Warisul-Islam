@@ -44,6 +44,7 @@ interface NavbarProps {
   wishlistCount: number;
   compareCount: number;
   searchQuery?: string;
+  selectedCategoryName?: string;
   onSearch: (query: string) => void;
   onCategorySelect: (catName: string) => void;
   isDarkMode?: boolean;
@@ -60,6 +61,7 @@ export default function Navbar({
   wishlistCount,
   compareCount,
   searchQuery: externalSearchQuery = '',
+  selectedCategoryName = '',
   onSearch,
   onCategorySelect,
   isDarkMode = false,
@@ -603,18 +605,25 @@ export default function Navbar({
 
           {/* Horizontal Scrollable Categories Links */}
           <div className="hidden md:flex items-center gap-6 overflow-x-auto scrollbar-none py-3 text-xs font-bold text-slate-200">
-            {megaCategories.slice(0, 8).map((cat) => (
-              <button
-                key={cat}
-                onClick={() => {
-                  onCategorySelect(cat);
-                  onNavigate('marketplace');
-                }}
-                className="hover:text-[#0F9D8A] transition whitespace-nowrap"
-              >
-                {cat}
-              </button>
-            ))}
+            {megaCategories.slice(0, 8).map((cat) => {
+              const isSelected = selectedCategoryName.trim().toLowerCase() === cat.trim().toLowerCase();
+              return (
+                <button
+                  key={cat}
+                  onClick={() => {
+                    onCategorySelect(isSelected ? '' : cat);
+                    onNavigate('marketplace');
+                  }}
+                  className={`transition whitespace-nowrap px-2.5 py-1 rounded-lg ${
+                    isSelected
+                      ? 'bg-[#0F9D8A] text-white font-black shadow-sm'
+                      : 'hover:text-[#0F9D8A]'
+                  }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
             <button 
               onClick={() => onNavigate('rfqs')} 
               className="text-amber-300 hover:text-amber-200 transition font-extrabold whitespace-nowrap flex items-center gap-1"

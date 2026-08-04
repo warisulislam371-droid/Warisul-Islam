@@ -679,31 +679,36 @@ export default function EnterpriseHomepage({
             <span className="text-[10px] text-[#0077B6]">20+ Divisions</span>
           </h3>
           <ul className="space-y-1 mt-2">
-            {sidebarCategories.map((cat) => (
-              <li key={cat.name}>
-                <button
-                  onClick={() => handleCategoryClick(cat.name)}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between hover:bg-[#F5F7FA] group ${
-                    selectedCategoryName === cat.name ? 'bg-[#0F9D8A]/10 text-[#0F9D8A] font-bold' : 'text-slate-700'
-                  }`}
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="shrink-0">{cat.icon}</span>
-                    <span className="truncate">{cat.name}</span>
-                  </span>
-                  <div className="flex items-center gap-1.5 shrink-0 ml-1">
-                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition ${
-                      selectedCategoryName === cat.name
-                        ? 'bg-[#0F9D8A] text-white'
-                        : 'bg-slate-100 group-hover:bg-[#0F9D8A]/20 group-hover:text-[#0F9D8A] text-slate-500'
-                    }`}>
-                      {cat.count}
+            {sidebarCategories.map((cat) => {
+              const isSelected = selectedCategoryName.trim().toLowerCase() === cat.name.trim().toLowerCase();
+              return (
+                <li key={cat.name}>
+                  <button
+                    onClick={() => handleCategoryClick(isSelected ? '' : cat.name)}
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between group cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#0F9D8A]/15 text-[#0F9D8A] font-extrabold border-l-4 border-[#0F9D8A] shadow-xs'
+                        : 'text-slate-700 hover:bg-[#F5F7FA]'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="shrink-0">{cat.icon}</span>
+                      <span className="truncate">{cat.name}</span>
                     </span>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0F9D8A]" />
-                  </div>
-                </button>
-              </li>
-            ))}
+                    <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition ${
+                        isSelected
+                          ? 'bg-[#0F9D8A] text-white font-black'
+                          : 'bg-slate-100 group-hover:bg-[#0F9D8A]/20 group-hover:text-[#0F9D8A] text-slate-500'
+                      }`}>
+                        {isSelected ? '✓' : cat.count}
+                      </span>
+                      <ChevronRight className={`w-3.5 h-3.5 transition ${isSelected ? 'text-[#0F9D8A]' : 'text-slate-400 group-hover:text-[#0F9D8A]'}`} />
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </aside>
 
@@ -971,41 +976,52 @@ export default function EnterpriseHomepage({
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-          {allCategoryCards.map((cat) => (
-            <div
-              key={cat.name}
-              onClick={() => handleCategoryClick(cat.name)}
-              className="bg-white rounded-2xl border border-slate-200 p-4 text-center hover:shadow-xl hover:border-[#0F9D8A] transition duration-300 group cursor-pointer flex flex-col items-center relative"
-            >
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm(`Remove category "${cat.displayName}"?`)) {
-                    dbLocal.removeCategory(cat.name);
-                    addToast(`Removed category "${cat.displayName}"`, 'info');
-                  }
-                }}
-                title={`Remove ${cat.displayName} category`}
-                className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-100 hover:bg-rose-500 text-slate-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100 z-10"
+          {allCategoryCards.map((cat) => {
+            const isSelected = selectedCategoryName.trim().toLowerCase() === cat.name.trim().toLowerCase();
+            return (
+              <div
+                key={cat.name}
+                onClick={() => handleCategoryClick(isSelected ? '' : cat.name)}
+                className={`rounded-2xl border p-4 text-center hover:shadow-xl transition duration-300 group cursor-pointer flex flex-col items-center relative ${
+                  isSelected
+                    ? 'bg-[#0F9D8A]/10 border-[#0F9D8A] ring-2 ring-[#0F9D8A]/50 shadow-lg scale-105'
+                    : 'bg-white border-slate-200 hover:border-[#0F9D8A]'
+                }`}
               >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`Remove category "${cat.displayName}"?`)) {
+                      dbLocal.removeCategory(cat.name);
+                      addToast(`Removed category "${cat.displayName}"`, 'info');
+                    }
+                  }}
+                  title={`Remove ${cat.displayName} category`}
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-100 hover:bg-rose-500 text-slate-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100 z-10"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
 
-              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-[#F5F7FA] p-2 mb-3 relative group-hover:scale-105 transition-transform">
-                <img src={cat.image} alt={cat.displayName} className="w-full h-full object-cover rounded-xl" />
-                <span className="absolute bottom-1 right-1 text-sm bg-white/80 p-1 rounded-full shadow-sm">
-                  {cat.icon}
+                <div className="w-20 h-20 rounded-2xl overflow-hidden bg-[#F5F7FA] p-2 mb-3 relative group-hover:scale-105 transition-transform">
+                  <img src={cat.image} alt={cat.displayName} className="w-full h-full object-cover rounded-xl" />
+                  <span className="absolute bottom-1 right-1 text-sm bg-white/80 p-1 rounded-full shadow-sm">
+                    {cat.icon}
+                  </span>
+                </div>
+                <h4 className={`text-xs font-bold transition leading-tight ${isSelected ? 'text-[#0F9D8A] font-black' : 'text-[#1F2937] group-hover:text-[#0F9D8A]'}`}>
+                  {cat.displayName}
+                </h4>
+                <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full mt-1.5 transition border ${
+                  isSelected
+                    ? 'bg-[#0F9D8A] text-white border-[#0F9D8A]'
+                    : 'bg-slate-100 group-hover:bg-[#0F9D8A]/10 text-slate-600 group-hover:text-[#0F9D8A] border-slate-200/60'
+                }`}>
+                  {isSelected ? '✓ Selected' : cat.count}
                 </span>
               </div>
-              <h4 className="text-xs font-bold text-[#1F2937] group-hover:text-[#0F9D8A] transition leading-tight">
-                {cat.displayName}
-              </h4>
-              <span className="text-[10px] bg-slate-100 group-hover:bg-[#0F9D8A]/10 text-slate-600 group-hover:text-[#0F9D8A] font-black px-2.5 py-0.5 rounded-full mt-1.5 transition border border-slate-200/60 shadow-2xs">
-                {cat.count}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -1111,18 +1127,79 @@ export default function EnterpriseHomepage({
         </section>
       )}
 
-      {/* 6. CURATED CATEGORY PRODUCT SLIDERS */}
+      {/* 6. CURATED CATEGORY PRODUCT CATALOG */}
       <div id="catalog-anchor" className="space-y-10">
         
-        {/* Active Category Filter View */}
+        {/* Interactive Category Selector Bar */}
+        <section className="max-w-7xl mx-auto px-4 lg:px-6 space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <h3 className="text-sm font-black text-[#1F2937] uppercase tracking-wider flex items-center gap-2">
+              <span className="text-[#0F9D8A]">🏷️</span> Category Quick Selector
+            </h3>
+            {selectedCategoryName && (
+              <button
+                onClick={() => handleCategoryClick('')}
+                className="text-xs font-bold text-[#0F9D8A] hover:underline cursor-pointer flex items-center gap-1"
+              >
+                Clear Selection ({products.length} total)
+              </button>
+            )}
+          </div>
+
+          {/* Scrollable Pills Row for Category Buttons */}
+          <div className="flex gap-2 overflow-x-auto pb-3 pt-1 scrollbar-thin">
+            <button
+              onClick={() => handleCategoryClick('')}
+              className={`shrink-0 px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 shadow-xs ${
+                !selectedCategoryName
+                  ? 'bg-[#0F9D8A] text-white ring-2 ring-[#0F9D8A]/40 shadow-md scale-105'
+                  : 'bg-[#F5F7FA] text-slate-700 hover:bg-slate-200 border border-slate-200'
+              }`}
+            >
+              <span>🏥 All Categories</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+                !selectedCategoryName ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {products.length}
+              </span>
+            </button>
+
+            {allCategoryCards.map((cat) => {
+              const isSelected = selectedCategoryName.trim().toLowerCase() === cat.name.trim().toLowerCase();
+              return (
+                <button
+                  key={cat.name}
+                  onClick={() => handleCategoryClick(isSelected ? '' : cat.name)}
+                  className={`shrink-0 px-4 py-2.5 rounded-xl text-xs transition-all cursor-pointer flex items-center gap-2 shadow-xs ${
+                    isSelected
+                      ? 'bg-[#0F9D8A] text-white font-black ring-2 ring-[#0F9D8A]/40 shadow-md scale-105'
+                      : 'bg-[#F5F7FA] text-slate-700 hover:bg-slate-200 font-bold border border-slate-200'
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  <span>{cat.displayName}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+                    isSelected ? 'bg-white/20 text-white font-black' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    {isSelected ? '✓' : cat.rawCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Active Category Filter Grid View */}
         {selectedCategoryName && (
           <section className="max-w-7xl mx-auto px-4 lg:px-6 space-y-4">
             <div className="bg-[#0F9D8A]/10 border border-[#0F9D8A]/30 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
               <div>
-                <span className="text-[10px] text-[#0F9D8A] font-extrabold uppercase tracking-widest block">Active Category Filter</span>
-                <h3 className="text-xl font-black text-[#1F2937]">{selectedCategoryName}</h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  Showing all verified products matching "{selectedCategoryName}"
+                <span className="text-[10px] text-[#0F9D8A] font-extrabold uppercase tracking-widest block">Selected Category</span>
+                <h3 className="text-xl font-black text-[#1F2937] flex items-center gap-2">
+                  <span>{selectedCategoryName}</span>
+                </h3>
+                <p className="text-xs text-slate-600 font-medium mt-0.5">
+                  Showing all verified products belonging to <strong className="text-[#0F9D8A]">{selectedCategoryName}</strong>
                 </p>
               </div>
               <button
@@ -1133,21 +1210,30 @@ export default function EnterpriseHomepage({
               </button>
             </div>
 
-            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
-              {(() => {
-                const matched = products.filter(p => isCategoryMatch(p, selectedCategoryName, categories));
+            {(() => {
+              const matched = products.filter(p => isCategoryMatch(p, selectedCategoryName, categories));
 
-                if (matched.length === 0) {
-                  return (
-                    <div className="w-full py-8 text-center bg-slate-50 border border-slate-200 rounded-xl text-slate-500 font-medium text-sm">
-                      No products found under "{selectedCategoryName}". Try selecting another category or clear filters.
-                    </div>
-                  );
-                }
+              if (matched.length === 0) {
+                return (
+                  <div className="w-full py-12 text-center bg-slate-50 border border-slate-200 rounded-2xl text-slate-500 font-medium text-sm space-y-2">
+                    <p className="text-base font-bold text-slate-700">No products currently listed under "{selectedCategoryName}"</p>
+                    <p className="text-xs text-slate-500">Try selecting another category or browse all available equipment below.</p>
+                    <button
+                      onClick={() => handleCategoryClick('')}
+                      className="mt-2 bg-[#0077B6] text-white font-bold text-xs px-4 py-2 rounded-xl"
+                    >
+                      Browse All Equipment
+                    </button>
+                  </div>
+                );
+              }
 
-                return matched.map(renderProductCard);
-              })()}
-            </div>
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {matched.map(renderProductCard)}
+                </div>
+              );
+            })()}
           </section>
         )}
 

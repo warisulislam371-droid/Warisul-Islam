@@ -204,6 +204,7 @@ export default function App() {
           wishlistCount={wishlist.length}
           compareCount={compareList.length}
           searchQuery={searchQuery}
+          selectedCategoryName={selectedCategoryName}
           onSearch={handleSearch}
           onCategorySelect={handleCategorySelect}
           isDarkMode={isDarkMode}
