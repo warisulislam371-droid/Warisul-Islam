@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Product, Category, Brand, Review, Vendor, DealOfDay, PromoBanner } from '../types';
 import { dbLocal } from '../db';
+import { isCategoryMatch } from '../utils/categoryMatcher';
 import {
   Activity,
   ShieldCheck,
@@ -1134,12 +1135,7 @@ export default function EnterpriseHomepage({
 
             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
               {(() => {
-                const sel = selectedCategoryName.trim().toLowerCase();
-                const matched = products.filter(p => {
-                  const catMatch = (p.category || '').trim().toLowerCase() === sel;
-                  const subMatch = (p.subcategory || '').trim().toLowerCase() === sel;
-                  return catMatch || subMatch;
-                });
+                const matched = products.filter(p => isCategoryMatch(p, selectedCategoryName, categories));
 
                 if (matched.length === 0) {
                   return (

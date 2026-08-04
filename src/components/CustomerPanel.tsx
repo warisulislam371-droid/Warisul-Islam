@@ -233,9 +233,10 @@ export default function CustomerPanel({
       const isExplicitlyUnpublished = p.published === false;
       const isActive = p.isActive !== false;
 
-      // Ensure the vendor is approved
+      // Ensure the vendor is approved or product is managed directly by Admin / Platform
       const isVendorApproved = approvedVendorIds.has(p.vendorId) ||
-        (!!p.vendorName && approvedVendorNames.has(p.vendorName.trim().toLowerCase()));
+        (!!p.vendorName && approvedVendorNames.has(p.vendorName.trim().toLowerCase())) ||
+        !p.vendorId || p.vendorId === 'v-admin' || p.vendorId === 'super-admin' || p.vendorId === 'vendor-admin';
 
       return isApprovedStatus && !isExplicitlyUnpublished && isActive && isVendorApproved;
     });

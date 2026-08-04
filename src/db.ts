@@ -219,18 +219,16 @@ function listenToCollection<T extends { id: string }>(collName: string, storageK
         syncedHashes.set(`${collName}/${data.id}`, JSON.stringify(sanitizeForFirestore(data)));
       }
     });
-    if (items.length > 0) {
-      const serialized = JSON.stringify(items);
-      const currentStored = localStorage.getItem(storageKey) ?? memoryCache[storageKey];
-      if (currentStored !== serialized) {
-        memoryCache[storageKey] = serialized;
-        try {
-          localStorage.setItem(storageKey, serialized);
-        } catch (e: any) {
-          console.warn(`LocalStorage quota exceeded or blocked for ${storageKey}. Operating in memory-only mode.`, e);
-        }
-        window.dispatchEvent(new Event('healnex_db_update'));
+    const serialized = JSON.stringify(items);
+    const currentStored = localStorage.getItem(storageKey) ?? memoryCache[storageKey];
+    if (currentStored !== serialized) {
+      memoryCache[storageKey] = serialized;
+      try {
+        localStorage.setItem(storageKey, serialized);
+      } catch (e: any) {
+        console.warn(`LocalStorage quota exceeded or blocked for ${storageKey}. Operating in memory-only mode.`, e);
       }
+      window.dispatchEvent(new Event('healnex_db_update'));
     }
   }, (error: any) => {
     if (error?.code === 'permission-denied' || error?.message?.includes('permission-denied')) {
@@ -1174,7 +1172,7 @@ export const dbLocal = {
     const removedSet = new Set(removed.map(s => s.toLowerCase()));
     
     let baseCategories: Category[] = [];
-    if (Array.isArray(list) && list.length > 0) {
+    if (Array.isArray(list)) {
       baseCategories = list.filter(c => c && c.isActive !== false && !removedSet.has((c.name || '').toLowerCase()) && !removedSet.has((c.id || '').toLowerCase()));
     } else {
       baseCategories = INITIAL_CATEGORIES.filter(c => c && !removedSet.has((c.name || '').toLowerCase()) && !removedSet.has((c.id || '').toLowerCase()));

@@ -16,7 +16,7 @@ export function isCategoryMatch(
 
   const target = selectedCategoryName.trim().toLowerCase();
   const pCat = (product.category || '').trim().toLowerCase();
-  const pCatId = (product.categoryId || '').trim().toLowerCase();
+  const pCatId = ((product as any).categoryId || '').trim().toLowerCase();
   const pSub = (product.subcategory || '').trim().toLowerCase();
   const pName = (product.name || '').trim().toLowerCase();
 
