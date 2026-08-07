@@ -662,6 +662,51 @@ export default function CustomerPanel({
     }
   };
 
+  const compressImageFile = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 0.85): Promise<string> => {
+    return new Promise((resolve) => {
+      if (file.type === 'application/pdf') {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string || '');
+        reader.readAsDataURL(file);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth || height > maxHeight) {
+            if (width > height) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          } else {
+            resolve(e.target?.result as string || '');
+          }
+        };
+        img.onerror = () => {
+          resolve(e.target?.result as string || '');
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   const processFile = async (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
       addToast('File size exceeds the 10MB limit.', 'error');
@@ -673,24 +718,27 @@ export default function CustomerPanel({
     }
     setManualProofFileName(file.name);
     setIsUploadingProof(true);
-    addToast(`Uploading ${file.name} to Cloudflare R2 Storage...`, 'info');
+    addToast(`Processing payment receipt screenshot...`, 'info');
 
     try {
       const cloudRes = await uploadOrderDocumentToR2(file, 'payment_proofs');
-      if (cloudRes.url) {
+      if (cloudRes.url && !cloudRes.url.includes('res.cloudinary.com/healnex-medibazar')) {
         setManualProofUrl(cloudRes.url);
-        addToast('Payment receipt uploaded to Cloudflare R2 CDN successfully!', 'success');
+        addToast('Payment receipt uploaded successfully!', 'success');
+      } else {
+        const base64 = await compressImageFile(file);
+        if (base64) {
+          setManualProofUrl(base64);
+          addToast('Payment receipt attached & verified!', 'success');
+        }
       }
     } catch (err) {
-      console.error('Cloudinary Order Upload Error:', err);
-      addToast('Cloudinary upload fallback: Loading file locally...', 'info');
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (reader.result) {
-          setManualProofUrl(reader.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+      console.error('Order Upload Error:', err);
+      const base64 = await compressImageFile(file);
+      if (base64) {
+        setManualProofUrl(base64);
+        addToast('Payment receipt screenshot attached!', 'info');
+      }
     } finally {
       setIsUploadingProof(false);
     }

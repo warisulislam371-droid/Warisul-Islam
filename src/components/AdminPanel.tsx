@@ -61,6 +61,7 @@ import {
   IndianRupee,
   Edit,
   Eye,
+  X,
   Tag,
   Box,
   Instagram,
@@ -411,6 +412,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [netBankingQrCode, setNetBankingQrCode] = useState<string>('');
   const [rejectingOrderId, setRejectingOrderId] = useState<string | null>(null);
   const [rejectionReasonText, setRejectionReasonText] = useState<string>('');
+  const [paymentFilterStatus, setPaymentFilterStatus] = useState<'pending' | 'all' | 'approved' | 'rejected'>('pending');
+  const [viewingProofOrder, setViewingProofOrder] = useState<Order | null>(null);
   
   // Audit Reports State
   const [selectedReportType, setSelectedReportType] = useState<'sales' | 'payments' | 'vendors' | 'customers' | 'rfqs'>('sales');
@@ -2142,6 +2145,16 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {order.paymentProofUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setViewingProofOrder(order)}
+                          className="bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-2xs"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-teal-700" />
+                          <span>View Payment Proof</span>
+                        </button>
+                      )}
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                         order.status === 'Completed' || order.status === 'Delivered'
                           ? 'bg-emerald-100 border border-emerald-200 text-emerald-800'
@@ -3900,29 +3913,105 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       )}
 
       {/* Admin B2B Payment Clearance Verification Panel */}
-      {activeTab === 'verify-payments' && (
-        <div className="space-y-6 animate-fade-in pb-12">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h2 className="text-base font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-teal-700" />
-              Manual Payment Clearance Audit Desk
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">Audit offline UPI screenshots and Bank transfers before dispatching clearance certificates to vendors.</p>
-          </div>
+      {activeTab === 'verify-payments' && (() => {
+        const pendingCount = orders.filter(o => o.status === 'Awaiting Payment Verification').length;
+        const allReceiptsCount = orders.filter(o => Boolean(o.paymentProofUrl)).length;
+        const approvedCount = orders.filter(o => Boolean(o.paymentProofUrl) && ['Paid', 'Vendor Accepted', 'Shipped', 'Completed', 'Delivered', 'Packed'].includes(o.status)).length;
+        const rejectedCount = orders.filter(o => Boolean(o.paymentRejectionReason) || (o.status === 'Pending Payment' && Boolean(o.paymentProofUrl))).length;
 
-          {orders.filter(o => o.status === 'Awaiting Payment Verification').length === 0 ? (
-            <div className="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center space-y-4 max-w-xl mx-auto">
-              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto" />
-              <div>
-                <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide">All Payments Audited</h4>
-                <p className="text-xs text-slate-400 mt-1">There are no pending manual payment receipts awaiting administrative clearance.</p>
+        const filteredVerificationOrders = orders.filter(o => {
+          if (paymentFilterStatus === 'pending') {
+            return o.status === 'Awaiting Payment Verification';
+          }
+          if (paymentFilterStatus === 'all') {
+            return Boolean(o.paymentProofUrl);
+          }
+          if (paymentFilterStatus === 'approved') {
+            return Boolean(o.paymentProofUrl) && ['Paid', 'Vendor Accepted', 'Shipped', 'Completed', 'Delivered', 'Packed'].includes(o.status);
+          }
+          if (paymentFilterStatus === 'rejected') {
+            return Boolean(o.paymentRejectionReason) || (o.status === 'Pending Payment' && Boolean(o.paymentProofUrl));
+          }
+          return true;
+        });
+
+        return (
+          <div className="space-y-6 animate-fade-in pb-12">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-teal-700" />
+                    Customer Payment Proof Verification Desk
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">Audit customer payment proof screenshots and transaction receipts before clearance.</p>
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFilterStatus('pending')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      paymentFilterStatus === 'pending'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>⏳ Awaiting Audit</span>
+                    <span className="bg-white/20 font-mono text-[10px] px-1.5 py-0.5 rounded-full">{pendingCount}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFilterStatus('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      paymentFilterStatus === 'all'
+                        ? 'bg-teal-700 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>🖼️ All Receipts</span>
+                    <span className="bg-white/20 font-mono text-[10px] px-1.5 py-0.5 rounded-full">{allReceiptsCount}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFilterStatus('approved')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      paymentFilterStatus === 'approved'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>✅ Approved</span>
+                    <span className="bg-white/20 font-mono text-[10px] px-1.5 py-0.5 rounded-full">{approvedCount}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFilterStatus('rejected')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      paymentFilterStatus === 'rejected'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>❌ Rejected</span>
+                    <span className="bg-white/20 font-mono text-[10px] px-1.5 py-0.5 rounded-full">{rejectedCount}</span>
+                  </button>
+                </div>
               </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-6">
-              {orders
-                .filter(o => o.status === 'Awaiting Payment Verification')
-                .map((order) => {
+
+            {filteredVerificationOrders.length === 0 ? (
+              <div className="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center space-y-4 max-w-xl mx-auto">
+                <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto" />
+                <div>
+                  <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide">No Receipts Found</h4>
+                  <p className="text-xs text-slate-400 mt-1">There are no payment receipts matching the selected filter category.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6">
+                {filteredVerificationOrders.map((order) => {
                   const isRejecting = rejectingOrderId === order.id;
 
                   return (
@@ -4171,10 +4260,11 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                     </div>
                   );
                 })}
-            </div>
-          )}
-        </div>
-      )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Admin Vendor Settlement & Payout Center */}
       {activeTab === 'vendor-payouts' && (() => {
@@ -8803,6 +8893,140 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
         addToast(`Successfully bulk imported ${count} products for "${targetVendorName}"!`, 'success');
       }}
     />
+
+    {/* Customer Payment Proof Inspector Lightbox Modal */}
+    {viewingProofOrder && (
+      <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-4xl w-full overflow-hidden my-8">
+          {/* Header */}
+          <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-teal-500/20 text-teal-400 rounded-xl flex items-center justify-center border border-teal-500/30">
+                <ClipboardList className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold tracking-wide">Customer Payment Proof Inspection</h3>
+                <p className="text-[11px] text-slate-400 font-mono">Order #{viewingProofOrder.id} • {new Date(viewingProofOrder.createdAt).toLocaleString('en-IN')}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewingProofOrder(null)}
+              className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 max-h-[80vh] overflow-y-auto">
+            {/* Left: Image Container */}
+            <div className="space-y-3">
+              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Payment Receipt Screenshot</p>
+              {viewingProofOrder.paymentProofUrl ? (
+                <div className="bg-slate-900 rounded-2xl p-2 border border-slate-800 flex flex-col items-center justify-center min-h-[300px]">
+                  <img
+                    src={viewingProofOrder.paymentProofUrl}
+                    alt="Payment Proof Receipt"
+                    className="max-h-[400px] w-auto object-contain rounded-xl shadow-lg"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="mt-3 flex gap-2 w-full justify-center">
+                    <a
+                      href={viewingProofOrder.paymentProofUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-slate-800 hover:bg-slate-700 text-teal-400 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Open Full Image
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-12 text-center text-slate-400">
+                  <AlertCircle className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                  <p className="text-xs font-semibold">No receipt attached to this order.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Right: Order Metadata & Audit Actions */}
+            <div className="space-y-4">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2 text-xs">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                  <span className="text-slate-400 font-semibold">Customer</span>
+                  <span className="font-bold text-slate-900">{viewingProofOrder.customerName}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                  <span className="text-slate-400 font-semibold">Total Amount</span>
+                  <span className="font-bold text-teal-800 font-mono text-sm">₹{viewingProofOrder.finalAmount.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                  <span className="text-slate-400 font-semibold">Payment Mode</span>
+                  <span className="font-bold text-slate-800">{viewingProofOrder.paymentMethod}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                  <span className="text-slate-400 font-semibold">UTR / Tx ID</span>
+                  <span className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900">{viewingProofOrder.paymentTxId || 'NOT REPORTED'}</span>
+                </div>
+                {viewingProofOrder.paymentNote && (
+                  <div>
+                    <span className="text-slate-400 font-semibold block mb-0.5">Reference Note</span>
+                    <p className="italic text-slate-700 bg-white p-2 rounded border border-slate-200">{viewingProofOrder.paymentNote}</p>
+                  </div>
+                )}
+                {viewingProofOrder.paymentRejectionReason && (
+                  <div className="bg-rose-50 border border-rose-200 p-2.5 rounded-xl">
+                    <span className="text-rose-800 font-bold block mb-0.5">Rejection History</span>
+                    <p className="text-rose-700 font-medium">{viewingProofOrder.paymentRejectionReason}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Items Summary */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ordered Items</p>
+                <div className="max-h-36 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-xl p-2 bg-white text-xs">
+                  {viewingProofOrder.items.map((item, idx) => (
+                    <div key={idx} className="py-1.5 flex justify-between">
+                      <span className="font-medium text-slate-800 truncate max-w-[200px]">{item.productName} (x{item.quantity})</span>
+                      <span className="font-mono text-slate-600 font-semibold">₹{(item.price * item.quantity).toLocaleString('en-IN')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="pt-3 border-t border-slate-100 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleVerifyPayment(viewingProofOrder.id);
+                    setViewingProofOrder(null);
+                  }}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Approve & Route
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('verify-payments');
+                    setRejectingOrderId(viewingProofOrder.id);
+                    setViewingProofOrder(null);
+                  }}
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1 transition cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Reject Proof
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }
