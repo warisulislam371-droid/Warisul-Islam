@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Product, Category, Brand, Review, Vendor, DealOfDay, PromoBanner } from '../types';
 import { dbLocal } from '../db';
 import { isCategoryMatch } from '../utils/categoryMatcher';
@@ -124,6 +124,103 @@ export default function EnterpriseHomepage({
       el?.scrollIntoView({ behavior: 'smooth' });
     }, 50);
   };
+
+  // 500ms Hover Timer for Category Sidebar Auto-Expand
+  const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleSidebarCategoryMouseEnter = (catName: string) => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+    }
+    hoverTimerRef.current = setTimeout(() => {
+      setSidebarExpandedCategory(catName);
+    }, 500);
+  };
+
+  const handleSidebarCategoryMouseLeave = (catName: string) => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setSidebarExpandedCategory(prev => (prev === catName ? null : prev));
+  };
+
+  const handleSidebarCategoryClick = (e: React.MouseEvent, catName: string) => {
+    e.stopPropagation();
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    const isExpanded = sidebarExpandedCategory?.trim().toLowerCase() === catName.trim().toLowerCase();
+    setSidebarExpandedCategory(isExpanded ? null : catName);
+    const isSelected = selectedCategoryName.trim().toLowerCase() === catName.trim().toLowerCase();
+    handleCategoryClick(isSelected ? '' : catName);
+  };
+
+  const handleSubcategoryClick = (e: React.MouseEvent, subName: string) => {
+    e.stopPropagation();
+    handleCategoryClick(subName);
+  };
+
+  const PRESET_SUBCATEGORIES_MAP: Record<string, string[]> = useMemo(() => ({
+    'diagnostic equipment': ['ECG Machine', 'Ultrasound Scanner', 'Patient Monitor', 'Defibrillator', 'X-Ray System', 'CT Scanner'],
+    'patient monitoring': ['Multipara Monitor', 'Pulse Oximeter', 'Capnograph', 'Fetal Doppler', 'Temperature System'],
+    'ecg machines': ['3-Channel ECG', '6-Channel ECG', '12-Channel ECG', 'Stress Test ECG', 'Holter Monitor'],
+    'ultrasound': ['Color Doppler Ultrasound', 'Portable Ultrasound', '3D/4D Ultrasound', 'Echocardiography Machine'],
+    'x-ray & imaging': ['Digital Radiography (DR)', 'C-Arm System', 'Mammography Machine', 'Dental X-Ray Unit'],
+    'ct scan': ['16-Slice CT', '32-Slice CT', '64-Slice CT', '128-Slice Cardiac CT'],
+    'mri systems': ['1.5T MRI Scanner', '3.0T High Field MRI', 'Open MRI System'],
+    'laboratory equipment': ['Hematology Analyzer', 'Biochemistry Analyzer', 'Clinical Centrifuge', 'Laboratory Microscope'],
+    'hospital furniture': ['5-Function ICU Bed', 'Motorized Patient Bed', 'Examination Couch', 'Hydraulic Stretcher'],
+    'icu equipment': ['ICU Ventilator', 'Syringe Infusion Pump', 'Volumetric Infusion Pump', 'Bedside Monitor'],
+    'ot equipment': ['Surgical OT Light', 'Hydraulic OT Table', 'Anaesthesia Workstation', 'Electrosurgical Cautery'],
+    'surgical instruments': ['Surgical Forceps', 'Operating Scissors', 'Needle Holders', 'Tissue Retractors'],
+    'dental equipment': ['Integrated Dental Chair', 'Dental X-Ray', 'Ultrasonic Scaler', 'Dental Autoclave'],
+    'medical consumables': ['Nitrile Examination Gloves', '3-Ply Surgical Masks', 'IV Cannula & Sets', 'Disposable Syringes'],
+    'respiratory equipment': ['10L Oxygen Concentrator', 'BiPAP & CPAP Machine', 'Compressor Nebulizer', 'High Flow Oxygen'],
+    'home healthcare': ['Digital BP Monitor', 'Glucometer Kit', 'Non-Contact Thermometer', 'Pulse Oximeter'],
+    'rehabilitation': ['Walking Frames & Canes', 'Manual & Power Wheelchair', 'Orthotic Braces'],
+    'physiotherapy': ['TENS Unit', 'Therapeutic Ultrasound', 'Shortwave Diathermy', 'IFT Machine'],
+    'refurbished equipment': ['Refurbished ICU Ventilators', 'Refurbished Ultrasound', 'Refurbished C-Arm'],
+    'spare parts & accessories': ['ECG Cables & Leadwires', 'SpO2 Sensors', 'Ultrasound Probes', 'Rechargeable Batteries']
+  }), []);
+
+  const getSidebarSubcategories = useCallback((catName: string): string[] => {
+    const normKey = catName.trim().toLowerCase();
+    const subSet = new Set<string>();
+
+    const dbCat = categories?.find(c => (c.name || '').trim().toLowerCase() === normKey);
+    if (dbCat && Array.isArray(dbCat.subcategories) && dbCat.subcategories.length > 0) {
+      dbCat.subcategories.forEach(s => {
+        if (s && s.trim()) subSet.add(s.trim());
+      });
+    }
+
+    products.forEach(p => {
+      if (isCategoryMatch(p, catName, categories)) {
+        if (p.subcategory && p.subcategory.trim()) {
+          subSet.add(p.subcategory.trim());
+        }
+      }
+    });
+
+    const presets = PRESET_SUBCATEGORIES_MAP[normKey];
+    if (presets) {
+      presets.forEach(p => subSet.add(p));
+    }
+
+    return Array.from(subSet);
+  }, [categories, products, PRESET_SUBCATEGORIES_MAP]);
+
+  const getSubcategoryCount = useCallback((subName: string, parentCatName: string) => {
+    const subNorm = subName.trim().toLowerCase();
+    return products.filter(p => {
+      const pSub = (p.subcategory || '').trim().toLowerCase();
+      const pCat = (p.category || '').trim().toLowerCase();
+      const pName = (p.name || '').trim().toLowerCase();
+      return pSub === subNorm || (pCat === parentCatName.trim().toLowerCase() && pName.includes(subNorm));
+    }).length;
+  }, [products]);
 
   // Countdown timer effect
   useEffect(() => {
@@ -681,13 +778,23 @@ export default function EnterpriseHomepage({
           <ul className="space-y-1 mt-2">
             {sidebarCategories.map((cat) => {
               const isSelected = selectedCategoryName.trim().toLowerCase() === cat.name.trim().toLowerCase();
+              const isExpanded = sidebarExpandedCategory?.trim().toLowerCase() === cat.name.trim().toLowerCase();
+              const subcategories = getSidebarSubcategories(cat.name);
+
               return (
-                <li key={cat.name}>
+                <li
+                  key={cat.name}
+                  onMouseEnter={() => handleSidebarCategoryMouseEnter(cat.name)}
+                  onMouseLeave={() => handleSidebarCategoryMouseLeave(cat.name)}
+                  className="rounded-xl transition-all duration-200"
+                >
                   <button
-                    onClick={() => handleCategoryClick(isSelected ? '' : cat.name)}
+                    onClick={(e) => handleSidebarCategoryClick(e, cat.name)}
                     className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between group cursor-pointer ${
                       isSelected
                         ? 'bg-[#0F9D8A]/15 text-[#0F9D8A] font-extrabold border-l-4 border-[#0F9D8A] shadow-xs'
+                        : isExpanded
+                        ? 'bg-[#F0FDF4] text-[#0F9D8A] font-bold border-l-2 border-[#0F9D8A]/60'
                         : 'text-slate-700 hover:bg-[#F5F7FA]'
                     }`}
                   >
@@ -703,9 +810,49 @@ export default function EnterpriseHomepage({
                       }`}>
                         {isSelected ? '✓' : cat.count}
                       </span>
-                      <ChevronRight className={`w-3.5 h-3.5 transition ${isSelected ? 'text-[#0F9D8A]' : 'text-slate-400 group-hover:text-[#0F9D8A]'}`} />
+                      <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                        isExpanded ? 'rotate-90 text-[#0F9D8A]' : isSelected ? 'text-[#0F9D8A]' : 'text-slate-400 group-hover:text-[#0F9D8A]'
+                      }`} />
                     </div>
                   </button>
+
+                  {/* Auto-expanded Subcategories List */}
+                  {isExpanded && subcategories.length > 0 && (
+                    <div className="ml-5 pl-2.5 my-1.5 border-l-2 border-[#0F9D8A]/30 space-y-1 animate-fade-in">
+                      <div className="text-[10px] font-extrabold text-[#0F9D8A] uppercase tracking-wider px-2 py-0.5 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-[#0F9D8A]" />
+                        <span>Subcategories ({subcategories.length})</span>
+                      </div>
+                      {subcategories.map(sub => {
+                        const isSubSelected = selectedCategoryName.trim().toLowerCase() === sub.trim().toLowerCase();
+                        const subCount = getSubcategoryCount(sub, cat.name);
+
+                        return (
+                          <button
+                            key={sub}
+                            onClick={(e) => handleSubcategoryClick(e, sub)}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition flex items-center justify-between group cursor-pointer ${
+                              isSubSelected
+                                ? 'bg-[#0F9D8A] text-white font-bold shadow-2xs'
+                                : 'text-slate-600 hover:text-[#0F9D8A] hover:bg-[#0F9D8A]/10 font-medium'
+                            }`}
+                          >
+                            <span className="truncate flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full ${isSubSelected ? 'bg-white' : 'bg-[#0F9D8A]'}`} />
+                              <span>{sub}</span>
+                            </span>
+                            {subCount > 0 && (
+                              <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full ${
+                                isSubSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                              }`}>
+                                {subCount}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </li>
               );
             })}
