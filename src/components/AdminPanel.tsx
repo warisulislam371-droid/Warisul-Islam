@@ -1293,8 +1293,10 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   };
 
   const handleApproveProduct = (productId: string) => {
+    let targetVendorId: string | undefined;
     const updated = products.map(p => {
       if (p.id === productId) {
+        targetVendorId = p.vendorId;
         dbLocal.addNotification(
           p.vendorId,
           `Product Approved & Live: ${p.name}`,
@@ -1314,14 +1316,33 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       }
       return p;
     });
+
+    if (targetVendorId) {
+      const allVendors = dbLocal.getVendors();
+      let vendorUpdated = false;
+      const updatedVendors = allVendors.map(v => {
+        if (v.id === targetVendorId && v.status !== 'Approved') {
+          vendorUpdated = true;
+          return { ...v, status: 'Approved' as const, updatedAt: new Date().toISOString() };
+        }
+        return v;
+      });
+      if (vendorUpdated) {
+        dbLocal.saveVendors(updatedVendors);
+        setVendors(updatedVendors);
+      }
+    }
+
     dbLocal.saveProducts(updated);
     setProducts(updated);
     addToast('Product approved & published live to marketplace!', 'success');
   };
 
   const handlePublishProduct = (productId: string) => {
+    let targetVendorId: string | undefined;
     const updated = products.map(p => {
       if (p.id === productId) {
+        targetVendorId = p.vendorId;
         dbLocal.addNotification(
           p.vendorId,
           `Product Published Live: ${p.name}`,
@@ -1339,6 +1360,23 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       }
       return p;
     });
+
+    if (targetVendorId) {
+      const allVendors = dbLocal.getVendors();
+      let vendorUpdated = false;
+      const updatedVendors = allVendors.map(v => {
+        if (v.id === targetVendorId && v.status !== 'Approved') {
+          vendorUpdated = true;
+          return { ...v, status: 'Approved' as const, updatedAt: new Date().toISOString() };
+        }
+        return v;
+      });
+      if (vendorUpdated) {
+        dbLocal.saveVendors(updatedVendors);
+        setVendors(updatedVendors);
+      }
+    }
+
     dbLocal.saveProducts(updated);
     setProducts(updated);
     addToast('Product published live! Now visible in products catalog.', 'success');
