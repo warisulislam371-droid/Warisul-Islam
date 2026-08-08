@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Vendor, Category, Brand, CategoryRequest, BrandRequest, ProductSpecification, User } from '../types';
 import { dbLocal } from '../db';
-import { uploadProductImageToR2 } from '../utils/r2Storage';
+import { uploadProductImageToCloudinary } from '../utils/cloudinary';
 import { detectCategoryAndSubcategory, detectCategoryWithAI, autoSortAndClassifyProducts } from '../utils/categorySorter';
 import { AICategorizerCard } from './AICategorizerCard';
 import {
@@ -156,7 +156,7 @@ export default function VendorProductManager({
           continue;
         }
 
-        const res = await uploadProductImageToR2(
+        const res = await uploadProductImageToCloudinary(
           file, 
           formCategory || 'equipment', 
           formSku || `SKU_${Date.now().toString(36).substring(4)}`, 
@@ -166,7 +166,7 @@ export default function VendorProductManager({
         if (res.image_url || res.url) {
           uploadedUrls.push(res.image_url || res.url);
         } else {
-          throw new Error(`No image URL returned from Cloudflare R2 for ${file.name}`);
+          throw new Error(`No image URL returned from Cloudinary for ${file.name}`);
         }
       }
 

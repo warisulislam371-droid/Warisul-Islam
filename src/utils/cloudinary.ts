@@ -15,16 +15,22 @@ export interface CloudinaryUploadResult {
   bytes?: number;
   created_at?: string;
   provider?: string;
+  SKU?: string;
+  category?: string;
+  uploaded_by?: string;
+  image_url?: string;
+  file_size?: number;
 }
 
 /**
- * Upload any medical product, vendor document, or payment proof file to Cloudinary CDN
+ * Upload product image to Cloudinary CDN storage via server API
  */
-export async function uploadImageToCloudinary(
+export async function uploadProductImageToCloudinary(
   file: File,
-  folder: string = 'products',
   category: string = 'general',
-  sku: string = 'SKU000'
+  sku: string = 'SKU000',
+  uploadedBy: string = 'Vendor',
+  productId?: string
 ): Promise<CloudinaryUploadResult> {
   const base64Data = await fileToBase64(file);
 
@@ -37,29 +43,40 @@ export async function uploadImageToCloudinary(
       contentType: file.type || 'image/webp',
       category,
       sku,
-      uploadedBy: 'Vendor',
-      folder
+      uploadedBy,
+      productId,
+      convertToWebP: true,
     }),
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Cloudinary upload failed (${response.status}): ${errText}`);
+    throw new Error(`Cloudinary Upload failed (${response.status}): ${errText}`);
   }
 
   const data = await response.json();
   return {
+    ...data,
     url: data.image_url || data.url || data.secure_url,
     secure_url: data.image_url || data.url || data.secure_url,
     public_id: data.public_id || data.storage_path || '',
     storage_path: data.public_id || data.storage_path || '',
     original_filename: file.name,
-    format: file.name.split('.').pop() || 'webp',
-    thumbnail_url: data.thumbnail_url,
-    bytes: data.file_size,
-    created_at: data.upload_date,
+    format: 'webp',
     provider: 'Cloudinary'
   };
+}
+
+/**
+ * Upload any medical product, vendor document, or payment proof file to Cloudinary CDN
+ */
+export async function uploadImageToCloudinary(
+  file: File,
+  folder: string = 'products',
+  category: string = 'general',
+  sku: string = 'SKU000'
+): Promise<CloudinaryUploadResult> {
+  return uploadProductImageToCloudinary(file, category, sku, 'Vendor');
 }
 
 /**
@@ -130,6 +147,83 @@ export async function uploadOrderDocumentToCloudinary(file: File, subFolder = 'o
     created_at: data.uploaded_at,
     provider: 'Cloudinary'
   };
+}
+
+/**
+ * Delete image from Cloudinary storage
+ */
+export async function deleteImageFromCloudinary(storagePath: string, productId?: string): Promise<{ success: boolean }> {
+  const response = await fetch('/api/delete-image', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storage_path: storagePath,
+      public_id: storagePath,
+      product_id: productId,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete image from Cloudinary (${response.status})`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Replace existing image in Cloudinary
+ */
+export async function updateImageInCloudinary(
+  oldStoragePath: string,
+  newFile: File,
+  category: string = 'general',
+  sku: string = 'SKU000',
+  productId?: string
+): Promise<CloudinaryUploadResult> {
+  const base64Data = await fileToBase64(newFile);
+
+  const response = await fetch('/api/update-image', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      old_storage_path: oldStoragePath,
+      old_public_id: oldStoragePath,
+      newImageBase64: base64Data,
+      fileName: newFile.name,
+      contentType: newFile.type,
+      category,
+      sku,
+      product_id: productId,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update image in Cloudinary (${response.status})`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Fetch marketplace Cloudinary storage gallery & usage stats
+ */
+export async function getMarketplaceImagesFromCloudinary(): Promise<{
+  files: any[];
+  stats: {
+    totalFiles: number;
+    totalSizeBytes: number;
+    totalSizeMB: string;
+    bucketName: string;
+    r2Configured: boolean;
+    cloudName: string;
+    publicCdnUrl: string;
+  };
+}> {
+  const response = await fetch('/api/images');
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Cloudinary images (${response.status})`);
+  }
+  return await response.json();
 }
 
 /**

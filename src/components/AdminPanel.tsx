@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { dbLocal } from '../db';
 import { getSliceUpiQrDataUrl, SLICE_UPI_ID, SLICE_HOLDER_NAME } from '../utils/sliceQrSvg';
-import { uploadVendorDocumentToR2, uploadOrderDocumentToR2 } from '../utils/r2Storage';
+import { uploadVendorDocumentToCloudinary, uploadOrderDocumentToCloudinary } from '../utils/cloudinary';
 import { Vendor, Product, SupportTicket, Order, User, Notification, PaymentSettings, WhatsAppSettings, WhatsAppClickLog, RFQ, PaymentClearanceRequest, PromoBanner, Quotation, SocialMediaLinks, DealOfDay } from '../types';
 import AdminCategoriesManager from './AdminCategoriesManager';
 import { AdminVerificationPanel } from './AdminVerificationPanel';
 import { AdminCategorizationPanel } from './AdminCategorizationPanel';
-import { AdminR2StoragePanel } from './AdminR2StoragePanel';
+import { AdminCloudinaryStoragePanel } from './AdminR2StoragePanel';
 import AdminBulkProductUploadModal from './AdminBulkProductUploadModal';
 import {
   UploadCloud,
@@ -1683,17 +1683,17 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
           </button>
           <button
             onClick={() => setActiveTab('r2-storage')}
-            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'r2-storage' ? 'bg-orange-600 text-white shadow-sm font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
+            className={`px-4 py-2 rounded-lg transition flex items-center gap-1.5 ${activeTab === 'r2-storage' ? 'bg-blue-600 text-white shadow-sm font-bold' : 'text-slate-600 hover:bg-slate-50'}`}
           >
-            <Server className="w-4 h-4 text-orange-500" />
-            Cloudflare R2 Storage
+            <Server className="w-4 h-4 text-blue-500" />
+            Cloudinary CDN Storage
           </button>
         </div>
       </div>
 
       {/* tab view layouts */}
       {activeTab === 'r2-storage' && (
-        <AdminR2StoragePanel />
+        <AdminCloudinaryStoragePanel />
       )}
       {activeTab === 'ai_categorization_audit' && (
         <AdminCategorizationPanel />
@@ -3148,6 +3148,24 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                   Bulk Upload Products to Vendor
                 </button>
 
+                {products.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to remove ALL products from the marketplace? This action cannot be undone.')) {
+                        dbLocal.clearAllProducts();
+                        setProducts([]);
+                        addToast('Successfully removed all products from marketplace.', 'info');
+                      }
+                    }}
+                    className="bg-red-50 hover:bg-red-100 text-red-700 font-extrabold text-xs px-4 py-2.5 rounded-xl border border-red-200 shadow-sm transition flex items-center gap-2 cursor-pointer"
+                    title="Remove all products currently uploaded in marketplace"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                    Wipe All Products ({products.length})
+                  </button>
+                )}
+
                 {pendingCount > 0 && (
                   <button
                     type="button"
@@ -4267,7 +4285,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                     if (file) {
                                       try {
                                         addToast(`Uploading invoice ${file.name} to Cloudinary...`, 'info');
-                                        const res = await uploadOrderDocumentToR2(file, 'invoices');
+                                        const res = await uploadOrderDocumentToCloudinary(file, 'invoices');
                                         if (res.url) {
                                           const allOrders = dbLocal.getOrders();
                                           const idx = allOrders.findIndex(o => o.id === order.id);
@@ -8030,7 +8048,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                                 if (file && selectedVendorDoc) {
                                   try {
                                     addToast(`Uploading ${file.name} to Cloudinary...`, 'info');
-                                    const cloudRes = await uploadVendorDocumentToR2(file);
+                                    const cloudRes = await uploadVendorDocumentToCloudinary(file);
                                     const cUrl = cloudRes.url;
                                     const updatedVendors = vendors.map(v => {
                                       if (v.id === selectedVendorDoc.id) {

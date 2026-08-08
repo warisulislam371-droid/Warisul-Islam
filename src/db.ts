@@ -677,9 +677,36 @@ export const dbLocal = {
 
   async init() {
     // Synchronous local state initialization for immediate rendering
+    // Clean wipe of all previously uploaded/stored products as requested
+    if (!localStorage.getItem('healnex_products_wiped_v3')) {
+      localStorage.setItem('healnex_products_wiped_v3', 'true');
+      this.set(STORAGE_KEYS.PRODUCTS, []);
+      try {
+        const querySnapshot = await getDocs(collection(db, 'products'));
+        querySnapshot.forEach((document) => {
+          deleteDoc(doc(db, 'products', document.id)).catch(() => {});
+        });
+      } catch (err) {}
+    } else if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
+      this.set(STORAGE_KEYS.PRODUCTS, []);
+    }
+
+    // Clean wipe of all previously stored categories as requested
+    if (!localStorage.getItem('healnex_categories_wiped_v3')) {
+      localStorage.setItem('healnex_categories_wiped_v3', 'true');
+      this.set(STORAGE_KEYS.CATEGORIES, []);
+      try {
+        const querySnapshot = await getDocs(collection(db, 'categories'));
+        querySnapshot.forEach((document) => {
+          deleteDoc(doc(db, 'categories', document.id)).catch(() => {});
+        });
+      } catch (err) {}
+    } else if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) {
+      this.set(STORAGE_KEYS.CATEGORIES, []);
+    }
+
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) this.set(STORAGE_KEYS.USERS, DEFAULT_USERS);
     if (!localStorage.getItem(STORAGE_KEYS.VENDORS)) this.set(STORAGE_KEYS.VENDORS, DEFAULT_VENDORS);
-    if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) this.set(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
     if (!localStorage.getItem(STORAGE_KEYS.ORDERS)) this.set(STORAGE_KEYS.ORDERS, DEFAULT_ORDERS);
     if (!localStorage.getItem(STORAGE_KEYS.RFQS)) this.set(STORAGE_KEYS.RFQS, DEFAULT_RFQS);
     if (!localStorage.getItem(STORAGE_KEYS.QUOTATIONS)) this.set(STORAGE_KEYS.QUOTATIONS, DEFAULT_QUOTATIONS);
@@ -692,7 +719,7 @@ export const dbLocal = {
     if (!localStorage.getItem(STORAGE_KEYS.WHATSAPP_CLICK_LOGS)) this.set(STORAGE_KEYS.WHATSAPP_CLICK_LOGS, []);
     if (!localStorage.getItem(STORAGE_KEYS.CLEARANCE_REQUESTS)) this.set(STORAGE_KEYS.CLEARANCE_REQUESTS, DEFAULT_CLEARANCE_REQUESTS);
     if (!localStorage.getItem(STORAGE_KEYS.PROMO_BANNERS)) this.set(STORAGE_KEYS.PROMO_BANNERS, DEFAULT_PROMO_BANNERS);
-    if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) this.set(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) this.set(STORAGE_KEYS.CATEGORIES, []);
     if (!localStorage.getItem(STORAGE_KEYS.BRANDS)) this.set(STORAGE_KEYS.BRANDS, INITIAL_BRANDS);
     if (!localStorage.getItem(STORAGE_KEYS.CATEGORY_REQUESTS)) this.set(STORAGE_KEYS.CATEGORY_REQUESTS, []);
     if (!localStorage.getItem(STORAGE_KEYS.BRAND_REQUESTS)) this.set(STORAGE_KEYS.BRAND_REQUESTS, []);
@@ -710,7 +737,7 @@ export const dbLocal = {
       // 1. Seed Firestore collections if empty
       await seedCollectionIfEmpty('users', DEFAULT_USERS);
       await seedCollectionIfEmpty('vendors', DEFAULT_VENDORS);
-      await seedCollectionIfEmpty('products', INITIAL_PRODUCTS);
+      await seedCollectionIfEmpty('products', []);
       await seedCollectionIfEmpty('orders', DEFAULT_ORDERS);
       await seedCollectionIfEmpty('rfqs', DEFAULT_RFQS);
       await seedCollectionIfEmpty('quotations', DEFAULT_QUOTATIONS);
@@ -723,7 +750,7 @@ export const dbLocal = {
       await seedCollectionIfEmpty('whatsapp_click_logs', []);
       await seedCollectionIfEmpty('clearance_requests', DEFAULT_CLEARANCE_REQUESTS);
       await seedCollectionIfEmpty('promo_banners', DEFAULT_PROMO_BANNERS);
-      await seedCollectionIfEmpty('categories', INITIAL_CATEGORIES);
+      await seedCollectionIfEmpty('categories', []);
       await seedCollectionIfEmpty('brands', INITIAL_BRANDS);
       await seedCollectionIfEmpty('categoryRequests', []);
       await seedCollectionIfEmpty('brandRequests', []);
@@ -731,7 +758,7 @@ export const dbLocal = {
       // 2. Start real-time Firestore synchronization
       listenToCollection('users', STORAGE_KEYS.USERS, DEFAULT_USERS);
       listenToCollection('vendors', STORAGE_KEYS.VENDORS, DEFAULT_VENDORS);
-      listenToCollection('products', STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+      listenToCollection('products', STORAGE_KEYS.PRODUCTS, []);
       listenToCollection('orders', STORAGE_KEYS.ORDERS, DEFAULT_ORDERS);
       listenToCollection('rfqs', STORAGE_KEYS.RFQS, DEFAULT_RFQS);
       listenToCollection('quotations', STORAGE_KEYS.QUOTATIONS, DEFAULT_QUOTATIONS);
@@ -744,7 +771,7 @@ export const dbLocal = {
       listenToCollection('whatsapp_click_logs', STORAGE_KEYS.WHATSAPP_CLICK_LOGS, []);
       listenToCollection('clearance_requests', STORAGE_KEYS.CLEARANCE_REQUESTS, DEFAULT_CLEARANCE_REQUESTS);
       listenToCollection('promo_banners', STORAGE_KEYS.PROMO_BANNERS, DEFAULT_PROMO_BANNERS);
-      listenToCollection('categories', STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+      listenToCollection('categories', STORAGE_KEYS.CATEGORIES, []);
       listenToCollection('brands', STORAGE_KEYS.BRANDS, INITIAL_BRANDS);
       listenToCollection('categoryRequests', STORAGE_KEYS.CATEGORY_REQUESTS, []);
       listenToCollection('brandRequests', STORAGE_KEYS.BRAND_REQUESTS, []);
@@ -812,8 +839,8 @@ export const dbLocal = {
 
   // Products
   getProducts(): Product[] {
-    const rawProducts = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
-    const list = Array.isArray(rawProducts) ? rawProducts : INITIAL_PRODUCTS;
+    const rawProducts = this.get(STORAGE_KEYS.PRODUCTS, []) as Product[];
+    const list = Array.isArray(rawProducts) ? rawProducts : [];
     const defaultFallbackImage = 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800';
     return list.map(p => {
       let cleanedImages: string[] = [];
@@ -828,6 +855,12 @@ export const dbLocal = {
         images: cleanedImages
       };
     });
+  },
+  clearAllProducts(): void {
+    const old = this.getProducts();
+    this.set(STORAGE_KEYS.PRODUCTS, []);
+    syncListToFirestoreWithDeletions('products', [], old);
+    window.dispatchEvent(new Event('healnex_db_update'));
   },
   saveProducts(products: Product[]) {
     const old = this.getProducts();
@@ -1167,7 +1200,7 @@ export const dbLocal = {
 
   // Dynamic Categories
   getCategories(): Category[] {
-    const list = this.get(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    const list = this.get(STORAGE_KEYS.CATEGORIES, []);
     const removed: string[] = this.get('healnex_removed_categories', []);
     const removedSet = new Set(removed.map(s => s.toLowerCase()));
     
@@ -1175,7 +1208,7 @@ export const dbLocal = {
     if (Array.isArray(list)) {
       baseCategories = list.filter(c => c && c.isActive !== false && !removedSet.has((c.name || '').toLowerCase()) && !removedSet.has((c.id || '').toLowerCase()));
     } else {
-      baseCategories = INITIAL_CATEGORIES.filter(c => c && !removedSet.has((c.name || '').toLowerCase()) && !removedSet.has((c.id || '').toLowerCase()));
+      baseCategories = [];
     }
 
     // On-the-fly deduplication by normalized category name
@@ -1206,8 +1239,8 @@ export const dbLocal = {
 
     // Auto calculate product counts dynamically
     try {
-      const rawProducts = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
-      const products = Array.isArray(rawProducts) ? rawProducts : INITIAL_PRODUCTS;
+      const rawProducts = this.get(STORAGE_KEYS.PRODUCTS, []) as Product[];
+      const products = Array.isArray(rawProducts) ? rawProducts : [];
 
       return baseCategories.map(cat => {
         const catKey = (cat.name || '').trim().toLowerCase();
@@ -1231,6 +1264,12 @@ export const dbLocal = {
       return baseCategories;
     }
   },
+  clearAllCategories(): void {
+    const old = this.getCategories();
+    this.set(STORAGE_KEYS.CATEGORIES, []);
+    syncListToFirestoreWithDeletions('categories', [], old);
+    window.dispatchEvent(new Event('healnex_db_update'));
+  },
   saveCategories(categories: Category[]) {
     const old = this.getCategories();
     this.set(STORAGE_KEYS.CATEGORIES, categories);
@@ -1238,11 +1277,11 @@ export const dbLocal = {
     window.dispatchEvent(new Event('healnex_db_update'));
   },
   mergeDuplicateCategories(): { mergedCount: number; duplicateNames: string[]; totalUniqueRemaining: number } {
-    const rawList = this.get(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES) as Category[];
+    const rawList = this.get(STORAGE_KEYS.CATEGORIES, []) as Category[];
     const removed: string[] = this.get('healnex_removed_categories', []);
     const removedSet = new Set(removed.map(s => s.toLowerCase()));
 
-    const activeList = (Array.isArray(rawList) ? rawList : INITIAL_CATEGORIES).filter(
+    const activeList = (Array.isArray(rawList) ? rawList : []).filter(
       c => c && c.name && c.isActive !== false && !removedSet.has(c.name.trim().toLowerCase()) && !removedSet.has((c.id || '').toLowerCase())
     );
 
@@ -1302,7 +1341,7 @@ export const dbLocal = {
 
         // Update products referencing merged duplicate category names
         try {
-          const rawProds = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
+          const rawProds = this.get(STORAGE_KEYS.PRODUCTS, []) as Product[];
           if (Array.isArray(rawProds) && rawProds.length > 0) {
             const groupNames = new Set(group.map(g => (g.name || '').trim().toLowerCase()));
 
@@ -1348,8 +1387,8 @@ export const dbLocal = {
 
     // 2. Fetch active categories & products
     const categories = this.getCategories();
-    const rawProducts = this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[];
-    const products = Array.isArray(rawProducts) ? rawProducts : INITIAL_PRODUCTS;
+    const rawProducts = this.get(STORAGE_KEYS.PRODUCTS, []) as Product[];
+    const products = Array.isArray(rawProducts) ? rawProducts : [];
 
     const categoryNameMap = new Map<string, Category>();
     categories.forEach(c => {
@@ -1413,7 +1452,7 @@ export const dbLocal = {
     }
 
     // 4. Ensure all subcategories present on active products exist in parent Category subcategory list
-    const currentProds = (this.get(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS) as Product[]) || [];
+    const currentProds = (this.get(STORAGE_KEYS.PRODUCTS, []) as Product[]) || [];
     const updatedCategories = categories.map(cat => {
       const catLower = (cat.name || '').trim().toLowerCase();
       const subSet = new Set((cat.subcategories || []).map(s => (s || '').trim()).filter(Boolean));
@@ -1458,7 +1497,7 @@ export const dbLocal = {
       this.set('healnex_removed_categories', removed);
     }
 
-    const currentList = this.get(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    const currentList = this.get(STORAGE_KEYS.CATEGORIES, []);
     const filtered = currentList.filter(c => 
       c.id !== categoryNameOrId && 
       (c.name || '').trim().toLowerCase() !== nameLower

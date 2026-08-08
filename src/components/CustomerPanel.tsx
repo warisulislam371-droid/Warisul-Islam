@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { dbLocal } from '../db';
-import { uploadOrderDocumentToR2 } from '../utils/r2Storage';
+import { uploadOrderDocumentToCloudinary } from '../utils/cloudinary';
 import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderItem, PaymentSettings, PromoBanner, Vendor, PriceAlert } from '../types';
 import { isCategoryMatch } from '../utils/categoryMatcher';
 import PriceAlertModal from './PriceAlertModal';
@@ -721,7 +721,7 @@ export default function CustomerPanel({
     addToast(`Processing payment receipt screenshot...`, 'info');
 
     try {
-      const cloudRes = await uploadOrderDocumentToR2(file, 'payment_proofs');
+      const cloudRes = await uploadOrderDocumentToCloudinary(file, 'payment_proofs');
       if (cloudRes.url && !cloudRes.url.includes('res.cloudinary.com/healnex-medibazar')) {
         setManualProofUrl(cloudRes.url);
         addToast('Payment receipt uploaded successfully!', 'success');

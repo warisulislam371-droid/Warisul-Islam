@@ -588,14 +588,34 @@ export default function AdminCategoriesManager({ onRefresh }: AdminCategoriesMan
           <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 gap-2 flex-wrap">
               <h3 className="text-sm font-extrabold text-slate-900">Active Categories ({categories.length})</h3>
-              <button
-                onClick={handleMergeDuplicates}
-                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 border border-emerald-200/80 shadow-2xs"
-                title="Find and merge duplicate categories with identical names"
-              >
-                <Wand2 className="w-3.5 h-3.5 text-emerald-600" />
-                Merge Duplicate Categories
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleMergeDuplicates}
+                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 border border-emerald-200/80 shadow-2xs"
+                  title="Find and merge duplicate categories with identical names"
+                >
+                  <Wand2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Merge Duplicate Categories
+                </button>
+
+                {categories.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to remove ALL categories from the marketplace? This action cannot be undone.')) {
+                        dbLocal.clearAllCategories();
+                        showToast('Successfully removed all categories from marketplace.');
+                        loadData();
+                        if (onRefresh) onRefresh();
+                      }
+                    }}
+                    className="bg-rose-50 hover:bg-rose-100 text-rose-800 font-extrabold text-xs px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 border border-rose-200/80 shadow-2xs cursor-pointer"
+                    title="Remove all categories from marketplace"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    Wipe All Categories ({categories.length})
+                  </button>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
               {categories.map(c => (

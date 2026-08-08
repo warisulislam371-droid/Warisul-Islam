@@ -19,7 +19,6 @@ import {
 
 import { categorizeProductLocally, auditProductsLocally } from './src/utils/medicalCategorizer';
 import { getCategorySeoUrl, getSubcategorySeoUrl, getProductSeoUrl } from './src/utils/seoUrls';
-import { uploadToR2, deleteFromR2, listR2Images } from './src/server/r2Service';
 import { uploadToCloudinary, deleteFromCloudinary, listCloudinaryImages } from './src/server/cloudinaryService';
 
 dotenv.config();
@@ -695,7 +694,7 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
   });
 
   // =========================================================================
-  // Cloudflare R2 Storage Backend API Routes
+  // Cloudinary CDN Storage Backend API Routes
   // =========================================================================
 
   /**

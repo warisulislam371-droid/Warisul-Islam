@@ -161,9 +161,9 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
 
     try {
       setIsUploading(true);
-      setStatusMessage({ type: 'info', text: 'Uploading compressed image to Cloudflare R2 Storage...' });
+      setStatusMessage({ type: 'info', text: 'Uploading compressed image to Cloudinary Storage...' });
 
-      // Call Cloudflare R2 API Endpoint
+      // Call Cloudinary Upload API Endpoint
       const response = await fetch('/api/upload-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -179,7 +179,7 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
       });
 
       if (!response.ok) {
-        throw new Error(`Cloudflare R2 Upload API returned status ${response.status}`);
+        throw new Error(`Cloudinary Upload API returned status ${response.status}`);
       }
 
       const r2Data = await response.json();
@@ -337,9 +337,9 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
               <ImageIcon className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Product Image Assets & Cloudflare R2 Storage Gallery</h3>
+              <h3 className="text-lg font-bold text-slate-900">Product Image Assets & Cloudinary CDN Storage Gallery</h3>
               <p className="text-xs text-slate-500">
-                Upload up to 10 clinical-grade images with automatic WebP conversion & Cloudflare R2 CDN hosting
+                Upload up to 10 clinical-grade images with automatic WebP conversion & Cloudinary CDN hosting
               </p>
             </div>
           </div>
@@ -700,7 +700,7 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="text-base font-bold text-slate-900">Image Inspection & Cloudflare R2 Storage Metadata</h3>
+            <h3 className="text-base font-bold text-slate-900">Image Inspection & Cloudinary Storage Metadata</h3>
 
             <div className="aspect-video bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border">
               <img src={selectedImageModal.secureUrl} alt="" className="max-h-full max-w-full object-contain" />
@@ -708,7 +708,7 @@ export const ProductImageManager: React.FC<ProductImageManagerProps> = ({
 
             <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl text-xs">
               <div>
-                <span className="text-slate-400 block text-[10px]">Cloudflare R2 Storage Path</span>
+                <span className="text-slate-400 block text-[10px]">Cloudinary Public ID / Storage Path</span>
                 <span className="font-mono font-bold text-slate-700">{selectedImageModal.cloudinaryPublicId}</span>
               </div>
               <div>

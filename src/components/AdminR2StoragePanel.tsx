@@ -9,23 +9,27 @@ import {
   CheckCircle2, 
   Image as ImageIcon, 
   Server, 
-  ShieldCheck, 
   Layers, 
   Search,
   Sparkles,
   Info
 } from 'lucide-react';
-import { getMarketplaceImagesFromR2, uploadProductImageToR2, deleteImageFromR2 } from '../utils/r2Storage';
+import { 
+  getMarketplaceImagesFromCloudinary, 
+  uploadProductImageToCloudinary, 
+  deleteImageFromCloudinary 
+} from '../utils/cloudinary';
 
-export const AdminR2StoragePanel: React.FC = () => {
+export const AdminCloudinaryStoragePanel: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [stats, setStats] = useState<any>({
     totalFiles: 0,
     totalSizeBytes: 0,
     totalSizeMB: '0.00 MB',
-    bucketName: 'healnex-medi-bazar-storage',
+    bucketName: 'healnex-medibazar',
+    cloudName: 'healnex-medibazar',
     r2Configured: true,
-    publicCdnUrl: 'https://cdn.healnex.com'
+    publicCdnUrl: 'https://res.cloudinary.com'
   });
   const [files, setFiles] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -34,21 +38,21 @@ export const AdminR2StoragePanel: React.FC = () => {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const loadR2Data = async () => {
+  const loadCloudinaryData = async () => {
     setLoading(true);
     try {
-      const data = await getMarketplaceImagesFromR2();
+      const data = await getMarketplaceImagesFromCloudinary();
       if (data.stats) setStats(data.stats);
       if (data.files) setFiles(data.files);
     } catch (err) {
-      console.error('Failed to load R2 data:', err);
+      console.error('Failed to load Cloudinary data:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadR2Data();
+    loadCloudinaryData();
   }, []);
 
   const showToast = (msg: string) => {
@@ -58,17 +62,17 @@ export const AdminR2StoragePanel: React.FC = () => {
 
   const handleCopyUrl = (url: string) => {
     navigator.clipboard.writeText(url);
-    showToast('Copied Cloudflare R2 Public CDN URL to clipboard!');
+    showToast('Copied Cloudinary Public CDN URL to clipboard!');
   };
 
   const handleDeleteImage = async (key: string) => {
-    if (!window.confirm(`Are you sure you want to delete this file from Cloudflare R2?\n\nPath: ${key}`)) {
+    if (!window.confirm(`Are you sure you want to delete this file from Cloudinary CDN?\n\nPath: ${key}`)) {
       return;
     }
     try {
-      await deleteImageFromR2(key);
-      showToast('Deleted file from Cloudflare R2 bucket.');
-      loadR2Data();
+      await deleteImageFromCloudinary(key);
+      showToast('Deleted file from Cloudinary CDN storage.');
+      loadCloudinaryData();
     } catch (err: any) {
       alert(`Delete failed: ${err.message || err}`);
     }
@@ -82,10 +86,10 @@ export const AdminR2StoragePanel: React.FC = () => {
     try {
       for (let i = 0; i < fileList.length; i++) {
         const file = fileList[i];
-        await uploadProductImageToR2(file, uploadCategory, uploadSku, 'Admin');
+        await uploadProductImageToCloudinary(file, uploadCategory, uploadSku, 'Admin');
       }
-      showToast(`Successfully uploaded ${fileList.length} image(s) to Cloudflare R2!`);
-      loadR2Data();
+      showToast(`Successfully uploaded ${fileList.length} image(s) to Cloudinary CDN!`);
+      loadCloudinaryData();
     } catch (err: any) {
       alert(`Upload failed: ${err.message || err}`);
     } finally {
@@ -114,7 +118,7 @@ export const AdminR2StoragePanel: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="bg-white/20 backdrop-blur-md px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest text-blue-200">
-                Primary Image Storage
+                Primary Product Storage Engine
               </span>
               <span className="bg-emerald-500/30 text-emerald-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-400/30 flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" /> Cloudinary CDN Active
@@ -122,11 +126,11 @@ export const AdminR2StoragePanel: React.FC = () => {
             </div>
             <h2 className="text-2xl font-black tracking-tight">Cloudinary Media & Asset Storage System</h2>
             <p className="text-blue-100 text-xs mt-1 max-w-2xl leading-relaxed">
-              Centralized Cloudinary media storage for HealNex Medi Bazar product images, vendor compliance documents, and payment receipts.
+              Centralized Cloudinary CDN media infrastructure for HealNex Medi Bazar product catalog images, vendor compliance documents, and customer payment receipts.
             </p>
           </div>
           <button 
-            onClick={loadR2Data}
+            onClick={loadCloudinaryData}
             disabled={loading}
             className="bg-white/10 hover:bg-white/20 text-white border border-white/30 px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-2 backdrop-blur-sm"
           >
@@ -157,7 +161,7 @@ export const AdminR2StoragePanel: React.FC = () => {
             </div>
           </div>
           <div className="text-2xl font-black text-slate-900">{stats.totalSizeMB}</div>
-          <span className="text-[11px] font-semibold text-slate-500 mt-1 block">Auto Format & Optimization</span>
+          <span className="text-[11px] font-semibold text-slate-500 mt-1 block">Auto Format & WebP Optimization</span>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -168,7 +172,7 @@ export const AdminR2StoragePanel: React.FC = () => {
             </div>
           </div>
           <div className="text-sm font-black text-slate-900 truncate font-mono">{stats.cloudName || stats.bucketName || 'healnex-medibazar'}</div>
-          <span className="text-[11px] font-semibold text-purple-600 mt-1 block">Cloudinary Cloud Infrastructure</span>
+          <span className="text-[11px] font-semibold text-purple-600 mt-1 block">Cloudinary Infrastructure</span>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -198,12 +202,11 @@ export const AdminR2StoragePanel: React.FC = () => {
         </div>
       </div>
 
-
       {/* Admin Upload Section */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
         <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-          <Upload className="w-4 h-4 text-orange-600" />
-          Direct Cloudflare R2 Marketplace Asset Uploader
+          <Upload className="w-4 h-4 text-blue-600" />
+          Direct Cloudinary Marketplace Product Asset Uploader
         </h3>
         
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -214,7 +217,7 @@ export const AdminR2StoragePanel: React.FC = () => {
               value={uploadCategory} 
               onChange={e => setUploadCategory(e.target.value)} 
               placeholder="e.g. ultrasound"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium outline-none focus:border-orange-500"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium outline-none focus:border-blue-500"
             />
           </div>
           <div>
@@ -224,17 +227,17 @@ export const AdminR2StoragePanel: React.FC = () => {
               value={uploadSku} 
               onChange={e => setUploadSku(e.target.value)} 
               placeholder="e.g. USG001"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium outline-none focus:border-orange-500"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium outline-none focus:border-blue-500"
             />
           </div>
           <div className="flex items-end">
             <label className={`w-full text-center px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-2 shadow-sm ${
               isUploading 
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                : 'bg-orange-600 hover:bg-orange-700 text-white'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
             }`}>
               <Upload className="w-4 h-4" />
-              {isUploading ? 'Uploading to R2...' : 'Select File(s) to Upload'}
+              {isUploading ? 'Uploading to Cloudinary...' : 'Select Product File(s) to Upload'}
               <input 
                 type="file" 
                 multiple 
@@ -253,11 +256,11 @@ export const AdminR2StoragePanel: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-orange-600" />
-              Cloudflare R2 Media Gallery & Assets ({filteredFiles.length})
+              <Layers className="w-4 h-4 text-blue-600" />
+              Cloudinary Media Gallery & Assets ({filteredFiles.length})
             </h3>
             <p className="text-[11px] text-slate-500">
-              Direct access to all images hosted in the Cloudflare R2 bucket.
+              Direct access to all product images hosted on Cloudinary CDN.
             </p>
           </div>
 
@@ -268,19 +271,19 @@ export const AdminR2StoragePanel: React.FC = () => {
               value={searchTerm} 
               onChange={e => setSearchTerm(e.target.value)} 
               placeholder="Search by SKU, filename or path..." 
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium outline-none focus:border-orange-500"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium outline-none focus:border-blue-500"
             />
           </div>
         </div>
 
         {loading ? (
           <div className="py-12 text-center text-slate-400 text-xs font-bold flex flex-col items-center gap-2">
-            <RefreshCw className="w-6 h-6 animate-spin text-orange-500" />
-            Scanning Cloudflare R2 Storage Bucket...
+            <RefreshCw className="w-6 h-6 animate-spin text-blue-500" />
+            Scanning Cloudinary Storage Engine...
           </div>
         ) : filteredFiles.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs font-medium bg-slate-50 rounded-2xl border border-dashed">
-            No media assets found in Cloudflare R2 bucket matching search criteria.
+            No product assets found in Cloudinary matching search criteria.
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -311,8 +314,8 @@ export const AdminR2StoragePanel: React.FC = () => {
                 <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
                   <button 
                     onClick={() => handleCopyUrl(file.url)}
-                    title="Copy R2 CDN URL"
-                    className="p-2 bg-white text-slate-900 rounded-lg hover:bg-orange-500 hover:text-white transition shadow-sm"
+                    title="Copy Cloudinary CDN URL"
+                    className="p-2 bg-white text-slate-900 rounded-lg hover:bg-blue-500 hover:text-white transition shadow-sm"
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>
@@ -320,14 +323,14 @@ export const AdminR2StoragePanel: React.FC = () => {
                     href={file.url} 
                     target="_blank" 
                     rel="noreferrer"
-                    title="Open R2 Asset"
-                    className="p-2 bg-white text-slate-900 rounded-lg hover:bg-orange-500 hover:text-white transition shadow-sm"
+                    title="Open Cloudinary Asset"
+                    className="p-2 bg-white text-slate-900 rounded-lg hover:bg-blue-500 hover:text-white transition shadow-sm"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                   <button 
                     onClick={() => handleDeleteImage(file.key)}
-                    title="Delete from R2"
+                    title="Delete from Cloudinary"
                     className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-sm"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -341,4 +344,6 @@ export const AdminR2StoragePanel: React.FC = () => {
     </div>
   );
 };
-export default AdminR2StoragePanel;
+
+export const AdminR2StoragePanel = AdminCloudinaryStoragePanel;
+export default AdminCloudinaryStoragePanel;
