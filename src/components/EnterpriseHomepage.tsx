@@ -142,7 +142,7 @@ export default function EnterpriseHomepage({
       clearTimeout(hoverTimerRef.current);
       hoverTimerRef.current = null;
     }
-    setSidebarExpandedCategory(prev => (prev === catName ? null : prev));
+    setSidebarExpandedCategory(prev => (prev?.trim().toLowerCase() === catName.trim().toLowerCase() ? null : prev));
   };
 
   const handleSidebarCategoryClick = (e: React.MouseEvent, catName: string) => {
