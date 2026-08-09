@@ -49,10 +49,14 @@ export default function ReviewsPage({
 
     const loadedProducts = dbLocal.getProducts().filter(p => {
       const statusLower = (p.status || '').toLowerCase();
-      const isApprovedStatus = statusLower === 'approved' || statusLower === 'published';
+      const isApprovedStatus = statusLower === 'approved' || statusLower === 'published' || statusLower === 'active' || statusLower === 'live';
       const isVendorApproved = approvedVendorIds.has(p.vendorId) ||
-        (!!p.vendorName && approvedVendorNames.has(p.vendorName.trim().toLowerCase()));
-      return isApprovedStatus && p.published !== false && p.isActive !== false && isVendorApproved;
+        (!!p.vendorName && approvedVendorNames.has(p.vendorName.trim().toLowerCase())) ||
+        !p.vendorId || p.vendorId === 'v-admin' || p.vendorId === 'super-admin' || p.vendorId === 'vendor-admin' ||
+        Boolean(p.approvedBy);
+
+      const isLive = (isApprovedStatus || p.published === true || Boolean(p.approvedBy)) && p.published !== false && p.isActive !== false;
+      return isLive && (isVendorApproved || isApprovedStatus || p.published === true || Boolean(p.approvedBy));
     });
     setProducts(loadedProducts);
     if (loadedProducts.length > 0 && !formProductId) {

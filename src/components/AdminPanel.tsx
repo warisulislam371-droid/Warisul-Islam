@@ -1481,10 +1481,38 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
   const handleAdminSaveEditedProduct = () => {
     if (!editingProductModal) return;
-    const updated = products.map(p => p.id === editingProductModal.id ? editingProductModal : p);
+    const isApproved = editingProductModal.status === 'Approved';
+    const now = new Date().toISOString();
+    const updatedModal = {
+      ...editingProductModal,
+      published: isApproved ? true : editingProductModal.published,
+      isActive: isApproved ? true : editingProductModal.isActive,
+      approvedBy: isApproved ? (editingProductModal.approvedBy || currentUser?.id || 'admin') : editingProductModal.approvedBy,
+      approvedAt: isApproved ? (editingProductModal.approvedAt || now) : editingProductModal.approvedAt,
+      publishedAt: isApproved ? (editingProductModal.publishedAt || now) : editingProductModal.publishedAt,
+      updatedAt: now
+    };
+    const updated = products.map(p => p.id === updatedModal.id ? updatedModal : p);
+
+    if (isApproved && updatedModal.vendorId) {
+      const allVendors = dbLocal.getVendors();
+      let vendorUpdated = false;
+      const updatedVendors = allVendors.map(v => {
+        if (v.id === updatedModal.vendorId && v.status !== 'Approved') {
+          vendorUpdated = true;
+          return { ...v, status: 'Approved' as const, updatedAt: now };
+        }
+        return v;
+      });
+      if (vendorUpdated) {
+        dbLocal.saveVendors(updatedVendors);
+        setVendors(updatedVendors);
+      }
+    }
+
     dbLocal.saveProducts(updated);
     setProducts(updated);
-    addToast(`Product "${editingProductModal.name}" updated successfully!`, 'success');
+    addToast(`Product "${updatedModal.name}" updated and published live!`, 'success');
     setEditingProductModal(null);
   };
 

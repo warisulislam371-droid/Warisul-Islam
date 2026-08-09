@@ -226,19 +226,22 @@ export default function CustomerPanel({
     const approvedVendorIds = new Set(approvedVendors.map(v => v.id));
     const approvedVendorNames = new Set(approvedVendors.map(v => v.companyName.trim().toLowerCase()));
 
-    // All approved/published products that belong to approved vendors are visible to customers on the platform
+    // All approved/published products that belong to approved vendors or are admin-approved are visible live to customers on the platform
     const approvedProducts = dbLocal.getProducts().filter(p => {
       const statusLower = (p.status || '').toLowerCase();
-      const isApprovedStatus = statusLower === 'approved' || statusLower === 'published';
+      const isApprovedStatus = statusLower === 'approved' || statusLower === 'published' || statusLower === 'active' || statusLower === 'live';
       const isExplicitlyUnpublished = p.published === false;
       const isActive = p.isActive !== false;
 
-      // Ensure the vendor is approved or product is managed directly by Admin / Platform
+      // Ensure vendor is approved or product is managed/approved directly by Admin / Platform
       const isVendorApproved = approvedVendorIds.has(p.vendorId) ||
         (!!p.vendorName && approvedVendorNames.has(p.vendorName.trim().toLowerCase())) ||
-        !p.vendorId || p.vendorId === 'v-admin' || p.vendorId === 'super-admin' || p.vendorId === 'vendor-admin';
+        !p.vendorId || p.vendorId === 'v-admin' || p.vendorId === 'super-admin' || p.vendorId === 'vendor-admin' ||
+        Boolean(p.approvedBy);
 
-      return isApprovedStatus && !isExplicitlyUnpublished && isActive && isVendorApproved;
+      const isLive = (isApprovedStatus || p.published === true || Boolean(p.approvedBy)) && !isExplicitlyUnpublished && isActive;
+
+      return isLive && (isVendorApproved || isApprovedStatus || p.published === true || Boolean(p.approvedBy));
     });
     setProducts(prev => {
       if (JSON.stringify(prev) === JSON.stringify(approvedProducts)) return prev;
