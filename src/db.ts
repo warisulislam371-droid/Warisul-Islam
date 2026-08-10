@@ -675,33 +675,77 @@ export const dbLocal = {
     }
   },
 
+  async resetAllData() {
+    // 1. Clear memory cache
+    Object.keys(memoryCache).forEach(k => delete memoryCache[k]);
+
+    // 2. Clear localStorage keys
+    Object.values(STORAGE_KEYS).forEach(key => {
+      try { localStorage.removeItem(key); } catch (e) {}
+    });
+    const extraKeys = [
+      'healnex_removed_categories',
+      'healnex_cart',
+      'healnex_wishlist',
+      'healnex_products_wiped_v3',
+      'healnex_categories_wiped_v3'
+    ];
+    extraKeys.forEach(k => {
+      try { localStorage.removeItem(k); } catch (e) {}
+    });
+
+    // 3. Reset default seed state
+    this.set(STORAGE_KEYS.USERS, DEFAULT_USERS);
+    this.set(STORAGE_KEYS.VENDORS, DEFAULT_VENDORS);
+    this.set(STORAGE_KEYS.PRODUCTS, []);
+    this.set(STORAGE_KEYS.ORDERS, DEFAULT_ORDERS);
+    this.set(STORAGE_KEYS.RFQS, DEFAULT_RFQS);
+    this.set(STORAGE_KEYS.QUOTATIONS, DEFAULT_QUOTATIONS);
+    this.set(STORAGE_KEYS.TICKETS, DEFAULT_TICKETS);
+    this.set(STORAGE_KEYS.BLOGS, INITIAL_BLOGS);
+    this.set(STORAGE_KEYS.NOTIFICATIONS, DEFAULT_NOTIFICATIONS);
+    this.set(STORAGE_KEYS.REVIEWS, DEFAULT_REVIEWS);
+    this.set(STORAGE_KEYS.PAYMENT_SETTINGS, [DEFAULT_PAYMENT_SETTINGS]);
+    this.set(STORAGE_KEYS.WHATSAPP_SETTINGS, [DEFAULT_WHATSAPP_SETTINGS]);
+    this.set(STORAGE_KEYS.WHATSAPP_CLICK_LOGS, []);
+    this.set(STORAGE_KEYS.CLEARANCE_REQUESTS, DEFAULT_CLEARANCE_REQUESTS);
+    this.set(STORAGE_KEYS.PROMO_BANNERS, DEFAULT_PROMO_BANNERS);
+    this.set(STORAGE_KEYS.CATEGORIES, []);
+    this.set(STORAGE_KEYS.BRANDS, INITIAL_BRANDS);
+    this.set(STORAGE_KEYS.CATEGORY_REQUESTS, []);
+    this.set(STORAGE_KEYS.BRAND_REQUESTS, []);
+    this.set(STORAGE_KEYS.PRICE_ALERTS, []);
+    this.set(STORAGE_KEYS.SOCIAL_LINKS, [DEFAULT_SOCIAL_LINKS]);
+    this.set(STORAGE_KEYS.DEAL_OF_DAY, DEFAULT_DEAL_OF_DAY);
+    this.set(STORAGE_KEYS.CURRENT_USER, null);
+
+    // 4. Also wipe Firestore collections if connected
+    try {
+      const collectionsToWipe = ['products', 'categories', 'orders', 'rfqs', 'quotations', 'tickets', 'notifications', 'reviews', 'clearance_requests', 'categoryRequests', 'brandRequests', 'price_alerts'];
+      for (const collName of collectionsToWipe) {
+        try {
+          const snap = await getDocs(collection(db, collName));
+          snap.forEach((docSnap) => {
+            deleteDoc(doc(db, collName, docSnap.id)).catch(() => {});
+          });
+        } catch (e) {}
+      }
+    } catch (err) {}
+
+    window.dispatchEvent(new Event('healnex_db_update'));
+  },
+
   async init() {
-    // Synchronous local state initialization for immediate rendering
-    // Clean wipe of all previously uploaded/stored products as requested
-    if (!localStorage.getItem('healnex_products_wiped_v3')) {
-      localStorage.setItem('healnex_products_wiped_v3', 'true');
-      this.set(STORAGE_KEYS.PRODUCTS, []);
-      try {
-        const querySnapshot = await getDocs(collection(db, 'products'));
-        querySnapshot.forEach((document) => {
-          deleteDoc(doc(db, 'products', document.id)).catch(() => {});
-        });
-      } catch (err) {}
-    } else if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
-      this.set(STORAGE_KEYS.PRODUCTS, []);
+    // Execute reset if requested
+    if (!localStorage.getItem('healnex_data_reset_v4')) {
+      localStorage.setItem('healnex_data_reset_v4', 'true');
+      await this.resetAllData();
     }
 
-    // Clean wipe of all previously stored categories as requested
-    if (!localStorage.getItem('healnex_categories_wiped_v3')) {
-      localStorage.setItem('healnex_categories_wiped_v3', 'true');
-      this.set(STORAGE_KEYS.CATEGORIES, []);
-      try {
-        const querySnapshot = await getDocs(collection(db, 'categories'));
-        querySnapshot.forEach((document) => {
-          deleteDoc(doc(db, 'categories', document.id)).catch(() => {});
-        });
-      } catch (err) {}
-    } else if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) {
+    if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
+      this.set(STORAGE_KEYS.PRODUCTS, []);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) {
       this.set(STORAGE_KEYS.CATEGORIES, []);
     }
 
