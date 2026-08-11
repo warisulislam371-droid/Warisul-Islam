@@ -6,6 +6,7 @@ import VendorProductManager from './VendorProductManager';
 import VendorAnalytics from './VendorAnalytics';
 import { VendorVerificationWizard } from './VendorVerificationWizard';
 import { ProductImageManager } from './ProductImageManager';
+import InvoicePDF from './InvoicePDF';
 import {
   Store,
   Upload,
@@ -90,6 +91,7 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
   const [reqUpiId, setReqUpiId] = useState<string>('');
   const [reqNote, setReqNote] = useState<string>('');
   const [viewInvoiceModal, setViewInvoiceModal] = useState<PaymentClearanceRequest | null>(null);
+  const [selectedVendorOrderInvoice, setSelectedVendorOrderInvoice] = useState<Order | null>(null);
 
   // Add Product Form State
   const [newProdName, setNewProdName] = useState('');
@@ -2328,6 +2330,14 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
                   </div>
 
                   <div className="flex flex-col justify-start items-end gap-2.5 shrink-0 w-full sm:w-64">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedVendorOrderInvoice(o)}
+                      className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-bold py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-teal-700" />
+                      <span>Print Tax Invoice / Slip</span>
+                    </button>
                     {['Pending', 'Confirmed', 'Order Sent to Vendor', 'Payment Verified', 'Paid'].includes(o.status) && (
                       <div className="flex gap-2 w-full">
                         <button
@@ -3122,6 +3132,15 @@ export default function VendorPanel({ currentUser, addToast }: VendorPanelProps)
             </div>
           </div>
         </div>
+      )}
+
+      {/* Invoice Print Modal Overlay */}
+      {selectedVendorOrderInvoice && (
+        <InvoicePDF
+          order={selectedVendorOrderInvoice}
+          onClose={() => setSelectedVendorOrderInvoice(null)}
+          addToast={addToast}
+        />
       )}
 
     </div>

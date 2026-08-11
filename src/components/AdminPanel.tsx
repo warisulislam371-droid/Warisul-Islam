@@ -8,6 +8,7 @@ import { AdminVerificationPanel } from './AdminVerificationPanel';
 import { AdminCategorizationPanel } from './AdminCategorizationPanel';
 import { AdminCloudinaryStoragePanel } from './AdminR2StoragePanel';
 import AdminBulkProductUploadModal from './AdminBulkProductUploadModal';
+import InvoicePDF from './InvoicePDF';
 import {
   UploadCloud,
   TrendingUp,
@@ -226,6 +227,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
+  const [selectedAdminOrderInvoice, setSelectedAdminOrderInvoice] = useState<Order | null>(null);
   
   // Custom push trigger form state
   const [pushTitle, setPushTitle] = useState('');
@@ -2211,6 +2213,14 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAdminOrderInvoice(order)}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition cursor-pointer shadow-2xs"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-teal-700" />
+                        <span>Print Tax Invoice</span>
+                      </button>
                       {order.paymentProofUrl && (
                         <button
                           type="button"
@@ -9110,6 +9120,15 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
           </div>
         </div>
       </div>
+    )}
+
+    {/* Dedicated Invoice Print Modal Overlay */}
+    {selectedAdminOrderInvoice && (
+      <InvoicePDF
+        order={selectedAdminOrderInvoice}
+        onClose={() => setSelectedAdminOrderInvoice(null)}
+        addToast={addToast}
+      />
     )}
     </>
   );
