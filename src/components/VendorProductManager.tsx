@@ -1700,7 +1700,7 @@ export default function VendorProductManager({
                       <img
                         src={p.images && p.images[0] ? p.images[0] : 'https://images.unsplash.com/photo-1516549655169-df83a0774514'}
                         alt={p.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out transform-gpu"
                       />
                       <span className="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-mono px-1 rounded">
                         ₹{(p.salePrice / 1000).toFixed(0)}k

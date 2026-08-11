@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Notification, Category, PriceAlert } from '../types';
+import { User, Notification, Category, PriceAlert, RFQ } from '../types';
 import { dbLocal } from '../db';
 import { MARKETPLACE_LOGO } from '../assets/logo';
 import {
@@ -32,7 +32,8 @@ import {
   Layers,
   ArrowRight,
   TrendingDown,
-  Tag
+  Tag,
+  FilePlus
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -81,6 +82,7 @@ export default function Navbar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([]);
+  const [rfqs, setRfqs] = useState<RFQ[]>([]);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -110,13 +112,17 @@ export default function Navbar({
   useEffect(() => {
     setNotifications(dbLocal.getNotifications());
     setPriceAlerts(dbLocal.getPriceAlerts());
+    setRfqs(dbLocal.getRfqs());
     const handleDbUpdate = () => {
       setNotifications(dbLocal.getNotifications());
       setPriceAlerts(dbLocal.getPriceAlerts());
+      setRfqs(dbLocal.getRfqs());
     };
     window.addEventListener('healnex_db_update', handleDbUpdate);
     return () => window.removeEventListener('healnex_db_update', handleDbUpdate);
   }, []);
+
+  const activeRfqsCount = rfqs.length;
 
   const displayedNotifications = notifications.filter(n => {
     if (!currentUser) return false;
@@ -447,6 +453,25 @@ export default function Navbar({
             )}
           </div>
 
+          {/* RFQ Tender System Badge */}
+          <button
+            onClick={() => onNavigate('rfqs')}
+            className={`p-2 rounded-2xl transition relative flex flex-col items-center justify-center text-[10px] font-bold ${
+              currentView === 'rfqs'
+                ? 'text-[#0F9D8A] bg-teal-50 border border-teal-200'
+                : 'text-slate-600 hover:text-[#0F9D8A] hover:bg-slate-100'
+            }`}
+            title="RFQ System: Request for Quotations & Hospital B2B Tenders"
+          >
+            <FilePlus className="w-5 h-5 text-teal-700" />
+            <span className="hidden lg:block text-[9px] mt-0.5">RFQ System</span>
+            {activeRfqsCount > 0 && (
+              <span className="absolute top-1 right-1 bg-amber-500 text-slate-950 font-mono font-bold text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow-2xs">
+                {activeRfqsCount}
+              </span>
+            )}
+          </button>
+
           {/* My Orders Badge */}
           <button
             onClick={() => onNavigate('orders')}
@@ -521,10 +546,16 @@ export default function Navbar({
                       </button>
                     )}
                     <button
+                      onClick={() => { onNavigate('rfqs'); setShowUserDropdown(false); }}
+                      className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2 text-teal-700 font-semibold"
+                    >
+                      <FilePlus className="w-4 h-4 text-teal-600" /> RFQ System &amp; Tenders
+                    </button>
+                    <button
                       onClick={() => { onNavigate('orders'); setShowUserDropdown(false); }}
                       className="w-full text-left px-4 py-2 text-xs hover:bg-slate-50 flex items-center gap-2 text-slate-700 font-medium"
                     >
-                      <ClipboardList className="w-4 h-4" /> My Orders &amp; RFQs
+                      <ClipboardList className="w-4 h-4" /> My Orders &amp; Track
                     </button>
                     <div className="border-t border-slate-100 my-1"></div>
                     <button
@@ -626,10 +657,19 @@ export default function Navbar({
             })}
             <button 
               onClick={() => onNavigate('rfqs')} 
-              className="text-amber-300 hover:text-amber-200 transition font-extrabold whitespace-nowrap flex items-center gap-1"
+              className={`transition font-extrabold whitespace-nowrap flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs ${
+                currentView === 'rfqs'
+                  ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                  : 'bg-amber-500/20 text-amber-300 hover:bg-amber-400/30'
+              }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Hospital B2B Tenders</span>
+              <FilePlus className="w-3.5 h-3.5 text-amber-300" />
+              <span>RFQ System (Tenders)</span>
+              {activeRfqsCount > 0 && (
+                <span className="bg-amber-500 text-slate-950 text-[10px] font-mono font-black px-1.5 py-0.2 rounded-full">
+                  {activeRfqsCount}
+                </span>
+              )}
             </button>
             <button 
               onClick={() => onNavigate('orders')} 
@@ -683,10 +723,17 @@ export default function Navbar({
 
             <button
               onClick={() => { onNavigate('rfqs'); setMobileMenuOpen(false); }}
-              className="p-2.5 rounded-xl bg-amber-50 text-amber-900 flex items-center gap-2"
+              className="p-2.5 rounded-xl bg-amber-50 text-amber-900 border border-amber-200/60 flex items-center justify-between"
             >
-              <Sparkles className="w-4 h-4 text-amber-600" />
-              <span>B2B Tenders</span>
+              <div className="flex items-center gap-2">
+                <FilePlus className="w-4 h-4 text-amber-600" />
+                <span>RFQ System</span>
+              </div>
+              {activeRfqsCount > 0 && (
+                <span className="bg-amber-500 text-slate-950 font-bold text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                  {activeRfqsCount}
+                </span>
+              )}
             </button>
 
             <button

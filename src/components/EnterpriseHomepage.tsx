@@ -615,7 +615,7 @@ export default function EnterpriseHomepage({
           <img
             src={product.images && product.images.length > 0 ? product.images[0] : 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400'}
             alt={product.name}
-            className="max-h-full max-w-full object-contain group-hover/img:scale-105 transition-transform duration-500"
+            className="max-h-full max-w-full object-contain group-hover:scale-105 group-hover/img:scale-105 transition-transform duration-500 ease-out transform-gpu"
             referrerPolicy="no-referrer"
           />
           <div className="absolute inset-0 bg-slate-950/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white font-extrabold text-[11px] backdrop-blur-[1px]">
