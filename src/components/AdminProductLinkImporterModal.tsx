@@ -120,10 +120,26 @@ export default function AdminProductLinkImporterModal({
         throw new Error(data.error || 'Failed to auto-generate product from link.');
       }
 
+      const effectiveCommissionRate = selectedVendor?.customCommissionRate !== undefined
+        ? selectedVendor.customCommissionRate
+        : (dbLocal.getPaymentSettings().platformCommissionRate || 10);
+      
+      const rawSalePrice = data.product.salePrice || data.product.price || 1000;
+      const initialVendorPrice = data.product.vendorPrice || Math.round(rawSalePrice * 0.90);
+      const initialCommAmount = Math.round((initialVendorPrice * effectiveCommissionRate) / 100);
+      const initialFinalPrice = initialVendorPrice + initialCommAmount;
+
       setGeneratedProduct({
         ...data.product,
         vendorId: resolvedVendorId,
-        vendorName: vendorDisplayName
+        vendorName: vendorDisplayName,
+        vendorPrice: initialVendorPrice,
+        commissionRate: effectiveCommissionRate,
+        commissionAmount: initialCommAmount,
+        price: initialFinalPrice,
+        salePrice: initialFinalPrice,
+        finalPrice: initialFinalPrice,
+        vendorPayout: initialVendorPrice
       });
       setExtractionMeta(data.rawExtracted || null);
       setActiveImageIdx(0);
@@ -157,6 +173,10 @@ export default function AdminProductLinkImporterModal({
     const collected: Product[] = [];
     let failedCount = 0;
 
+    const effectiveCommissionRate = selectedVendor?.customCommissionRate !== undefined
+      ? selectedVendor.customCommissionRate
+      : (dbLocal.getPaymentSettings().platformCommissionRate || 10);
+
     for (let i = 0; i < urls.length; i++) {
       const singleUrl = urls[i];
       setBatchProgress({ total: urls.length, current: i + 1, failed: failedCount });
@@ -174,10 +194,22 @@ export default function AdminProductLinkImporterModal({
 
         const data = await res.json();
         if (data.success && data.product) {
+          const rawSalePrice = data.product.salePrice || data.product.price || 1000;
+          const vPrice = data.product.vendorPrice || Math.round(rawSalePrice * 0.90);
+          const commAmt = Math.round((vPrice * effectiveCommissionRate) / 100);
+          const fPrice = vPrice + commAmt;
+
           collected.push({
             ...data.product,
             vendorId: resolvedVendorId,
-            vendorName: vendorDisplayName
+            vendorName: vendorDisplayName,
+            vendorPrice: vPrice,
+            commissionRate: effectiveCommissionRate,
+            commissionAmount: commAmt,
+            price: fPrice,
+            salePrice: fPrice,
+            finalPrice: fPrice,
+            vendorPayout: vPrice
           });
         } else {
           failedCount++;
@@ -815,40 +847,151 @@ export default function AdminProductLinkImporterModal({
                           </div>
                         </div>
 
-                        {/* Pricing, MOQ, Stock Row */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          <div>
-                            <label className="block text-[11px] font-black uppercase text-slate-600 mb-1 flex items-center justify-between">
-                              <span>MRP (List Price ₹)</span>
-                            </label>
-                            <input
-                              type="number"
-                              value={generatedProduct.price || 0}
-                              onChange={(e) => setGeneratedProduct({ ...generatedProduct, price: Number(e.target.value), mrp: Number(e.target.value) })}
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black font-mono text-slate-900 focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                            />
+                        {/* Commission Breakdown & Vendor Price Section */}
+                        <div className="bg-gradient-to-r from-teal-50 via-slate-50 to-amber-50 border border-teal-200/90 rounded-2xl p-4 space-y-3.5 shadow-xs">
+                          <div className="flex flex-wrap justify-between items-center gap-2">
+                            <div className="flex items-center gap-2 text-xs font-black text-slate-900 uppercase tracking-wide">
+                              <DollarSign className="w-4 h-4 text-teal-700" />
+                              <span>Vendor Pricing & Platform Commission Configuration</span>
+                            </div>
+                            <span className="text-[10px] font-extrabold bg-teal-100 text-teal-900 px-2 py-0.5 rounded-full border border-teal-200">
+                              Vendor: {vendorDisplayName}
+                            </span>
                           </div>
 
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {/* Vendor Base Price */}
+                            <div>
+                              <label className="block text-[11px] font-black uppercase text-amber-900 mb-1">
+                                Vendor Base Price (₹) <span className="text-red-500">*</span>
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-2 text-slate-400 font-bold text-xs">₹</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={generatedProduct.vendorPrice !== undefined ? generatedProduct.vendorPrice : Math.round((generatedProduct.salePrice || 1000) * 0.90)}
+                                  onChange={(e) => {
+                                    const vPrice = Math.max(0, Number(e.target.value));
+                                    const commRate = generatedProduct.commissionRate !== undefined ? generatedProduct.commissionRate : 10;
+                                    const commAmt = Math.round((vPrice * commRate) / 100);
+                                    const fPrice = vPrice + commAmt;
+                                    setGeneratedProduct({
+                                      ...generatedProduct,
+                                      vendorPrice: vPrice,
+                                      commissionAmount: commAmt,
+                                      price: fPrice,
+                                      salePrice: fPrice,
+                                      finalPrice: fPrice,
+                                      vendorPayout: vPrice
+                                    });
+                                  }}
+                                  className="w-full pl-7 pr-3 py-2 bg-white border border-amber-300 rounded-xl text-xs font-black font-mono text-amber-950 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                                />
+                              </div>
+                              <span className="text-[9px] text-amber-700 font-bold mt-0.5 block">
+                                Amount paid out to vendor
+                              </span>
+                            </div>
+
+                            {/* Commission Rate (%) */}
+                            <div>
+                              <label className="block text-[11px] font-black uppercase text-rose-900 mb-1">
+                                Commission Rate (%)
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.5"
+                                  value={generatedProduct.commissionRate !== undefined ? generatedProduct.commissionRate : 10}
+                                  onChange={(e) => {
+                                    const commRate = Math.max(0, Number(e.target.value));
+                                    const vPrice = generatedProduct.vendorPrice !== undefined ? generatedProduct.vendorPrice : (generatedProduct.salePrice || 1000);
+                                    const commAmt = Math.round((vPrice * commRate) / 100);
+                                    const fPrice = vPrice + commAmt;
+                                    setGeneratedProduct({
+                                      ...generatedProduct,
+                                      commissionRate: commRate,
+                                      commissionAmount: commAmt,
+                                      price: fPrice,
+                                      salePrice: fPrice,
+                                      finalPrice: fPrice
+                                    });
+                                  }}
+                                  className="w-full pr-8 pl-3 py-2 bg-white border border-rose-300 rounded-xl text-xs font-black font-mono text-rose-950 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                                />
+                                <span className="absolute right-3 top-2 text-rose-400 font-bold text-xs">%</span>
+                              </div>
+                              <span className="text-[9px] text-rose-700 font-bold mt-0.5 block">
+                                Platform fee (+₹{(generatedProduct.commissionAmount || Math.round(((generatedProduct.vendorPrice ?? generatedProduct.salePrice ?? 1000) * (generatedProduct.commissionRate ?? 10)) / 100)).toLocaleString('en-IN')})
+                              </span>
+                            </div>
+
+                            {/* Final Customer Price */}
+                            <div>
+                              <label className="block text-[11px] font-black uppercase text-emerald-900 mb-1">
+                                Customer Price (₹) <span className="text-red-500">*</span>
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-2 text-slate-400 font-bold text-xs">₹</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={generatedProduct.salePrice || generatedProduct.price || 0}
+                                  onChange={(e) => {
+                                    const fPrice = Math.max(0, Number(e.target.value));
+                                    const commRate = generatedProduct.commissionRate !== undefined ? generatedProduct.commissionRate : 10;
+                                    const vPrice = Math.round(fPrice / (1 + (commRate / 100)));
+                                    const commAmt = fPrice - vPrice;
+                                    setGeneratedProduct({
+                                      ...generatedProduct,
+                                      salePrice: fPrice,
+                                      price: fPrice,
+                                      finalPrice: fPrice,
+                                      vendorPrice: vPrice,
+                                      commissionAmount: commAmt,
+                                      vendorPayout: vPrice
+                                    });
+                                  }}
+                                  className="w-full pl-7 pr-3 py-2 bg-emerald-50/70 border-2 border-emerald-500 rounded-xl text-xs font-black font-mono text-emerald-950 focus:ring-2 focus:ring-emerald-600 focus:outline-none shadow-xs"
+                                />
+                              </div>
+                              <span className="text-[9px] text-emerald-700 font-bold mt-0.5 block">
+                                Price listed on marketplace
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Live Commission Equation Banner */}
+                          <div className="text-[11px] bg-white border border-teal-200/80 rounded-xl p-2.5 flex flex-wrap justify-between items-center font-bold text-slate-700">
+                            <span className="text-amber-800 font-mono">
+                              Vendor Price: ₹{(generatedProduct.vendorPrice ?? Math.round((generatedProduct.salePrice || 1000) * 0.90)).toLocaleString('en-IN')}
+                            </span>
+                            <span className="text-slate-400">+</span>
+                            <span className="text-rose-700 font-mono">
+                              Fee ({generatedProduct.commissionRate ?? 10}%): ₹{(generatedProduct.commissionAmount ?? Math.round(((generatedProduct.vendorPrice ?? 1000) * (generatedProduct.commissionRate ?? 10)) / 100)).toLocaleString('en-IN')}
+                            </span>
+                            <span className="text-slate-400">=</span>
+                            <span className="text-emerald-800 font-mono font-black">
+                              Final Price: ₹{(generatedProduct.salePrice || generatedProduct.price || 0).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Pricing, MOQ, Stock Row */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                           <div>
-                            <label className="block text-[11px] font-black uppercase text-emerald-800 mb-1 flex items-center justify-between">
-                              <span className="flex items-center gap-1">
-                                <span>Selling Price (₹)</span>
-                              </span>
-                              <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-black tracking-wide shadow-xs">
-                                Pasted Link Offer
-                              </span>
+                            <label className="block text-[11px] font-black uppercase text-slate-600 mb-1">
+                              MRP (List Price ₹)
                             </label>
                             <input
-                              id="platform-link-selling-price-input"
                               type="number"
-                              placeholder="Pasted Link Offer Price"
-                              value={generatedProduct.salePrice || 0}
-                              onChange={(e) => setGeneratedProduct({ ...generatedProduct, salePrice: Number(e.target.value) })}
-                              className="w-full px-3 py-2 bg-emerald-50/70 border-2 border-emerald-500 rounded-xl text-xs font-black font-mono text-emerald-950 focus:ring-2 focus:ring-emerald-600 focus:outline-none shadow-xs"
+                              value={generatedProduct.mrp || Math.round((generatedProduct.price || 1000) * 1.2)}
+                              onChange={(e) => setGeneratedProduct({ ...generatedProduct, mrp: Number(e.target.value) })}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black font-mono text-slate-900 focus:ring-2 focus:ring-teal-500 focus:outline-none"
                             />
-                            <span className="text-[9px] text-emerald-700 font-bold block mt-0.5 truncate">
-                              ✓ Same price offered on pasted platform link
-                            </span>
                           </div>
 
                           <div>

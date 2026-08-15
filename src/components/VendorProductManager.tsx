@@ -4,6 +4,7 @@ import { dbLocal } from '../db';
 import { uploadProductImageToCloudinary } from '../utils/cloudinary';
 import { detectCategoryAndSubcategory, detectCategoryWithAI, autoSortAndClassifyProducts } from '../utils/categorySorter';
 import { AICategorizerCard } from './AICategorizerCard';
+import AdminProductLinkImporterModal from './AdminProductLinkImporterModal';
 import {
   Plus,
   Search,
@@ -63,6 +64,7 @@ export default function VendorProductManager({
 
   // Modals
   const [showProductModal, setShowProductModal] = useState(false);
+  const [showLinkImporterModal, setShowLinkImporterModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showCategoryRequestModal, setShowCategoryRequestModal] = useState(false);
   const [showBrandRequestModal, setShowBrandRequestModal] = useState(false);
@@ -1337,6 +1339,15 @@ export default function VendorProductManager({
           >
             <Upload className="w-4 h-4 text-teal-600" />
             Bulk Import
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowLinkImporterModal(true)}
+            className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl border border-teal-500 shadow-sm transition flex items-center gap-2 cursor-pointer"
+            title="Paste any product web link to auto-generate Name, Image, Price, GST, and HSN Code"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+            <span>Paste Link & Auto-Generate</span>
           </button>
           <button
             onClick={() => setShowCategoryRequestModal(true)}
@@ -3024,6 +3035,24 @@ export default function VendorProductManager({
           </div>
         </div>
       )}
+
+      {/* Auto Product Generator from Web Link (URL) Modal for Vendor */}
+      <AdminProductLinkImporterModal
+        isOpen={showLinkImporterModal}
+        onClose={() => setShowLinkImporterModal(false)}
+        vendors={[vendor]}
+        targetVendorId={vendor.id}
+        onProductUploaded={(newProduct) => {
+          onRefresh();
+          setToastMessage(`Product "${newProduct.name}" auto-generated from link & submitted!`);
+          setTimeout(() => setToastMessage(null), 4000);
+        }}
+        onMultipleProductsUploaded={(newProducts) => {
+          onRefresh();
+          setToastMessage(`Successfully auto-generated ${newProducts.length} products from links!`);
+          setTimeout(() => setToastMessage(null), 4000);
+        }}
+      />
     </div>
   );
 }
