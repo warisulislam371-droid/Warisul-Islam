@@ -30,6 +30,9 @@ import {
   Clock,
   Layers,
   ChevronDown,
+  ChevronUp,
+  Info,
+  FileText,
   Percent,
   Check,
   Download,
@@ -52,6 +55,7 @@ interface EnterpriseHomepageProps {
   onCategorySelect: (catName: string) => void;
   onNavigate: (view: string) => void;
   onAddToCart: (product: Product, quantity?: number) => void;
+  onQuickBuy?: (product: Product) => void;
   onAddToWishlist: (productId: string) => void;
   onAddToCompare: (product: Product) => void;
   onQuickView: (product: Product) => void;
@@ -70,6 +74,7 @@ export default function EnterpriseHomepage({
   onCategorySelect,
   onNavigate,
   onAddToCart,
+  onQuickBuy,
   onAddToWishlist,
   onAddToCompare,
   onQuickView,
@@ -82,6 +87,7 @@ export default function EnterpriseHomepage({
   const [emailInput, setEmailInput] = useState('');
   const [lightboxProduct, setLightboxProduct] = useState<Product | null>(null);
   const [savedPriceAlerts, setSavedPriceAlerts] = useState(dbLocal.getPriceAlerts());
+  const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const handleDbUpdate = () => {
@@ -739,6 +745,115 @@ export default function EnterpriseHomepage({
               No-Cost EMI
             </span>
           </div>
+
+          {/* Expand Details Toggle Button */}
+          {(() => {
+            const isExpanded = !!expandedCardIds[product.id];
+            return (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  id={`expand-details-btn-${product.id}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpandedCardIds(prev => ({
+                      ...prev,
+                      [product.id]: !prev[product.id]
+                    }));
+                  }}
+                  className={`w-full py-1.5 px-2.5 rounded-xl text-[10px] font-extrabold border transition flex items-center justify-between cursor-pointer ${
+                    isExpanded
+                      ? 'bg-teal-50 hover:bg-teal-100/80 border-teal-300 text-teal-900 shadow-xs'
+                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200/90 text-slate-700'
+                  }`}
+                  title={isExpanded ? 'Collapse specifications and description' : 'Expand technical specifications and short product description'}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <FileText className={`w-3.5 h-3.5 ${isExpanded ? 'text-teal-600' : 'text-slate-500'}`} />
+                    <span>{isExpanded ? 'Hide Details' : 'Expand Details'}</span>
+                  </span>
+                  {isExpanded ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  )}
+                </button>
+
+                {/* Direct In-Card Expanded Technical Specifications & Description */}
+                {isExpanded && (
+                  <div
+                    id={`expanded-details-panel-${product.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-slate-700 text-[10px] animate-fade-in"
+                  >
+                    {/* Short Description */}
+                    {product.description && (
+                      <div className="space-y-0.5">
+                        <span className="font-extrabold text-[9px] uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                          <Info className="w-3 h-3 text-teal-600" /> Short Overview
+                        </span>
+                        <p className="text-slate-600 line-clamp-3 leading-relaxed bg-white p-1.5 rounded-lg border border-slate-200/70">
+                          {product.description}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Technical Specifications */}
+                    <div className="space-y-0.5">
+                      <span className="font-extrabold text-[9px] uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                        <Layers className="w-3 h-3 text-teal-600" /> Technical Specifications
+                      </span>
+                      {product.specifications && product.specifications.length > 0 ? (
+                        <div className="bg-white p-1.5 rounded-lg border border-slate-200/70 space-y-1">
+                          {product.specifications.slice(0, 4).map((spec, i) => (
+                            <div key={i} className="flex justify-between items-start text-[10px] py-0.5 border-b border-slate-100 last:border-0">
+                              <span className="font-semibold text-slate-500 pr-1.5 truncate max-w-[100px]">{spec.key}:</span>
+                              <span className="font-bold text-slate-800 text-right truncate max-w-[120px]">{spec.value}</span>
+                            </div>
+                          ))}
+                          {product.specifications.length > 4 && (
+                            <button
+                              type="button"
+                              onClick={() => onQuickView(product)}
+                              className="text-[9px] font-bold text-teal-700 hover:text-teal-900 w-full text-center pt-0.5 cursor-pointer block hover:underline"
+                            >
+                              +{product.specifications.length - 4} more specs (Click Quick View)
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-white p-1.5 rounded-lg border border-slate-200/70 space-y-1">
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="font-semibold text-slate-500">Category:</span>
+                            <span className="font-bold text-slate-800">{product.category || 'Medical Equipment'}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="font-semibold text-slate-500">Brand:</span>
+                            <span className="font-bold text-slate-800">{product.brand || 'HealNex Medical'}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="font-semibold text-slate-500">Warranty:</span>
+                            <span className="font-bold text-slate-800">{product.warranty || '1 Year Standard'}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tax & Origin Snapshot */}
+                    <div className="pt-1.5 border-t border-slate-200/80 flex items-center justify-between text-[9px] font-mono text-slate-500">
+                      <span>HSN: <strong className="text-slate-800 font-bold">{product.hsnCode || '9018'}</strong></span>
+                      <span className="bg-teal-100 text-teal-800 font-bold px-1.5 py-0.5 rounded font-sans">
+                        {product.gstRate || 12}% GST
+                      </span>
+                      {product.countryOfOrigin && (
+                        <span className="font-sans text-slate-600 font-medium">📍 {product.countryOfOrigin}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Actions */}
@@ -751,12 +866,18 @@ export default function EnterpriseHomepage({
           </button>
           <button
             onClick={() => {
-              onAddToCart(product, product.moq || 1);
-              onNavigate('cart');
+              if (onQuickBuy) {
+                onQuickBuy(product);
+              } else {
+                onAddToCart(product, product.moq || 1);
+                onNavigate('cart');
+              }
             }}
-            className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white text-[11px] font-bold py-2 rounded-xl transition shadow-sm"
+            className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white text-[11px] font-bold py-2 rounded-xl transition shadow-sm flex items-center justify-center gap-1 cursor-pointer"
+            title="Quick Buy: Instantly proceed to checkout for this product"
           >
-            Buy Now
+            <Zap className="w-3.5 h-3.5 fill-current text-amber-300" />
+            <span>Quick Buy</span>
           </button>
         </div>
       </div>

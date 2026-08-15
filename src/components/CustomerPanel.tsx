@@ -1236,6 +1236,11 @@ export default function CustomerPanel({
             onCategorySelect={onCategorySelect}
             onNavigate={onNavigate}
             onAddToCart={handleAddToCart}
+            onQuickBuy={(p) => {
+              handleAddToCart(p, p.moq || 1);
+              setCheckoutStep('checkout');
+              onNavigate('cart');
+            }}
             onAddToWishlist={(pId) => {
               if (wishlist.includes(pId)) {
                 onUpdateWishlist(wishlist.filter(id => id !== pId));

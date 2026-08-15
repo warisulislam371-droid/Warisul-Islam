@@ -8,6 +8,7 @@ import { AdminVerificationPanel } from './AdminVerificationPanel';
 import { AdminCategorizationPanel } from './AdminCategorizationPanel';
 import { AdminCloudinaryStoragePanel } from './AdminR2StoragePanel';
 import AdminBulkProductUploadModal from './AdminBulkProductUploadModal';
+import AdminProductLinkImporterModal from './AdminProductLinkImporterModal';
 import InvoicePDF from './InvoicePDF';
 import {
   UploadCloud,
@@ -666,6 +667,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [editingVendorModal, setEditingVendorModal] = useState<Vendor | null>(null);
   const [viewingVendorCatalogModal, setViewingVendorCatalogModal] = useState<Vendor | null>(null);
   const [showAdminBulkUploadModal, setShowAdminBulkUploadModal] = useState<boolean>(false);
+  const [showAdminLinkImporterModal, setShowAdminLinkImporterModal] = useState<boolean>(false);
   const [adminBulkUploadPreselectedVendorId, setAdminBulkUploadPreselectedVendorId] = useState<string | undefined>(undefined);
   const [vendorForm, setVendorForm] = useState<{
     companyName: string;
@@ -1485,8 +1487,31 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
     if (!editingProductModal) return;
     const isApproved = editingProductModal.status === 'Approved';
     const now = new Date().toISOString();
+
+    const vPrice = editingProductModal.vendorPrice !== undefined
+      ? Number(editingProductModal.vendorPrice)
+      : Number(editingProductModal.price || 0);
+
+    const commRate = editingProductModal.commissionRate !== undefined
+      ? Number(editingProductModal.commissionRate)
+      : (vendors.find(v => v.id === editingProductModal.vendorId)?.customCommissionRate ?? globalCommRate ?? 10);
+
+    const commAmt = editingProductModal.commissionAmount !== undefined
+      ? Number(editingProductModal.commissionAmount)
+      : Math.round((vPrice * commRate) / 100);
+
+    const finalCustomerPrice = (editingProductModal.price !== undefined && editingProductModal.price > 0)
+      ? Number(editingProductModal.price)
+      : (vPrice + commAmt);
+
     const updatedModal = {
       ...editingProductModal,
+      vendorPrice: vPrice,
+      commissionRate: commRate,
+      commissionAmount: commAmt,
+      price: finalCustomerPrice,
+      salePrice: finalCustomerPrice,
+      vendorPayout: vPrice,
       published: isApproved ? true : editingProductModal.published,
       isActive: isApproved ? true : editingProductModal.isActive,
       approvedBy: isApproved ? (editingProductModal.approvedBy || currentUser?.id || 'admin') : editingProductModal.approvedBy,
@@ -1514,7 +1539,7 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
     dbLocal.saveProducts(updated);
     setProducts(updated);
-    addToast(`Product "${updatedModal.name}" updated and published live!`, 'success');
+    addToast(`Product "${updatedModal.name}" updated with vendor price ₹${vPrice.toLocaleString('en-IN')} and final price ₹${finalCustomerPrice.toLocaleString('en-IN')}!`, 'success');
     setEditingProductModal(null);
   };
 
@@ -3175,6 +3200,16 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => setShowAdminLinkImporterModal(true)}
+                  className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl border border-teal-500 shadow-md transition flex items-center gap-2 cursor-pointer"
+                  title="Paste any product web link to auto-generate Name, Image, Price, GST, and HSN Code"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                  <span>Paste Product Link & Auto-Generate</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => {
                     setAdminBulkUploadPreselectedVendorId(undefined);
                     setShowAdminBulkUploadModal(true);
@@ -3568,16 +3603,28 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
                             <h4 className="font-extrabold text-slate-900 text-sm leading-snug">{p.name}</h4>
                             
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 font-medium pt-1">
-                              <span>Vendor: <strong className="text-teal-700 font-bold">{p.vendorName || 'Unknown Vendor'}</strong></span>
-                              <span>MRP: <strong className="text-slate-800 font-mono font-bold">₹{(p.mrp || p.price * 1.2).toLocaleString('en-IN')}</strong></span>
-                              <span>Vendor Price: <strong className="text-amber-800 font-mono font-bold">₹{(p.vendorPrice !== undefined ? p.vendorPrice : p.salePrice).toLocaleString('en-IN')}</strong></span>
-                              <span>Commission: <strong className="text-rose-700 font-mono font-bold">{p.commissionRate !== undefined ? p.commissionRate : 10}% (+₹{(p.commissionAmount !== undefined ? p.commissionAmount : 0).toLocaleString('en-IN')})</strong></span>
-                              <span>Customer Price: <strong className="text-emerald-700 font-mono font-bold">₹{p.price.toLocaleString('en-IN')}</strong></span>
-                              <span>Est. Payout: <strong className="text-indigo-800 font-mono font-bold">₹{(p.vendorPayout !== undefined ? p.vendorPayout : (p.vendorPrice !== undefined ? p.vendorPrice : p.salePrice)).toLocaleString('en-IN')}</strong></span>
-                              <span>Stock: <strong className="text-slate-800 font-mono font-bold">{p.stockQuantity} {p.unit || 'Piece(s)'}</strong></span>
-                              <span>MOQ: <strong className="text-slate-700">{p.moq}</strong></span>
-                              <span>Upload Date: <strong className="text-indigo-700">{uploadDate}</strong></span>
+                            <div className="flex flex-wrap items-center gap-2 pt-1.5 text-xs">
+                              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-lg font-semibold">
+                                Vendor Price: <strong className="font-mono text-amber-800 font-bold">₹{(p.vendorPrice !== undefined ? p.vendorPrice : p.salePrice).toLocaleString('en-IN')}</strong>
+                              </span>
+                              <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-lg font-semibold">
+                                Commission: <strong className="font-mono font-bold">{p.commissionRate !== undefined ? p.commissionRate : 10}% (+₹{(p.commissionAmount !== undefined ? p.commissionAmount : Math.round(((p.vendorPrice ?? p.price) * (p.commissionRate ?? 10)) / 100)).toLocaleString('en-IN')})</strong>
+                              </span>
+                              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-lg font-bold shadow-xs">
+                                Customer Price: <strong className="font-mono text-emerald-900 font-black">₹{p.price.toLocaleString('en-IN')}</strong>
+                              </span>
+                              <span className="text-slate-600 font-medium">
+                                Vendor: <strong className="text-teal-700 font-bold">{p.vendorName || 'Unknown Vendor'}</strong>
+                              </span>
+                              <span className="text-slate-400 font-mono">
+                                MRP: <strong className="text-slate-700">₹{(p.mrp || p.price * 1.2).toLocaleString('en-IN')}</strong>
+                              </span>
+                              <span className="text-slate-400 font-mono">
+                                Stock: <strong className="text-slate-700">{p.stockQuantity} {p.unit || 'Piece(s)'}</strong>
+                              </span>
+                              <span className="text-slate-400">
+                                MOQ: <strong className="text-slate-600">{p.moq}</strong>
+                              </span>
                             </div>
 
                             {/* Show rejection or changes requested reason if present */}
@@ -7494,10 +7541,10 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
 
             {/* Modal Body */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              {/* Section 1: Core Specifications */}
+              {/* Section 1: Core Specifications & Vendor Partner */}
               <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/80 space-y-4">
                 <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-200 pb-2.5">
-                  <Tag className="w-4 h-4 text-teal-600" /> Basic Information & Catalog Classification
+                  <Tag className="w-4 h-4 text-teal-600" /> Basic Information &amp; Vendor Partner
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="md:col-span-2">
@@ -7509,6 +7556,42 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Assigned Vendor Partner *</label>
+                    <select
+                      value={editingProductModal.vendorId || ''}
+                      onChange={(e) => {
+                        const vId = e.target.value;
+                        const matchedVendor = vendors.find(v => v.id === vId);
+                        const vName = matchedVendor?.companyName || matchedVendor?.name || 'Selected Vendor';
+                        const vCommRate = matchedVendor?.customCommissionRate !== undefined ? matchedVendor.customCommissionRate : (globalCommRate ?? 10);
+                        const curVPrice = editingProductModal.vendorPrice !== undefined ? editingProductModal.vendorPrice : (editingProductModal.price || 0);
+                        const commAmt = Math.round((curVPrice * vCommRate) / 100);
+                        const customerPrice = curVPrice + commAmt;
+                        setEditingProductModal({
+                          ...editingProductModal,
+                          vendorId: vId,
+                          vendorName: vName,
+                          commissionRate: vCommRate,
+                          commissionAmount: commAmt,
+                          vendorPrice: curVPrice,
+                          price: customerPrice,
+                          salePrice: customerPrice,
+                          vendorPayout: curVPrice
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    >
+                      <option value="">-- Choose Vendor Partner --</option>
+                      {vendors.map(v => (
+                        <option key={v.id} value={v.id}>
+                          {v.companyName} {v.customCommissionRate !== undefined ? `(${v.customCommissionRate}% Custom Comm)` : `(${globalCommRate}% Base Comm)`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">SKU / Model Code *</label>
                     <input
@@ -7548,21 +7631,143 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                 </div>
               </div>
 
-              {/* Section 2: Pricing & Inventory */}
+              {/* Section 2: Pricing, Platform Commission & Inventory */}
               <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/80 space-y-4">
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-200 pb-2.5">
-                  <IndianRupee className="w-4 h-4 text-emerald-600" /> Financials, Tax & Stock Levels
-                </h4>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <IndianRupee className="w-4 h-4 text-emerald-600" /> Financials, Vendor Base Price &amp; Platform Commission
+                  </h4>
+                  <span className="text-[11px] font-bold bg-teal-50 text-teal-800 border border-teal-200 px-2.5 py-0.5 rounded-full">
+                    Auto-Calculated Commission Model
+                  </span>
+                </div>
+
+                {/* Live Formula Banner */}
+                {(() => {
+                  const vp = editingProductModal.vendorPrice !== undefined ? editingProductModal.vendorPrice : (editingProductModal.price || 0);
+                  const cr = editingProductModal.commissionRate !== undefined 
+                    ? editingProductModal.commissionRate 
+                    : (vendors.find(v => v.id === editingProductModal.vendorId)?.customCommissionRate ?? globalCommRate ?? 10);
+                  const ca = editingProductModal.commissionAmount !== undefined ? editingProductModal.commissionAmount : Math.round((vp * cr) / 100);
+                  const fp = editingProductModal.price || (vp + ca);
+                  return (
+                    <div className="bg-gradient-to-r from-teal-900 to-slate-900 p-3.5 rounded-xl text-white text-xs flex flex-wrap items-center justify-between gap-3 shadow-sm font-sans">
+                      <div className="flex items-center gap-2">
+                        <Percent className="w-4 h-4 text-teal-400 shrink-0" />
+                        <span>
+                          <strong>Live Formula:</strong> Vendor Price (₹{vp.toLocaleString('en-IN')}) + Platform Fee ({cr}% = +₹{ca.toLocaleString('en-IN')}) = <strong>Final Customer Price (₹{fp.toLocaleString('en-IN')})</strong>
+                        </span>
+                      </div>
+                      <span className="bg-teal-500/20 text-teal-300 font-mono text-[11px] px-2 py-0.5 rounded border border-teal-500/30">
+                        Vendor Payout: ₹{vp.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  );
+                })()}
+
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* 1. Vendor Base Price */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Selling Price (INR) *</label>
+                    <label className="block text-xs font-bold text-amber-900 mb-1 flex items-center justify-between">
+                      <span>Vendor Base Price (INR) *</span>
+                      <span className="text-[10px] text-amber-700 font-medium">Vendor gets</span>
+                    </label>
                     <input
                       type="number"
-                      value={editingProductModal.price || 0}
-                      onChange={(e) => setEditingProductModal({ ...editingProductModal, price: Number(e.target.value), salePrice: Number(e.target.value) })}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      min="0"
+                      value={editingProductModal.vendorPrice !== undefined ? editingProductModal.vendorPrice : (editingProductModal.price || 0)}
+                      onChange={(e) => {
+                        const newVPrice = Number(e.target.value) || 0;
+                        const commRate = editingProductModal.commissionRate !== undefined 
+                          ? editingProductModal.commissionRate 
+                          : (vendors.find(v => v.id === editingProductModal.vendorId)?.customCommissionRate ?? globalCommRate ?? 10);
+                        const commAmt = Math.round((newVPrice * commRate) / 100);
+                        const customerPrice = newVPrice + commAmt;
+                        setEditingProductModal({
+                          ...editingProductModal,
+                          vendorPrice: newVPrice,
+                          commissionRate: commRate,
+                          commissionAmount: commAmt,
+                          price: customerPrice,
+                          salePrice: customerPrice,
+                          vendorPayout: newVPrice
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-amber-50/50 border border-amber-300 rounded-xl text-xs font-mono font-bold text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
                     />
                   </div>
+
+                  {/* 2. Commission Rate */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Commission Rate (%) *</span>
+                      <span className="text-[10px] text-slate-400">Platform %</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={editingProductModal.commissionRate !== undefined 
+                        ? editingProductModal.commissionRate 
+                        : (vendors.find(v => v.id === editingProductModal.vendorId)?.customCommissionRate ?? globalCommRate ?? 10)}
+                      onChange={(e) => {
+                        const newRate = Number(e.target.value) || 0;
+                        const curVPrice = editingProductModal.vendorPrice !== undefined ? editingProductModal.vendorPrice : (editingProductModal.price || 0);
+                        const commAmt = Math.round((curVPrice * newRate) / 100);
+                        const customerPrice = curVPrice + commAmt;
+                        setEditingProductModal({
+                          ...editingProductModal,
+                          commissionRate: newRate,
+                          commissionAmount: commAmt,
+                          price: customerPrice,
+                          salePrice: customerPrice,
+                          vendorPayout: curVPrice
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+
+                  {/* 3. Commission Amount (Calculated) */}
+                  <div>
+                    <label className="block text-xs font-bold text-rose-900 mb-1 flex items-center justify-between">
+                      <span>Commission Added (INR)</span>
+                      <span className="text-[10px] text-rose-600 font-medium">Platform cut</span>
+                    </label>
+                    <input
+                      type="number"
+                      readOnly
+                      value={editingProductModal.commissionAmount !== undefined 
+                        ? editingProductModal.commissionAmount 
+                        : Math.round(((editingProductModal.vendorPrice ?? editingProductModal.price ?? 0) * (editingProductModal.commissionRate ?? globalCommRate ?? 10)) / 100)}
+                      className="w-full px-3 py-2 bg-rose-50/50 border border-rose-200 rounded-xl text-xs font-mono font-bold text-rose-700 cursor-not-allowed"
+                    />
+                  </div>
+
+                  {/* 4. Final Customer Selling Price */}
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-900 mb-1 flex items-center justify-between">
+                      <span>Customer Price (INR) *</span>
+                      <span className="text-[10px] text-emerald-600 font-medium">Shown in shop</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingProductModal.price || 0}
+                      onChange={(e) => {
+                        const newPrice = Number(e.target.value) || 0;
+                        setEditingProductModal({
+                          ...editingProductModal,
+                          price: newPrice,
+                          salePrice: newPrice
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-emerald-50/60 border border-emerald-300 rounded-xl text-xs font-mono font-black text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* 5. MRP */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">MRP (INR)</label>
                     <input
@@ -7572,6 +7777,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
+
+                  {/* 6. Wholesale / B2B Price */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Wholesale / B2B Price</label>
                     <input
@@ -7581,6 +7788,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
+
+                  {/* 7. Stock Quantity */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Stock Quantity *</label>
                     <input
@@ -7590,6 +7799,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
+
+                  {/* 8. MOQ */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Min Order Qty (MOQ)</label>
                     <input
@@ -7599,6 +7810,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
+
+                  {/* 9. Unit Type */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Unit Type</label>
                     <input
@@ -7608,6 +7821,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
+
+                  {/* 10. HSN Code */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">HSN Code</label>
                     <input
@@ -7617,6 +7832,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
+
+                  {/* 11. GST Rate */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">GST Rate (%)</label>
                     <input
@@ -8985,6 +9202,21 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       onSuccess={(count, targetVendorName) => {
         loadData();
         addToast(`Successfully bulk imported ${count} products for "${targetVendorName}"!`, 'success');
+      }}
+    />
+
+    {/* Admin Auto Product Generator from Web Link (URL) Modal */}
+    <AdminProductLinkImporterModal
+      isOpen={showAdminLinkImporterModal}
+      onClose={() => setShowAdminLinkImporterModal(false)}
+      vendors={vendors}
+      onProductUploaded={(newProduct) => {
+        loadData();
+        addToast(`Product "${newProduct.name}" generated & published live!`, 'success');
+      }}
+      onMultipleProductsUploaded={(newProducts) => {
+        loadData();
+        addToast(`Successfully imported & published ${newProducts.length} products from links!`, 'success');
       }}
     />
 

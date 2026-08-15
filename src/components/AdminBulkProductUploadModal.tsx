@@ -15,7 +15,9 @@ import {
   FileText,
   HelpCircle,
   RefreshCw,
-  Check
+  Check,
+  Link as LinkIcon,
+  Loader2
 } from 'lucide-react';
 import { Vendor, Product, ProductStatus } from '../types';
 import { dbLocal } from '../db';
@@ -68,8 +70,10 @@ export default function AdminBulkProductUploadModal({
   const [commissionRate, setCommissionRate] = useState<number>(5.0);
 
   // Import Input States
-  const [activeInputTab, setActiveInputTab] = useState<'csv_file' | 'csv_text' | 'manual'>('csv_file');
+  const [activeInputTab, setActiveInputTab] = useState<'csv_file' | 'csv_text' | 'link_paste' | 'manual'>('csv_file');
   const [csvText, setCsvText] = useState<string>('');
+  const [pastedProductUrl, setPastedProductUrl] = useState<string>('');
+  const [isScrapingLink, setIsScrapingLink] = useState<boolean>(false);
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [fileName, setFileName] = useState<string>('');
 
@@ -688,7 +692,155 @@ DEFIB-BIPHASIC,Biphasic Defibrillator Monitor with AED,Cardiology,Defibrillators
                 <FileText className="w-4 h-4 text-teal-600" />
                 Paste CSV Text Data
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveInputTab('link_paste')}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center justify-center gap-2 ${
+                  activeInputTab === 'link_paste'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <LinkIcon className="w-4 h-4 text-teal-600" />
+                Paste Product Link (URL)
+              </button>
             </div>
+
+            {/* Paste Product Link Tab */}
+            {activeInputTab === 'link_paste' && (
+              <div className="space-y-4 bg-slate-50 border border-slate-200 rounded-3xl p-6">
+                <div>
+                  <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-teal-600" />
+                    Auto-Generate from Medical Web Link for <span className="text-teal-700">{resolvedVendorName}</span>
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Paste any product link or manufacturer URL. Gemini AI will extract the Name, Images, HSN Code, GST Rate, and Market Price to add directly into the import queue.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <div className="relative flex-1">
+                    <LinkIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    <input
+                      type="url"
+                      placeholder="https://example.com/product/mindray-ultrasound-machine..."
+                      value={pastedProductUrl}
+                      onChange={(e) => setPastedProductUrl(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter') {
+                          const url = pastedProductUrl.trim();
+                          if (!url) return;
+                          setIsScrapingLink(true);
+                          setErrorMsg('');
+                          try {
+                            const res = await fetch('/api/gemini/scrape-product-link', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ url, vendorId: resolvedVendorId, vendorName: resolvedVendorName })
+                            });
+                            const data = await res.json();
+                            if (!res.ok || !data.success || !data.product) throw new Error(data.error || 'Failed to auto-generate product.');
+                            const p = data.product;
+                            const currentSellingPrice = Number(p.salePrice || p.price || 0);
+                            const mrpPrice = Number(p.mrp || p.price || Math.round(currentSellingPrice * 1.18) || currentSellingPrice);
+                            const newRow: RawImportRow = {
+                              sku: p.sku || `HLN-LNK-${Math.floor(1000 + Math.random() * 9000)}`,
+                              name: p.name,
+                              category: p.category,
+                              subcategory: p.subcategory || 'Medical Device',
+                              brand: p.brand || 'HealNex Medical',
+                              mrp: mrpPrice,
+                              price: mrpPrice,
+                              salePrice: currentSellingPrice,
+                              stockQuantity: p.stockQuantity || 20,
+                              description: p.description || '',
+                              unit: p.unit || 'Piece',
+                              hsnCode: p.hsnCode || '90189099',
+                              gstRate: p.gstRate || 12,
+                              warranty: p.warranty || '1 Year Warranty',
+                              countryOfOrigin: p.countryOfOrigin || 'India',
+                              imageUrl: p.images?.[0] || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800',
+                              isValid: true
+                            };
+                            setParsedRows(prev => [newRow, ...prev]);
+                            setPastedProductUrl('');
+                            setSuccessMsg(`Auto-generated and added "${p.name}" to queue!`);
+                          } catch (err: any) {
+                            setErrorMsg(err?.message || 'Failed to generate product from link.');
+                          } finally {
+                            setIsScrapingLink(false);
+                          }
+                        }
+                      }}
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 shadow-inner"
+                      disabled={isScrapingLink}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isScrapingLink || !pastedProductUrl.trim()}
+                    onClick={async () => {
+                      const url = pastedProductUrl.trim();
+                      if (!url) return;
+                      setIsScrapingLink(true);
+                      setErrorMsg('');
+                      try {
+                        const res = await fetch('/api/gemini/scrape-product-link', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ url, vendorId: resolvedVendorId, vendorName: resolvedVendorName })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.success || !data.product) throw new Error(data.error || 'Failed to auto-generate product.');
+                        const p = data.product;
+                        const currentSellingPrice = Number(p.salePrice || p.price || 0);
+                        const mrpPrice = Number(p.mrp || p.price || Math.round(currentSellingPrice * 1.18) || currentSellingPrice);
+                        const newRow: RawImportRow = {
+                          sku: p.sku || `HLN-LNK-${Math.floor(1000 + Math.random() * 9000)}`,
+                          name: p.name,
+                          category: p.category,
+                          subcategory: p.subcategory || 'Medical Device',
+                          brand: p.brand || 'HealNex Medical',
+                          mrp: mrpPrice,
+                          price: mrpPrice,
+                          salePrice: currentSellingPrice,
+                          stockQuantity: p.stockQuantity || 20,
+                          description: p.description || '',
+                          unit: p.unit || 'Piece',
+                          hsnCode: p.hsnCode || '90189099',
+                          gstRate: p.gstRate || 12,
+                          warranty: p.warranty || '1 Year Warranty',
+                          countryOfOrigin: p.countryOfOrigin || 'India',
+                          imageUrl: p.images?.[0] || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800',
+                          isValid: true
+                        };
+                        setParsedRows(prev => [newRow, ...prev]);
+                        setPastedProductUrl('');
+                        setSuccessMsg(`Auto-generated and added "${p.name}" to queue!`);
+                      } catch (err: any) {
+                        setErrorMsg(err?.message || 'Failed to generate product from link.');
+                      } finally {
+                        setIsScrapingLink(false);
+                      }
+                    }}
+                    className="px-6 py-3 bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                  >
+                    {isScrapingLink ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-teal-200" />
+                        <span>Extracting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 text-teal-200" />
+                        <span>Auto-Generate to Queue</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* CSV File Drag & Drop Zone */}
             {activeInputTab === 'csv_file' && (

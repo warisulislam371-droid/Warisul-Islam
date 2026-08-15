@@ -18,6 +18,7 @@ import {
 } from './src/seo/generator';
 
 import { categorizeProductLocally, auditProductsLocally } from './src/utils/medicalCategorizer';
+import { determineMedicalHsnAndGst } from './src/utils/medicalHsnTaxonomy';
 import { getCategorySeoUrl, getSubcategorySeoUrl, getProductSeoUrl } from './src/utils/seoUrls';
 import { uploadToCloudinary, deleteFromCloudinary, listCloudinaryImages } from './src/server/cloudinaryService';
 
@@ -690,6 +691,445 @@ Return a structured JSON with extracted details and a confidence percentage (1-1
     } catch (err: any) {
       console.log('OCR endpoint error:', err.message || err);
       res.status(500).json({ error: 'Failed to process document OCR' });
+    }
+  });
+
+  // =========================================================================
+  // AI-Powered Medical Product Link Scraper & Auto-Generator API
+  // Paste product link/URL -> Auto-extracts/generates Name, Images, Price, GST %, HSN, Category, Specs
+  // =========================================================================
+  app.post('/api/gemini/scrape-product-link', async (req, res) => {
+    try {
+      let { url, customPrompt, vendorId = 'admin_master', vendorName = 'HealNex Direct' } = req.body;
+
+      if (!url || typeof url !== 'string' || url.trim().length === 0) {
+        return res.status(400).json({ error: 'Please provide a valid product URL or link.' });
+      }
+
+      url = url.trim();
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch (urlErr) {
+        return res.status(400).json({ error: 'Invalid URL format. Please check the pasted web link.' });
+      }
+
+      const domain = parsedUrl.hostname;
+      const urlPath = parsedUrl.pathname;
+      const cleanSlug = urlPath.split('/').filter(Boolean).pop()?.replace(/[-_]/g, ' ') || '';
+
+      // 1. Fetch the raw HTML content from the provided product URL
+      let html = '';
+      let pageTitle = '';
+      let metaDescription = '';
+      let ogImage = '';
+      let extractedImages: string[] = [];
+      let extractedPrices: number[] = [];
+      let extractedMrpCandidates: number[] = [];
+      let jsonLdData: any = null;
+      let textSnippet = '';
+
+      try {
+        const fetchResponse = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,hi;q=0.8',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          },
+          signal: AbortSignal.timeout(12000),
+        });
+
+        if (fetchResponse.ok) {
+          html = await fetchResponse.text();
+        }
+      } catch (fetchErr: any) {
+        console.log(`[Link Scraper] Direct fetch for ${url} timed out or failed (${fetchErr?.message}). Proceeding with URL slug & AI synthesis.`);
+      }
+
+      // 2. Parse HTML metadata, OpenGraph, JSON-LD, Images, and Price
+      if (html) {
+        // Page Title
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        if (titleMatch) pageTitle = titleMatch[1].trim();
+
+        // Meta Description
+        const descMatch = html.match(/<meta[^>]+(?:name=["']description["']|property=["']og:description["'])[^>]+content=["']([^"']+)["']/i)
+          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:name=["']description["']|property=["']og:description["'])/i);
+        if (descMatch) metaDescription = descMatch[1].trim();
+
+        // OpenGraph Image & Twitter Image
+        const ogImageMatch = html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i)
+          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/i)
+          || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+        if (ogImageMatch) ogImage = ogImageMatch[1].trim();
+
+        // JSON-LD structured product extraction
+        const jsonLdMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+        for (const match of jsonLdMatches) {
+          try {
+            const rawJson = match[1].trim();
+            const parsed = JSON.parse(rawJson);
+            const items = Array.isArray(parsed) ? parsed : [parsed];
+            for (const item of items) {
+              if (item['@type'] === 'Product' || item['@type'] === 'IndividualProduct' || item.offers) {
+                jsonLdData = item;
+                break;
+              }
+              if (item['@graph'] && Array.isArray(item['@graph'])) {
+                const p = item['@graph'].find((g: any) => g['@type'] === 'Product');
+                if (p) {
+                  jsonLdData = p;
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore malformed JSON-LD
+          }
+        }
+
+        // Extract candidate product images
+        const imgRegex = /<img[^>]+(?:src|data-src|data-zoom-image|data-large_image|data-original)=["']([^"']+)["'][^>]*>/gi;
+        let imgMatch;
+        const rawFoundImgs: string[] = [];
+        if (ogImage) rawFoundImgs.push(ogImage);
+
+        if (jsonLdData) {
+          if (typeof jsonLdData.image === 'string') rawFoundImgs.push(jsonLdData.image);
+          if (Array.isArray(jsonLdData.image)) rawFoundImgs.push(...jsonLdData.image);
+        }
+
+        while ((imgMatch = imgRegex.exec(html)) !== null) {
+          const src = imgMatch[1];
+          if (
+            src &&
+            !src.includes('data:image') &&
+            !src.includes('favicon') &&
+            !src.includes('logo') &&
+            !src.includes('badge') &&
+            !src.includes('icon') &&
+            !src.includes('tracker') &&
+            !src.includes('analytics') &&
+            !src.endsWith('.svg')
+          ) {
+            // Resolve relative URLs to absolute
+            try {
+              const fullImgUrl = new URL(src, url).toString();
+              rawFoundImgs.push(fullImgUrl);
+            } catch (e) {
+              if (src.startsWith('http')) rawFoundImgs.push(src);
+            }
+          }
+        }
+
+        // Deduplicate images
+        extractedImages = Array.from(new Set(rawFoundImgs)).filter(img => img.startsWith('http')).slice(0, 6);
+
+        // Extract OpenGraph, Twitter, and meta pricing tags
+        const metaOgPrice = html.match(/<meta\s+property=["'](?:og:price:amount|product:price:amount|product:sale_price:amount)["']\s+content=["']([\d,.]+)["']/i);
+        if (metaOgPrice) {
+          const val = parseFloat(metaOgPrice[1].replace(/,/g, ''));
+          if (val > 0) extractedPrices.push(val);
+        }
+
+        // Platform-specific offer / selling price selectors (Amazon, Flipkart, IndiaMART, Shopify, Mediseller, etc.)
+        const platformPriceRegex = /<(?:span|div|p|b|strong)[^>]*class=["'][^"']*(?:a-price-whole|a-offscreen|offer-price|special-price|final-price|selling-price|our-price|saleprice|sale_price|price-current|current-price|price-new|prc|bold-price)[^"']*["'][^>]*>(?:[^<]*?)(?:₹|Rs\.?|INR|\$)?\s*([\d,]+(?:\.\d{2})?)/gi;
+        let platformMatch;
+        while ((platformMatch = platformPriceRegex.exec(html)) !== null) {
+          const val = parseFloat(platformMatch[1].replace(/,/g, ''));
+          if (val > 50 && val < 50000000) extractedPrices.unshift(val); // high priority
+        }
+
+        // Data attribute prices
+        const dataPriceRegex = /data-(?:price|saleprice|offer-price|current-price)=["']([\d,.]+)["']/gi;
+        let dataMatch;
+        while ((dataMatch = dataPriceRegex.exec(html)) !== null) {
+          const val = parseFloat(dataMatch[1].replace(/,/g, ''));
+          if (val > 50 && val < 50000000) extractedPrices.unshift(val);
+        }
+
+        // Separate scan for MRP / Strike-through prices vs Active Current Selling Prices
+        const strikeRegex = /<(?:del|s|span[^>]*class=["'][^"']*(?:mrp|strike|original-price|list-price|regular-price|old-price|price-old)[^"']*["'])[^>]*>(?:[^<]*?)(?:₹|Rs\.?|INR|\$)\s*([\d,]+(?:\.\d{2})?)/gi;
+        let strikeMatch;
+        while ((strikeMatch = strikeRegex.exec(html)) !== null) {
+          const val = parseFloat(strikeMatch[1].replace(/,/g, ''));
+          if (val > 50 && val < 50000000) extractedMrpCandidates.push(val);
+        }
+
+        // Active Price regex scan (INR/Rs/₹/$ numbers)
+        const priceRegex = /(?:selling\s*price|deal\s*price|offer\s*price|special\s*price|our\s*price|price\s*:?|₹|Rs\.?|INR|\$)\s*:?\s*(?:₹|Rs\.?|INR|\$)?\s*([\d,]+(?:\.\d{2})?)/gi;
+        let pMatch;
+        while ((pMatch = priceRegex.exec(html)) !== null) {
+          const numStr = pMatch[1].replace(/,/g, '');
+          const val = parseFloat(numStr);
+          if (val > 50 && val < 50000000) {
+            extractedPrices.push(val);
+          }
+        }
+
+        // Extract clean text snippet for AI (stripping scripts, styles, tags)
+        const cleanText = html
+          .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
+          .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        textSnippet = cleanText.slice(0, 4000);
+      }
+
+      // 3. Fallback Local Medical Classifier & HSN Calculation
+      const candidateName = jsonLdData?.name || pageTitle || cleanSlug || 'Medical Diagnostic Equipment';
+      const candidateBrand = jsonLdData?.brand?.name || (typeof jsonLdData?.brand === 'string' ? jsonLdData.brand : '') || '';
+      const localCat = categorizeProductLocally({ name: candidateName, description: metaDescription || textSnippet, brand: candidateBrand });
+      const localHsnGst = determineMedicalHsnAndGst(candidateName, localCat.mainCategory, metaDescription || textSnippet);
+
+      // Sourced High-Resolution Default Medical Images if scraping didn't find clear photo
+      const medicalFallbackImages: Record<string, string[]> = {
+        'Diagnostic Equipment': [
+          'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800',
+          'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=800'
+        ],
+        'ICU & Critical Care': [
+          'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=800',
+          'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800'
+        ],
+        'Surgical & OT Equipment': [
+          'https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&q=80&w=800',
+          'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=800'
+        ],
+        'Hospital Furniture': [
+          'https://images.unsplash.com/photo-1538108149393-fbbd81895907?auto=format&fit=crop&q=80&w=800'
+        ],
+        'Imaging & Radiology': [
+          'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800'
+        ],
+        'Laboratory Equipment': [
+          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&q=80&w=800'
+        ],
+        'Consumables & Disposables': [
+          'https://images.unsplash.com/photo-1583912267670-6575ad4736f8?auto=format&fit=crop&q=80&w=800'
+        ]
+      };
+
+      const defaultCategoryFallback = localCat.mainCategory || 'Diagnostic Equipment';
+      const fallbackImgs = medicalFallbackImages[defaultCategoryFallback] || medicalFallbackImages['Diagnostic Equipment'];
+      const finalImageCandidates = extractedImages.length > 0 ? extractedImages : fallbackImgs;
+
+      // Extract JSON-LD price or regex price as CURRENT SELLING PRICE
+      let detectedSellingPrice = 0;
+      if (jsonLdData?.offers?.price) {
+        detectedSellingPrice = parseFloat(jsonLdData.offers.price);
+      } else if (Array.isArray(jsonLdData?.offers) && jsonLdData.offers[0]?.price) {
+        detectedSellingPrice = parseFloat(jsonLdData.offers[0].price);
+      } else if (extractedPrices.length > 0) {
+        detectedSellingPrice = extractedPrices[0];
+      } else {
+        detectedSellingPrice = 38000; // Sensible medical equipment default selling rate
+      }
+
+      // Extract MRP / List Price (if higher strike price found, use it; else calculate sensible MRP ~15% higher)
+      let detectedMrp = detectedSellingPrice;
+      if (extractedMrpCandidates.length > 0 && extractedMrpCandidates[0] > detectedSellingPrice) {
+        detectedMrp = extractedMrpCandidates[0];
+      } else {
+        detectedMrp = Math.round(detectedSellingPrice * 1.18);
+      }
+
+      // 4. Try Gemini AI for High-Precision Medical Extraction & Synthesis
+      const ai = getGeminiClient();
+      let generatedProduct: any = null;
+
+      if (ai && !isQuotaCooldowned()) {
+        try {
+          const systemInstruction = `You are the HealNex Medical Equipment B2B Product Intelligence & Catalog Generator.
+Analyze the provided scraped webpage content, URL slug, HTML metadata, JSON-LD, and text snippets.
+Extract and generate a complete, structured medical equipment product object ready for Indian B2B marketplace upload.
+
+CRITICAL PRICING & FIELD RULES:
+1. "name": Clean, professional medical product title with brand and model (e.g. "Mindray DP-50 Expert Portable Ultrasound System").
+2. "brand": Manufacturer / Brand name (e.g. "Mindray", "Philips", "GE Healthcare", "BPL Medical", "Schiller", "Siemens", "Drager", "Contec", etc.).
+3. "category": Choose the best matching category from: 'Diagnostic Equipment', 'ICU & Critical Care', 'Surgical & OT Equipment', 'Hospital Furniture', 'Homecare Devices', 'Laboratory Equipment', 'Dental Equipment', 'Ophthalmology', 'Imaging & Radiology', 'Consumables & Disposables', 'Cardiology Equipment'.
+4. "subcategory": Specific subcategory name (e.g. 'Ultrasound Machine', 'Patient Monitor', 'ECG Machine', 'Defibrillator', 'Ventilator', 'Syringe Pump', 'Hospital Beds', 'Surgical Diathermy', 'Autoclave').
+5. "salePrice": The exact CURRENT SELLING PRICE (deal price, offer price, checkout rate, or primary selling price on the page) in INR (₹). If price in foreign currency, convert ($1 = ~₹85). If only one price is visible on the webpage, put THAT EXACT AMOUNT in "salePrice".
+6. "price": The Original MRP (Maximum Retail Price / List Price) in INR (₹). If an MRP or strike-through price is present, use that. If not provided or if only selling price is available, set "price" (MRP) to ~15-20% higher than "salePrice" (so that salePrice is the actual discounted selling price). Must be >= "salePrice".
+7. "hsnCode": Accurate 6-8 digit Indian GST HSN Code:
+   - 90181100 (ECG / EKG)
+   - 90181200 (Ultrasound / Sonography / Probes)
+   - 90181300 (MRI)
+   - 90181900 (Patient Monitor, Multi-para, Vital Signs)
+   - 90189029 (Surgical Diathermy / Cautery / ESU)
+   - 90189032 (Endoscopes / Laparoscopy)
+   - 90189099 (General Medical / Electromedical / Defibrillators / Infusion Pumps)
+   - 90192000 (Ventilators, Oxygen Concentrators, BiPAP, CPAP, Nebulizers)
+   - 90221400 (X-Ray, C-Arm, CT Scanners, Mammography)
+   - 94029090 (Hospital Beds, OT Tables, Medical Furniture, Wheelchairs)
+   - 84192010 (Medical Autoclaves & Sterilizers)
+   - 90278090 (Laboratory Analyzers, Centrifuges, Microscopes)
+   - 90251910 (Digital Thermometers)
+   - 90183100 (Syringes & Needles)
+   - 90183990 (Catheters, IV Cannulas, Infusion Sets)
+   - 40151100 (Surgical & Examination Gloves)
+   - 30059040 (Surgical Dressings & Bandages)
+   - 90211000 (Orthopedic Appliances & Braces)
+8. "gstRate": 12, 18, or 5 based on GST Council rules (Most medical equipment is 12%, furniture & lab is 18%, assistive/orthopedic is 5%).
+9. "hsnRationale": Short explanation why this HSN and GST rate was chosen.
+10. "moq": Minimum Order Quantity (1 for capital equipment, 5-20 for small accessories/consumables).
+11. "stockQuantity": Available stock (default 10 to 50).
+12. "unit": "Piece", "Set", "Unit", "Box", or "Pack".
+13. "warranty": Warranty statement (e.g. "1 Year Comprehensive Manufacturer Warranty", "2 Years Warranty").
+14. "countryOfOrigin": e.g. "India", "Germany", "USA", "Japan", "China", "Netherlands".
+15. "description": 2-3 paragraph clinical overview covering therapeutic/diagnostic indications, hardware quality, certifications (CE / ISO / FDA), and hospital usability.
+16. "shortDescription": Punchy 1-line summary.
+17. "specifications": Array of 4 to 8 key specs [{ key: string, value: string }] (e.g. Display Size, Battery Backup, Operating Modes, Power Supply, Weight, Safety Certifications).
+18. "tags": Array of 5 to 8 search tags.
+19. "suggestedSku": Short unique SKU like "HLN-US-8921".`;
+
+          const userPrompt = `Product Web Link: ${url}
+Domain: ${domain}
+URL Slug: ${cleanSlug}
+Page Title: "${pageTitle}"
+Meta Description: "${metaDescription}"
+JSON-LD Structured Data: ${JSON.stringify(jsonLdData || {})}
+Extracted Current Selling Price Candidates: ${JSON.stringify(extractedPrices)}
+Extracted Strike-through / MRP Candidates: ${JSON.stringify(extractedMrpCandidates)}
+Extracted Image Candidates: ${JSON.stringify(finalImageCandidates)}
+Page Text Snippet: "${textSnippet}"
+${customPrompt ? `Admin Custom Prompt Note: ${customPrompt}` : ''}`;
+
+          const schema = {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              brand: { type: Type.STRING },
+              category: { type: Type.STRING },
+              subcategory: { type: Type.STRING },
+              price: { type: Type.NUMBER },
+              salePrice: { type: Type.NUMBER },
+              hsnCode: { type: Type.STRING },
+              gstRate: { type: Type.NUMBER },
+              hsnRationale: { type: Type.STRING },
+              moq: { type: Type.NUMBER },
+              stockQuantity: { type: Type.NUMBER },
+              unit: { type: Type.STRING },
+              warranty: { type: Type.STRING },
+              countryOfOrigin: { type: Type.STRING },
+              description: { type: Type.STRING },
+              shortDescription: { type: Type.STRING },
+              specifications: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    key: { type: Type.STRING },
+                    value: { type: Type.STRING }
+                  },
+                  required: ['key', 'value']
+                }
+              },
+              tags: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              },
+              suggestedSku: { type: Type.STRING }
+            },
+            required: [
+              'name', 'brand', 'category', 'subcategory', 'price', 'salePrice',
+              'hsnCode', 'gstRate', 'moq', 'description', 'specifications'
+            ]
+          };
+
+          const aiResponse = await generateContentResilient(ai, [userPrompt], systemInstruction, schema);
+          if (aiResponse && aiResponse.name) {
+            generatedProduct = aiResponse;
+          }
+        } catch (geminiErr: any) {
+          handleQuotaExceeded(geminiErr, 'product link auto-generator');
+        }
+      }
+
+      // 5. Build Final Product Object (AI or Local Fallback Engine)
+      const finalName = generatedProduct?.name || candidateName.replace(/[_-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+      const finalBrand = generatedProduct?.brand || candidateBrand || 'HealNex Medical';
+      const finalCategory = generatedProduct?.category || localCat.mainCategory || 'Diagnostic Equipment';
+      const finalSubcategory = generatedProduct?.subcategory || localCat.subcategory || 'Medical Device';
+      
+      const finalHsnMatch = determineMedicalHsnAndGst(finalName, finalCategory, metaDescription || textSnippet);
+      const finalHsnCode = generatedProduct?.hsnCode || finalHsnMatch.hsnCode;
+      const finalGstRate = generatedProduct?.gstRate || finalHsnMatch.gstRate;
+      const finalHsnRationale = generatedProduct?.hsnRationale || finalHsnMatch.rationale;
+
+      // Exact current selling price from scraped page / AI
+      const finalSalePrice = Math.max(90, Math.round(generatedProduct?.salePrice || detectedSellingPrice));
+      const finalPrice = Math.max(finalSalePrice, Math.round(generatedProduct?.price || detectedMrp || (finalSalePrice * 1.15)));
+      
+      const cleanSku = generatedProduct?.suggestedSku || `HLN-${cleanSlug.slice(0, 3).toUpperCase() || 'MED'}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const finalProductPayload = {
+        id: `prod_link_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        vendorId: vendorId,
+        vendorName: vendorName,
+        name: finalName,
+        sku: cleanSku,
+        brand: finalBrand,
+        category: finalCategory,
+        subcategory: finalSubcategory,
+        price: finalPrice,
+        salePrice: finalSalePrice,
+        mrp: finalPrice,
+        wholesalePrice: Math.round(finalSalePrice * 0.92),
+        vendorPrice: Math.round(finalSalePrice * 0.88),
+        hsnCode: finalHsnCode,
+        gstRate: finalGstRate,
+        hsnRationale: finalHsnRationale,
+        moq: generatedProduct?.moq || 1,
+        stockQuantity: generatedProduct?.stockQuantity || 25,
+        unit: generatedProduct?.unit || 'Piece',
+        warranty: generatedProduct?.warranty || '1 Year Comprehensive Manufacturer Warranty',
+        countryOfOrigin: generatedProduct?.countryOfOrigin || 'India',
+        images: finalImageCandidates,
+        description: generatedProduct?.description || metaDescription || `Hospital-grade ${finalName} precision-engineered for clinical accuracy, robust continuous operation, and full healthcare regulatory compliance.`,
+        shortDescription: generatedProduct?.shortDescription || `Certified ${finalBrand} ${finalName} for healthcare clinics and multi-specialty hospitals.`,
+        specifications: (generatedProduct?.specifications && generatedProduct.specifications.length > 0) ? generatedProduct.specifications : [
+          { key: 'Classification', value: 'Class B/C Medical Diagnostic Device' },
+          { key: 'Power Supply', value: '220V - 240V AC, 50/60 Hz' },
+          { key: 'Certifications', value: 'CE, ISO 13485, FDA Compliant' },
+          { key: 'Warranty Term', value: '12 Months Comprehensive On-Site Support' },
+          { key: 'HSN & GST Code', value: `${finalHsnCode} (@ ${finalGstRate}% GST)` }
+        ],
+        tags: generatedProduct?.tags || [finalBrand, finalCategory, finalSubcategory, 'Medical Equipment', 'B2B Healthcare', 'Hospital Supply'],
+        status: 'Approved',
+        published: true,
+        isActive: true,
+        sourceUrl: url,
+        sourceDomain: domain,
+        createdAt: new Date().toISOString()
+      };
+
+      return res.json({
+        success: true,
+        sourceUrl: url,
+        sourceDomain: domain,
+        product: finalProductPayload,
+        rawExtracted: {
+          pageTitle,
+          metaDescription,
+          detectedSellingPrice,
+          detectedMrp,
+          imageCount: finalImageCandidates.length,
+          hsnAssigned: finalHsnCode,
+          gstRateAssigned: finalGstRate,
+          aiModelUsed: ai && !isQuotaCooldowned() ? 'Gemini 2.5 Flash' : 'HealNex Medical Taxonomy Engine'
+        }
+      });
+    } catch (err: any) {
+      console.log('[Product Link Scraper API Error]:', err?.message || err);
+      return res.status(500).json({ error: 'Failed to process product link. Please check the URL and retry.' });
     }
   });
 
