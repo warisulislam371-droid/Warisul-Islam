@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Link as LinkIcon,
@@ -31,6 +31,7 @@ interface AdminProductLinkImporterModalProps {
   isOpen: boolean;
   onClose: () => void;
   vendors: Vendor[];
+  targetVendorId?: string;
   onProductUploaded: (newProduct: Product) => void;
   onMultipleProductsUploaded?: (newProducts: Product[]) => void;
 }
@@ -39,6 +40,7 @@ export default function AdminProductLinkImporterModal({
   isOpen,
   onClose,
   vendors,
+  targetVendorId: initialVendorId,
   onProductUploaded,
   onMultipleProductsUploaded
 }: AdminProductLinkImporterModalProps) {
@@ -48,9 +50,16 @@ export default function AdminProductLinkImporterModal({
   // Single Link Input
   const [productUrl, setProductUrl] = useState('');
   const [customPrompt, setCustomPrompt] = useState('');
-  const [targetVendorId, setTargetVendorId] = useState<string>('admin_master');
+  const [targetVendorId, setTargetVendorId] = useState<string>(initialVendorId || 'admin_master');
   const [customVendorName, setCustomVendorName] = useState<string>('');
   const [targetStatus, setTargetStatus] = useState<'Approved' | 'Pending' | 'Draft'>('Approved');
+
+  // Keep targetVendorId synced when prop changes
+  useEffect(() => {
+    if (initialVendorId) {
+      setTargetVendorId(initialVendorId);
+    }
+  }, [initialVendorId]);
 
   // Batch Links Input
   const [batchUrlsText, setBatchUrlsText] = useState('');
