@@ -74,10 +74,10 @@ export function getCloudinaryConfig(): {
   uploadPreset: string;
   isConfigured: boolean;
 } {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.VITE_CLOUDINARY_CLOUD_NAME || 'healnex-medibazar';
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.VITE_CLOUDINARY_CLOUD_NAME || 'healnex_products';
   const apiKey = process.env.CLOUDINARY_API_KEY || '';
   const apiSecret = process.env.CLOUDINARY_API_SECRET || '';
-  const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || process.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'healnex_uploads';
+  const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || process.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'healnex_products';
 
   const isConfigured = Boolean((apiKey && apiSecret) || process.env.CLOUDINARY_URL || uploadPreset);
 
