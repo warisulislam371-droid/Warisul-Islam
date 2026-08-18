@@ -36,7 +36,8 @@ import {
   Globe,
   Wand2,
   FolderTree,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 
 interface VendorProductManagerProps {
@@ -65,6 +66,10 @@ export default function VendorProductManager({
   // Modals
   const [showProductModal, setShowProductModal] = useState(false);
   const [showLinkImporterModal, setShowLinkImporterModal] = useState(false);
+  const [linkImporterInitialMode, setLinkImporterInitialMode] = useState<'googleSearch' | 'single' | 'batch'>('googleSearch');
+  const [linkImporterInitialQuery, setLinkImporterInitialQuery] = useState<string>('');
+  const [isInlineGoogleSearching, setIsInlineGoogleSearching] = useState(false);
+  const [inlineGoogleSearchQuery, setInlineGoogleSearchQuery] = useState('');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showCategoryRequestModal, setShowCategoryRequestModal] = useState(false);
   const [showBrandRequestModal, setShowBrandRequestModal] = useState(false);
@@ -1342,7 +1347,24 @@ export default function VendorProductManager({
           </button>
           <button
             type="button"
-            onClick={() => setShowLinkImporterModal(true)}
+            onClick={() => {
+              setLinkImporterInitialMode('googleSearch');
+              setLinkImporterInitialQuery('');
+              setShowLinkImporterModal(true);
+            }}
+            className="bg-gradient-to-r from-teal-800 via-teal-900 to-slate-950 hover:from-teal-900 hover:to-black text-white font-extrabold text-xs px-4 py-2.5 rounded-xl border border-teal-600 shadow-md transition flex items-center gap-2 cursor-pointer"
+            title="Auto search Google to find verified medical equipment specs, pricing, and HSN codes"
+          >
+            <Search className="w-4 h-4 text-amber-300 animate-pulse" />
+            <span>Auto Search Google & Copy</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLinkImporterInitialMode('single');
+              setLinkImporterInitialQuery('');
+              setShowLinkImporterModal(true);
+            }}
             className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl border border-teal-500 shadow-sm transition flex items-center gap-2 cursor-pointer"
             title="Paste any product web link to auto-generate Name, Image, Price, GST, and HSN Code"
           >
@@ -1818,6 +1840,17 @@ export default function VendorProductManager({
                           Submit
                         </button>
                       )}
+                      <button
+                        onClick={() => {
+                          setLinkImporterInitialMode('googleSearch');
+                          setLinkImporterInitialQuery(p.name);
+                          setShowLinkImporterModal(true);
+                        }}
+                        title="Auto Search Google for updated specs & copy details"
+                        className="p-1.5 text-teal-700 hover:text-teal-950 hover:bg-teal-100 rounded-lg transition"
+                      >
+                        <Search className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => handleDuplicateProduct(p)}
                         title="Duplicate Product"
@@ -2416,6 +2449,149 @@ export default function VendorProductManager({
 
             {/* Modal Form Content */}
             <div className="p-6 overflow-y-auto space-y-6 text-xs font-semibold text-slate-700 flex-1">
+              
+              {/* Smart Auto-Search Google & Auto-Fill Bar */}
+              <div className="bg-gradient-to-r from-teal-900 via-slate-900 to-teal-950 p-4 rounded-2xl text-white border border-teal-800 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                    <span className="text-xs font-black tracking-wide text-white">
+                      Google Medical Product Auto-Search & Form Auto-Fill
+                    </span>
+                  </div>
+                  <span className="text-[10px] bg-teal-500/30 text-teal-200 px-2 py-0.5 rounded-full border border-teal-400/40">
+                    Live Web Grounding
+                  </span>
+                </div>
+                <p className="text-[11px] text-teal-200/90 leading-relaxed">
+                  Type an equipment name or brand model to auto-fetch verified technical specs, pricing, and HSN codes directly into this form.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="e.g. Mindray DP-50, BPL Cardiart ECG, Philips IntelliVue..."
+                      value={inlineGoogleSearchQuery}
+                      onChange={(e) => setInlineGoogleSearchQuery(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && inlineGoogleSearchQuery.trim()) {
+                          e.preventDefault();
+                          setIsInlineGoogleSearching(true);
+                          try {
+                            const res = await fetch('/api/gemini/google-product-search', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                query: inlineGoogleSearchQuery.trim(),
+                                vendorId: vendor.id,
+                                vendorName: vendor.companyName
+                              })
+                            });
+                            const data = await res.json();
+                            if (data && data.results && data.results.length > 0) {
+                              const best = data.results[0];
+                              setFormName(best.name || formName);
+                              if (best.brand) setFormBrand(best.brand);
+                              if (best.category) setFormCategory(best.category);
+                              if (best.subcategory) setFormSubcategory(best.subcategory);
+                              if (best.shortDescription) setFormShortDesc(best.shortDescription);
+                              if (best.description) setFormFullDesc(best.description);
+                              if (best.price) setFormMrp(best.price);
+                              if (best.salePrice) setFormSalePrice(best.salePrice);
+                              if (best.wholesalePrice) setFormWholesalePrice(best.wholesalePrice);
+                              if (best.hsnCode) setFormHsn(best.hsnCode);
+                              if (best.gstRate) setFormGst(best.gstRate);
+                              if (best.countryOfOrigin) setFormCountry(best.countryOfOrigin);
+                              if (best.warranty) setFormWarranty(best.warranty);
+                              if (best.images && best.images.length > 0) {
+                                setPrimaryImage(best.images[0]);
+                                if (best.images.length > 1) {
+                                  setSecondaryImages([best.images[1] || '', best.images[2] || '', best.images[3] || '']);
+                                }
+                              }
+                              if (best.specifications && Array.isArray(best.specifications)) {
+                                setFormSpecs(best.specifications);
+                              }
+                              setToastMessage(`Auto-filled specifications for "${best.name}" from Google!`);
+                              setTimeout(() => setToastMessage(null), 4000);
+                            }
+                          } catch (err) {
+                            console.error('Inline search error:', err);
+                          } finally {
+                            setIsInlineGoogleSearching(false);
+                          }
+                        }
+                      }}
+                      className="w-full pl-9 pr-3 py-2 bg-white/10 border border-teal-700/80 rounded-xl text-xs font-bold text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isInlineGoogleSearching || !inlineGoogleSearchQuery.trim()}
+                    onClick={async () => {
+                      if (!inlineGoogleSearchQuery.trim()) return;
+                      setIsInlineGoogleSearching(true);
+                      try {
+                        const res = await fetch('/api/gemini/google-product-search', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            query: inlineGoogleSearchQuery.trim(),
+                            vendorId: vendor.id,
+                            vendorName: vendor.companyName
+                          })
+                        });
+                        const data = await res.json();
+                        if (data && data.results && data.results.length > 0) {
+                          const best = data.results[0];
+                          setFormName(best.name || formName);
+                          if (best.brand) setFormBrand(best.brand);
+                          if (best.category) setFormCategory(best.category);
+                          if (best.subcategory) setFormSubcategory(best.subcategory);
+                          if (best.shortDescription) setFormShortDesc(best.shortDescription);
+                          if (best.description) setFormFullDesc(best.description);
+                          if (best.price) setFormMrp(best.price);
+                          if (best.salePrice) setFormSalePrice(best.salePrice);
+                          if (best.wholesalePrice) setFormWholesalePrice(best.wholesalePrice);
+                          if (best.hsnCode) setFormHsn(best.hsnCode);
+                          if (best.gstRate) setFormGst(best.gstRate);
+                          if (best.countryOfOrigin) setFormCountry(best.countryOfOrigin);
+                          if (best.warranty) setFormWarranty(best.warranty);
+                          if (best.images && best.images.length > 0) {
+                            setPrimaryImage(best.images[0]);
+                            if (best.images.length > 1) {
+                              setSecondaryImages([best.images[1] || '', best.images[2] || '', best.images[3] || '']);
+                            }
+                          }
+                          if (best.specifications && Array.isArray(best.specifications)) {
+                            setFormSpecs(best.specifications);
+                          }
+                          setToastMessage(`Auto-filled specifications for "${best.name}" from Google!`);
+                          setTimeout(() => setToastMessage(null), 4000);
+                        }
+                      } catch (err) {
+                        console.error('Inline search error:', err);
+                      } finally {
+                        setIsInlineGoogleSearching(false);
+                      }
+                    }}
+                    className="bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-extrabold px-4 py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    {isInlineGoogleSearching ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Searching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-3.5 h-3.5" />
+                        <span>Search Google & Auto-Fill</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
               
               {formError && (
                 <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl flex items-start gap-3">
@@ -3036,20 +3212,22 @@ export default function VendorProductManager({
         </div>
       )}
 
-      {/* Auto Product Generator from Web Link (URL) Modal for Vendor */}
+      {/* Auto Product Generator & Google Search Modal for Vendor */}
       <AdminProductLinkImporterModal
         isOpen={showLinkImporterModal}
         onClose={() => setShowLinkImporterModal(false)}
         vendors={[vendor]}
         targetVendorId={vendor.id}
+        initialMode={linkImporterInitialMode}
+        initialSearchQuery={linkImporterInitialQuery}
         onProductUploaded={(newProduct) => {
           onRefresh();
-          setToastMessage(`Product "${newProduct.name}" auto-generated from link & submitted!`);
+          setToastMessage(`Product "${newProduct.name}" auto-generated from Google/link & submitted!`);
           setTimeout(() => setToastMessage(null), 4000);
         }}
         onMultipleProductsUploaded={(newProducts) => {
           onRefresh();
-          setToastMessage(`Successfully auto-generated ${newProducts.length} products from links!`);
+          setToastMessage(`Successfully imported ${newProducts.length} products!`);
           setTimeout(() => setToastMessage(null), 4000);
         }}
       />

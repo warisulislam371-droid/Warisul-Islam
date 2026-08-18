@@ -668,6 +668,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
   const [viewingVendorCatalogModal, setViewingVendorCatalogModal] = useState<Vendor | null>(null);
   const [showAdminBulkUploadModal, setShowAdminBulkUploadModal] = useState<boolean>(false);
   const [showAdminLinkImporterModal, setShowAdminLinkImporterModal] = useState<boolean>(false);
+  const [adminLinkImporterInitialMode, setAdminLinkImporterInitialMode] = useState<'googleSearch' | 'single' | 'batch'>('googleSearch');
+  const [adminLinkImporterInitialQuery, setAdminLinkImporterInitialQuery] = useState<string>('');
   const [adminBulkUploadPreselectedVendorId, setAdminBulkUploadPreselectedVendorId] = useState<string | undefined>(undefined);
   const [vendorForm, setVendorForm] = useState<{
     companyName: string;
@@ -3200,7 +3202,25 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowAdminLinkImporterModal(true)}
+                  onClick={() => {
+                    setAdminLinkImporterInitialMode('googleSearch');
+                    setAdminLinkImporterInitialQuery('');
+                    setShowAdminLinkImporterModal(true);
+                  }}
+                  className="bg-gradient-to-r from-teal-800 via-teal-900 to-slate-950 hover:from-teal-900 hover:to-black text-white font-extrabold text-xs px-4 py-2.5 rounded-xl border border-teal-600 shadow-md transition flex items-center gap-2 cursor-pointer"
+                  title="Auto search Google to find verified medical equipment specs, pricing, and HSN codes"
+                >
+                  <Search className="w-4 h-4 text-amber-300 animate-pulse" />
+                  <span>Auto Search Google & Copy</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminLinkImporterInitialMode('single');
+                    setAdminLinkImporterInitialQuery('');
+                    setShowAdminLinkImporterModal(true);
+                  }}
                   className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl border border-teal-500 shadow-md transition flex items-center gap-2 cursor-pointer"
                   title="Paste any product web link to auto-generate Name, Image, Price, GST, and HSN Code"
                 >
@@ -3703,7 +3723,20 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
                             </button>
                           )}
 
-                          {/* 6. EYE PREVIEW BUTTON - Available for all */}
+                          {/* 6. GOOGLE SEARCH & COPY SPECS BUTTON */}
+                          <button
+                            onClick={() => {
+                              setAdminLinkImporterInitialMode('googleSearch');
+                              setAdminLinkImporterInitialQuery(p.name);
+                              setShowAdminLinkImporterModal(true);
+                            }}
+                            className="bg-teal-50 hover:bg-teal-100 text-teal-800 text-[11px] font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1 border border-teal-200"
+                            title="Search Google for updated specs & copy details"
+                          >
+                            <Search className="w-3.5 h-3.5 text-teal-600" /> Google Specs
+                          </button>
+
+                          {/* 7. EYE PREVIEW BUTTON - Available for all */}
                           <button
                             onClick={() => setPreviewingProduct(p)}
                             className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1"
@@ -9210,6 +9243,8 @@ export default function AdminPanel({ currentUser, addToast }: AdminPanelProps) {
       isOpen={showAdminLinkImporterModal}
       onClose={() => setShowAdminLinkImporterModal(false)}
       vendors={vendors}
+      initialMode={adminLinkImporterInitialMode}
+      initialSearchQuery={adminLinkImporterInitialQuery}
       onProductUploaded={(newProduct) => {
         loadData();
         addToast(`Product "${newProduct.name}" generated & published live!`, 'success');

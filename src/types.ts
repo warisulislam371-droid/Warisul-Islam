@@ -103,6 +103,8 @@ export interface Product {
   stockQuantity: number;
   hsnCode: string;
   gstRate: number; // e.g., 12 for 12%, 18 for 18%
+  hsnRationale?: string;
+  sourceUrl?: string;
   warranty: string;
   countryOfOrigin: string;
   images: string[];
