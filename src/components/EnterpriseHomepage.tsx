@@ -60,6 +60,8 @@ interface EnterpriseHomepageProps {
   vendors: Vendor[];
   reviews: Review[];
   selectedCategoryName: string;
+  compareList?: Product[];
+  onOpenCompareModal?: () => void;
   onCategorySelect: (catName: string) => void;
   onNavigate: (view: string) => void;
   onAddToCart: (product: Product, quantity?: number) => void;
@@ -79,6 +81,8 @@ export default function EnterpriseHomepage({
   vendors,
   reviews,
   selectedCategoryName,
+  compareList = [],
+  onOpenCompareModal,
   onCategorySelect,
   onNavigate,
   onAddToCart,
@@ -754,37 +758,94 @@ export default function EnterpriseHomepage({
         {/* Quick Utilities Icons */}
         <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button 
-            onClick={() => onAddToWishlist(product.id)}
-            className="p-1.5 bg-white/90 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-full shadow-md transition"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToWishlist(product.id);
+            }}
+            className="p-1.5 bg-white/90 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-full shadow-md transition cursor-pointer"
             title="Wishlist"
           >
             <Heart className="w-3.5 h-3.5" />
           </button>
+          {(() => {
+            const isInCompare = compareList?.some(item => item.id === product.id);
+            return (
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToCompare(product);
+                }}
+                className={`p-1.5 rounded-full shadow-md transition cursor-pointer ${
+                  isInCompare
+                    ? 'bg-[#0077B6] text-white ring-2 ring-sky-300 shadow-lg scale-110'
+                    : 'bg-white/90 hover:bg-[#0077B6]/10 text-slate-600 hover:text-[#0077B6]'
+                }`}
+                title={isInCompare ? 'In Comparison Matrix (Click to toggle)' : 'Add to side-by-side comparison'}
+              >
+                <Scale className="w-3.5 h-3.5" />
+              </button>
+            );
+          })()}
           <button 
-            onClick={() => onAddToCompare(product)}
-            className="p-1.5 bg-white/90 hover:bg-[#0077B6]/10 text-slate-600 hover:text-[#0077B6] rounded-full shadow-md transition"
-            title="Compare"
-          >
-            <Scale className="w-3.5 h-3.5" />
-          </button>
-          <button 
-            onClick={() => onQuickView(product)}
-            className="p-1.5 bg-white/90 hover:bg-[#0F9D8A]/10 text-slate-600 hover:text-[#0F9D8A] rounded-full shadow-md transition"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onQuickView(product);
+            }}
+            className="p-1.5 bg-white/90 hover:bg-[#0F9D8A]/10 text-slate-600 hover:text-[#0F9D8A] rounded-full shadow-md transition cursor-pointer"
             title="Quick View"
           >
             <Eye className="w-3.5 h-3.5" />
           </button>
           <button 
+            type="button"
+            id={`quick-price-alert-btn-${product.id}`}
+            aria-label="Notify me of price drops"
             onClick={(e) => {
               e.stopPropagation();
-              if (onPriceAlert) onPriceAlert(product);
+              if (onPriceAlert) {
+                onPriceAlert(product);
+              } else {
+                const newAlert = {
+                  id: userAlert?.id || `alert-${Date.now()}`,
+                  userEmail: 'procurement@healnex.com',
+                  productName: product.name,
+                  productId: product.id,
+                  productImage: product.images?.[0],
+                  vendorName: product.vendorName,
+                  currentPrice: product.salePrice || product.price,
+                  targetPrice: Math.round((product.salePrice || product.price) * 0.95),
+                  alertType: 'price_drop' as const,
+                  channel: 'both' as const,
+                  enableEmail: true,
+                  enablePush: true,
+                  createdAt: new Date().toISOString(),
+                  status: 'active' as const
+                };
+                dbLocal.addPriceAlert(newAlert);
+                if (addToast) {
+                  addToast(`🔔 Price drop alert active for ${product.name}!`, 'success');
+                }
+              }
             }}
-            className={`p-1.5 rounded-full shadow-md transition ${
-              hasActiveAlert || isTriggeredAlert ? 'bg-amber-500 text-white' : 'bg-white/90 hover:bg-amber-50 text-slate-600 hover:text-amber-600'
+            className={`p-1.5 rounded-full shadow-md transition cursor-pointer transform hover:scale-110 active:scale-95 ${
+              isTriggeredAlert
+                ? 'bg-rose-500 text-white ring-2 ring-rose-300 shadow-lg animate-pulse'
+                : hasActiveAlert
+                ? 'bg-amber-500 text-white ring-2 ring-amber-300 shadow-lg'
+                : 'bg-white/90 hover:bg-amber-50 text-slate-600 hover:text-amber-600'
             }`}
-            title="Notify me of price drops"
+            title={
+              isTriggeredAlert
+                ? '⚡ Price reduced! Click to view alert details'
+                : hasActiveAlert
+                ? '🔔 Price alert is active (Click to manage)'
+                : 'Notify me when this product price drops'
+            }
           >
-            <Bell className="w-3.5 h-3.5" />
+            <Bell className={`w-3.5 h-3.5 ${hasActiveAlert || isTriggeredAlert ? 'fill-current text-white' : ''}`} />
           </button>
         </div>
 

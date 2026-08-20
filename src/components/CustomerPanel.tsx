@@ -5,6 +5,8 @@ import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderIte
 import { isCategoryMatch } from '../utils/categoryMatcher';
 import PriceAlertModal from './PriceAlertModal';
 import EnterpriseHomepage from './EnterpriseHomepage';
+import { ProductComparisonModal } from './ProductComparisonModal';
+import { ProductCompareDock } from './ProductCompareDock';
 import {
   Heart,
   ShoppingCart,
@@ -123,6 +125,7 @@ export default function CustomerPanel({
   // Detailed Modal view of a product
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [lightboxProduct, setLightboxProduct] = useState<Product | null>(null);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false);
 
   // Price Alert state
   const [priceAlertModalProduct, setPriceAlertModalProduct] = useState<Product | null>(null);
@@ -351,11 +354,16 @@ export default function CustomerPanel({
         onCategorySelect(e.detail);
       }
     };
+    const handleOpenCompare = () => {
+      setIsCompareModalOpen(true);
+    };
     window.addEventListener('healnex_open_product', handleOpenProduct);
     window.addEventListener('healnex_filter_subcategory', handleFilterSubcat);
+    window.addEventListener('healnex_open_compare', handleOpenCompare);
     return () => {
       window.removeEventListener('healnex_open_product', handleOpenProduct);
       window.removeEventListener('healnex_filter_subcategory', handleFilterSubcat);
+      window.removeEventListener('healnex_open_compare', handleOpenCompare);
     };
   }, [onCategorySelect]);
 
@@ -607,12 +615,14 @@ export default function CustomerPanel({
     let updated: Product[];
     if (compareList.some(item => item.id === p.id)) {
       updated = compareList.filter(item => item.id !== p.id);
+      addToast(`Removed "${p.name}" from comparison`, 'info');
     } else {
-      if (compareList.length >= 3) {
-        addToast('You can compare a maximum of 3 medical items side-by-side.', 'info');
+      if (compareList.length >= 4) {
+        addToast('You can compare a maximum of 4 medical items side-by-side. Remove one to add another.', 'info');
         return;
       }
       updated = [...compareList, p];
+      addToast(`Added "${p.name}" to comparison matrix (${updated.length}/4)`, 'success');
     }
     onUpdateCompare(updated);
   };
@@ -1252,8 +1262,16 @@ export default function CustomerPanel({
             vendors={vendors}
             reviews={reviews}
             selectedCategoryName={selectedCategoryName}
+            compareList={compareList}
+            onOpenCompareModal={() => setIsCompareModalOpen(true)}
             onCategorySelect={onCategorySelect}
-            onNavigate={onNavigate}
+            onNavigate={(view) => {
+              if (view === 'compare') {
+                setIsCompareModalOpen(true);
+              } else {
+                onNavigate(view);
+              }
+            }}
             onAddToCart={handleAddToCart}
             onQuickBuy={(p) => {
               handleAddToCart(p, p.moq || 1);
@@ -1269,14 +1287,7 @@ export default function CustomerPanel({
                 addToast('Added to Wishlist!', 'success');
               }
             }}
-            onAddToCompare={(p) => {
-              if (compareList.some(item => item.id === p.id)) {
-                addToast('Already in compare list', 'info');
-              } else {
-                onUpdateCompare([...compareList, p]);
-                addToast('Added to Compare list!', 'success');
-              }
-            }}
+            onAddToCompare={handleToggleCompare}
             onQuickView={(p) => setSelectedProduct(p)}
             onPriceAlert={(p) => setPriceAlertModalProduct(p)}
             onBecomeSeller={onBecomeSeller}
@@ -3631,6 +3642,50 @@ export default function CustomerPanel({
         onClose={() => setLightboxProduct(null)}
         product={lightboxProduct}
         onAddToCart={handleAddToCart}
+      />
+
+      {/* Floating Compare Dock Bar */}
+      <ProductCompareDock
+        compareList={compareList}
+        onOpenCompareModal={() => setIsCompareModalOpen(true)}
+        onRemoveFromCompare={(productId) => {
+          onUpdateCompare(compareList.filter(p => p.id !== productId));
+          addToast('Removed item from comparison', 'info');
+        }}
+        onClearCompare={() => {
+          onUpdateCompare([]);
+          addToast('Cleared comparison list', 'info');
+        }}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Full-Screen Detailed Product Comparison Matrix Modal */}
+      <ProductComparisonModal
+        isOpen={isCompareModalOpen}
+        onClose={() => setIsCompareModalOpen(false)}
+        compareList={compareList}
+        allProducts={products}
+        onRemoveFromCompare={(productId) => {
+          onUpdateCompare(compareList.filter(p => p.id !== productId));
+        }}
+        onClearCompare={() => {
+          onUpdateCompare([]);
+        }}
+        onAddToCompare={(product) => {
+          handleToggleCompare(product);
+        }}
+        onAddToCart={handleAddToCart}
+        onQuickBuy={(product) => {
+          handleAddToCart(product, product.moq || 1);
+          setCheckoutStep('checkout');
+          onNavigate('cart');
+          setIsCompareModalOpen(false);
+        }}
+        onQuickView={(product) => {
+          setSelectedProduct(product);
+        }}
+        isDarkMode={isDarkMode}
+        addToast={addToast}
       />
 
     </div>
