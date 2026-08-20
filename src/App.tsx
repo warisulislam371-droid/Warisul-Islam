@@ -150,6 +150,12 @@ export default function App() {
   const handleCategorySelect = (catName: string) => {
     setSelectedCategoryName(catName);
     setCurrentView('marketplace');
+    setTimeout(() => {
+      const el = document.getElementById('catalog-anchor');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 60);
   };
 
   const handleSearch = (query: string) => {

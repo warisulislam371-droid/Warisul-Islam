@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
@@ -47,6 +48,11 @@ async function startServer() {
   app.set('trust proxy', true);
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+  // Immediate Health Check Route for Cloud Run deployment probes
+  app.get(['/api/health', '/health', '/_health', '/ping'], (req, res) => {
+    res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+  });
 
   const getRequestBaseUrl = (req: express.Request): string => {
     const host = req.get('x-forwarded-host') || req.get('host') || 'medbazarhelnex.shop';
@@ -1905,14 +1911,24 @@ CRITICAL INSTRUCTIONS:
   });
 
   // Vite development integration or static files serving
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+
+  if (process.env.NODE_ENV !== 'production' && !hasDist) {
+    try {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } catch (viteErr) {
+      console.warn('[HealNex Server] Vite dev server error, falling back to static dist:', viteErr);
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -1923,5 +1939,13 @@ CRITICAL INSTRUCTIONS:
     console.log(`[HealNex Server] Running full-stack on http://0.0.0.0:${PORT}`);
   });
 }
+
+// Global process error handlers to prevent unhandled rejections from crashing container
+process.on('unhandledRejection', (reason) => {
+  console.warn('[HealNex Server] Unhandled Promise Rejection (suppressed):', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.warn('[HealNex Server] Uncaught Exception (handled):', err);
+});
 
 startServer();

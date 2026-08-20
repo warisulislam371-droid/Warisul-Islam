@@ -241,6 +241,8 @@ export async function classifyAndAssignProductAI(productInput: {
   id?: string;
   name: string;
   brand?: string;
+  category?: string;
+  subcategory?: string;
   description?: string;
   specifications?: any[];
   sku?: string;
@@ -351,20 +353,22 @@ export async function classifyAndAssignProductAI(productInput: {
 
   // Step 3: Subcategory NOT found or confidence < 70 -> Intelligently create new Subcategory
   // 3a. Find closest Parent Category
-  let parentCategoryName = 'Medical Equipment';
-  let parentCategoryObj = categories.find(c => c.name === 'Medical Equipment') || categories[0];
+  let parentCategoryName = productInput.category?.trim() || 'Medical Equipment';
+  let parentCategoryObj = categories.find(c => c.name.toLowerCase() === parentCategoryName.toLowerCase());
 
-  for (const cat of categories) {
-    if (fullText.includes(normalizeMedicalText(cat.name))) {
-      parentCategoryName = cat.name;
-      parentCategoryObj = cat;
-      break;
+  if (!parentCategoryObj) {
+    for (const cat of categories) {
+      if (fullText.includes(normalizeMedicalText(cat.name))) {
+        parentCategoryName = cat.name;
+        parentCategoryObj = cat;
+        break;
+      }
     }
   }
 
   // 3b. Determine clean new Subcategory name from product name
   // Extract key clinical term (e.g., "Philips Vein Finder Pro" -> "Vein Finder")
-  let newSubName = extractClinicalSubcategoryName(productInput.name, productInput.brand);
+  let newSubName = productInput.subcategory?.trim() || extractClinicalSubcategoryName(productInput.name, productInput.brand);
 
   // Check duplicate protection before creating
   const existingDup = findDuplicateSubcategory(parentCategoryName, newSubName, allSubcategories);
@@ -422,22 +426,11 @@ export async function classifyAndAssignProductAI(productInput: {
   allSubcategories.unshift(newSubcategoryObj);
   saveSubcategories(allSubcategories);
 
-  // Update parent category's subcategories array if needed
-  if (parentCategoryObj) {
-    const updatedCats = categories.map(c => {
-      if (c.name.toLowerCase() === parentCategoryName.toLowerCase()) {
-        const subList = c.subcategories || [];
-        if (!subList.includes(newSubName)) {
-          return {
-            ...c,
-            subcategories: [...subList, newSubName],
-            subcategoryObjects: [...(c.subcategoryObjects || []), newSubcategoryObj]
-          };
-        }
-      }
-      return c;
-    });
-    dbLocal.saveCategories(updatedCats);
+  // Update or auto-create parent category and subcategory in platform database
+  try {
+    dbLocal.ensureCategoryAndSubcategoryExists(parentCategoryName, newSubName);
+  } catch (e) {
+    console.warn('Auto category creation error in ai engine:', e);
   }
 
   const resultStatus = isAutoApproved ? 'AutoSelected' : computedConfidence >= 70 ? 'Suggested' : 'NeedsAdminReview';

@@ -2658,42 +2658,74 @@ export default function VendorProductManager({
                         >
                           <Wand2 className="w-3 h-3 text-amber-600" /> Auto-Detect
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowCategoryRequestModal(true)}
-                          className="text-[10px] text-teal-700 hover:underline font-extrabold flex items-center gap-1"
-                        >
-                          <Plus className="w-3 h-3" /> Request New
-                        </button>
                       </div>
                     </div>
-                    <select
-                      value={formCategory}
-                      onChange={(e) => {
-                        setFormCategory(e.target.value);
-                        const matchedCat = categories.find(c => c.name === e.target.value);
-                        if (matchedCat && matchedCat.subcategories && matchedCat.subcategories.length > 0) {
-                          setFormSubcategory(matchedCat.subcategories[0]);
-                        }
-                      }}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-bold text-slate-800 text-xs"
-                    >
-                      <option value="">Select Category</option>
-                      {categories.map(c => (
-                        <option key={c.id} value={c.name}>{c.name}</option>
-                      ))}
-                    </select>
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        list="available-categories-list"
+                        placeholder="Select or enter new category (e.g. ICU Equipment)"
+                        value={formCategory}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormCategory(val);
+                          const matchedCat = categories.find(c => c.name.toLowerCase() === val.trim().toLowerCase());
+                          if (matchedCat && matchedCat.subcategories && matchedCat.subcategories.length > 0) {
+                            if (!formSubcategory) {
+                              setFormSubcategory(matchedCat.subcategories[0]);
+                            }
+                          }
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-bold text-slate-800 text-xs"
+                      />
+                      <datalist id="available-categories-list">
+                        {categories.map(c => (
+                          <option key={c.id} value={c.name} />
+                        ))}
+                      </datalist>
+                      {formCategory && !categories.some(c => c.name.toLowerCase() === formCategory.trim().toLowerCase()) && (
+                        <p className="text-[10px] text-teal-700 font-bold flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-teal-600 shrink-0" />
+                          <span>New Category &quot;{formCategory}&quot; will be automatically created in the platform.</span>
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   <div>
                     <label className="block mb-1.5 text-slate-800 font-bold">Subcategory / Type</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ECG Machine, Patient Monitor"
-                      value={formSubcategory}
-                      onChange={(e) => setFormSubcategory(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-bold text-slate-800 text-xs"
-                    />
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        list="available-subcategories-list"
+                        placeholder="Select or enter new subcategory (e.g. Multipara Monitor)"
+                        value={formSubcategory}
+                        onChange={(e) => setFormSubcategory(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-teal-700 font-bold text-slate-800 text-xs"
+                      />
+                      <datalist id="available-subcategories-list">
+                        {(() => {
+                          const matchedCat = categories.find(c => c.name.toLowerCase() === formCategory.trim().toLowerCase());
+                          const subs = matchedCat?.subcategories || [];
+                          return subs.map((s, idx) => (
+                            <option key={`${s}-${idx}`} value={s} />
+                          ));
+                        })()}
+                      </datalist>
+                      {formSubcategory && (() => {
+                        const matchedCat = categories.find(c => c.name.toLowerCase() === formCategory.trim().toLowerCase());
+                        const hasSub = matchedCat?.subcategories?.some(s => s.toLowerCase() === formSubcategory.trim().toLowerCase());
+                        if (!hasSub) {
+                          return (
+                            <p className="text-[10px] text-teal-700 font-bold flex items-center gap-1">
+                              <Sparkles className="w-3 h-3 text-teal-600 shrink-0" />
+                              <span>New Subcategory &quot;{formSubcategory}&quot; will be automatically created.</span>
+                            </p>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
                   </div>
 
                   <div>

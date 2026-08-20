@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { dbLocal } from '../db';
 import { uploadOrderDocumentToCloudinary } from '../utils/cloudinary';
 import { Product, Order, RFQ, Quotation, Category, Brand, Review, User, OrderItem, PaymentSettings, PromoBanner, Vendor, PriceAlert } from '../types';
-import { isCategoryMatch } from '../utils/categoryMatcher';
+import { isCategoryMatch, calculateCategoryRelevanceScore } from '../utils/categoryMatcher';
 import PriceAlertModal from './PriceAlertModal';
 import EnterpriseHomepage from './EnterpriseHomepage';
 import { ProductComparisonModal } from './ProductComparisonModal';
@@ -133,7 +133,7 @@ export default function CustomerPanel({
 
   // Filters State
   const [filterBrand, setFilterBrand] = useState('');
-  const [filterPriceRange, setFilterPriceRange] = useState<number>(500000);
+  const [filterPriceRange, setFilterPriceRange] = useState<number>(1000000000);
   const [filterMoq, setFilterMoq] = useState<number>(100);
   const [filterTrustSealOnly, setFilterTrustSealOnly] = useState(false);
   const [filterMinRating, setFilterMinRating] = useState<number>(0);
@@ -594,6 +594,13 @@ export default function CustomerPanel({
       sorted.sort((a, b) => {
         const scoreA = aiSearchResults.find(m => m.productId === a.id)?.relevanceScore || 0;
         const scoreB = aiSearchResults.find(m => m.productId === b.id)?.relevanceScore || 0;
+        return scoreB - scoreA;
+      });
+    } else if (selectedCategoryName) {
+      // Prioritize highest matching items for the selected category
+      sorted.sort((a, b) => {
+        const scoreB = calculateCategoryRelevanceScore(b, selectedCategoryName, categories);
+        const scoreA = calculateCategoryRelevanceScore(a, selectedCategoryName, categories);
         return scoreB - scoreA;
       });
     }

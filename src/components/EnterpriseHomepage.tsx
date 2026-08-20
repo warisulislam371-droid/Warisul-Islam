@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Product, Category, Brand, Review, Vendor, DealOfDay, PromoBanner } from '../types';
 import { dbLocal } from '../db';
-import { isCategoryMatch } from '../utils/categoryMatcher';
+import { isCategoryMatch, calculateCategoryRelevanceScore } from '../utils/categoryMatcher';
 import {
   Activity,
   ShieldCheck,
@@ -52,6 +52,7 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 import { ImageLightboxModal } from './ImageLightboxModal';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface EnterpriseHomepageProps {
   products: Product[];
@@ -137,7 +138,7 @@ export default function EnterpriseHomepage({
 
   // Marketplace Catalog Filter & Sorter State
   const [filterPriceMin, setFilterPriceMin] = useState<number>(0);
-  const [filterPriceMax, setFilterPriceMax] = useState<number>(2500000);
+  const [filterPriceMax, setFilterPriceMax] = useState<number>(1000000000);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedWarranty, setSelectedWarranty] = useState<string>('all');
   const [filterVerifiedVendorsOnly, setFilterVerifiedVendorsOnly] = useState<boolean>(false);
@@ -146,6 +147,12 @@ export default function EnterpriseHomepage({
   const [catalogSortBy, setCatalogSortBy] = useState<'relevance' | 'price_asc' | 'price_desc' | 'rating_desc' | 'warranty_desc' | 'moq_asc' | 'brand_asc' | 'newest'>('relevance');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState<boolean>(false);
   const [brandSearchQuery, setBrandSearchQuery] = useState<string>('');
+  const [selectedSubcategoryFilter, setSelectedSubcategoryFilter] = useState<string>('');
+
+  // Reset active subcategory sub-filter whenever the parent selectedCategoryName changes
+  useEffect(() => {
+    setSelectedSubcategoryFilter('');
+  }, [selectedCategoryName]);
 
   // Extract dynamic list of brands present in products
   const availableBrands = useMemo(() => {
@@ -196,25 +203,27 @@ export default function EnterpriseHomepage({
   // Active filter count for badges
   const activeFiltersCount = useMemo(() => {
     let count = 0;
-    if (filterPriceMin > 0 || filterPriceMax < 2500000) count++;
+    if (filterPriceMin > 0 || filterPriceMax < 1000000000) count++;
     if (selectedBrands.length > 0) count += selectedBrands.length;
     if (selectedWarranty !== 'all') count++;
     if (filterVerifiedVendorsOnly) count++;
     if (filterInStockOnly) count++;
     if (filterMinRating > 0) count++;
     if (selectedCategoryName) count++;
+    if (selectedSubcategoryFilter) count++;
     return count;
-  }, [filterPriceMin, filterPriceMax, selectedBrands, selectedWarranty, filterVerifiedVendorsOnly, filterInStockOnly, filterMinRating, selectedCategoryName]);
+  }, [filterPriceMin, filterPriceMax, selectedBrands, selectedWarranty, filterVerifiedVendorsOnly, filterInStockOnly, filterMinRating, selectedCategoryName, selectedSubcategoryFilter]);
 
   const handleResetFilters = () => {
     setFilterPriceMin(0);
-    setFilterPriceMax(2500000);
+    setFilterPriceMax(1000000000);
     setSelectedBrands([]);
     setSelectedWarranty('all');
     setFilterVerifiedVendorsOnly(false);
     setFilterInStockOnly(false);
     setFilterMinRating(0);
     setCatalogSortBy('relevance');
+    setSelectedSubcategoryFilter('');
     onCategorySelect('');
   };
 
@@ -224,12 +233,22 @@ export default function EnterpriseHomepage({
     );
   };
 
-  // Computed catalog products reflecting all active filters and sort criteria
+  // Computed catalog products reflecting all active filters, category & subcategory hoisting
   const filteredMarketplaceProducts = useMemo(() => {
     let list = products.filter(p => {
-      // Category filter
-      if (selectedCategoryName && !isCategoryMatch(p, selectedCategoryName, categories)) {
-        return false;
+      // Category & Subcategory filter
+      if (selectedCategoryName) {
+        if (selectedSubcategoryFilter) {
+          const subTarget = selectedSubcategoryFilter.trim().toLowerCase();
+          const pSub = (p.subcategory || '').trim().toLowerCase();
+          const pName = (p.name || '').trim().toLowerCase();
+          const isSubMatch = pSub === subTarget || pName.includes(subTarget);
+          if (!isSubMatch && !isCategoryMatch(p, selectedSubcategoryFilter, categories)) {
+            return false;
+          }
+        } else if (!isCategoryMatch(p, selectedCategoryName, categories)) {
+          return false;
+        }
       }
 
       // Price filter
@@ -296,12 +315,20 @@ export default function EnterpriseHomepage({
         sorted.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         break;
       default:
-        // Keep original curated ordering
+        // When a category or subcategory is selected, sort highest matching items to the top
+        if (selectedCategoryName || selectedSubcategoryFilter) {
+          const effectiveTarget = selectedSubcategoryFilter || selectedCategoryName;
+          sorted.sort((a, b) => {
+            const scoreB = calculateCategoryRelevanceScore(b, effectiveTarget, categories);
+            const scoreA = calculateCategoryRelevanceScore(a, effectiveTarget, categories);
+            return scoreB - scoreA;
+          });
+        }
         break;
     }
 
     return sorted;
-  }, [products, categories, selectedCategoryName, filterPriceMin, filterPriceMax, selectedBrands, selectedWarranty, filterVerifiedVendorsOnly, filterInStockOnly, filterMinRating, catalogSortBy, vendors]);
+  }, [products, categories, selectedCategoryName, selectedSubcategoryFilter, filterPriceMin, filterPriceMax, selectedBrands, selectedWarranty, filterVerifiedVendorsOnly, filterInStockOnly, filterMinRating, catalogSortBy, vendors]);
 
   const handleCategoryClick = (catName: string) => {
     onCategorySelect(catName);
@@ -407,6 +434,16 @@ export default function EnterpriseHomepage({
       return pSub === subNorm || (pCat === parentCatName.trim().toLowerCase() && pName.includes(subNorm));
     }).length;
   }, [products]);
+
+  // Derived list of all subcategories under currently active category with counts
+  const activeCategorySubcategories = useMemo(() => {
+    if (!selectedCategoryName) return [];
+    const subs = getSidebarSubcategories(selectedCategoryName);
+    return subs.map(sub => {
+      const count = getSubcategoryCount(sub, selectedCategoryName);
+      return { name: sub, count };
+    }).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [selectedCategoryName, getSidebarSubcategories, getSubcategoryCount]);
 
   // Countdown timer effect
   useEffect(() => {
@@ -1645,6 +1682,110 @@ export default function EnterpriseHomepage({
           </div>
         </section>
 
+        {/* Department Category Active Banner with All Subcategories Displayed at Top */}
+        <div id="catalog-anchor" className="scroll-mt-24"></div>
+        {selectedCategoryName && (
+          <div className="bg-gradient-to-br from-[#0F9D8A] via-[#0077B6] to-slate-900 text-white rounded-3xl p-6 sm:p-7 shadow-lg border border-teal-400/30 space-y-4 animate-fade-in">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl shadow-inner border border-white/30 shrink-0">
+                  {allCategoryCards.find(c => c.name.toLowerCase() === selectedCategoryName.toLowerCase())?.icon || '🏥'}
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-teal-200 bg-teal-950/60 px-2.5 py-0.5 rounded-full border border-teal-400/40">
+                      Active Department Category
+                    </span>
+                    <span className="text-[10px] font-mono font-bold bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full shadow-xs">
+                      {products.filter(p => isCategoryMatch(p, selectedCategoryName, categories)).length} Total Equipment Items
+                    </span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white mt-1">
+                    {selectedCategoryName}
+                  </h2>
+                  <p className="text-xs text-slate-200 font-medium mt-0.5">
+                    Showing all medical equipment and systems from all subcategories under <strong>{selectedCategoryName}</strong> displayed at the top.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleCategoryClick('')}
+                  className="bg-white/15 hover:bg-white/25 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition border border-white/25 flex items-center gap-1.5 cursor-pointer backdrop-blur-sm shadow-xs"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Show All Categories</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Subcategories Row with 'All Subcategories' Pill */}
+            {activeCategorySubcategories.length > 0 && (
+              <div className="pt-3.5 border-t border-white/20 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-teal-200 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5" />
+                    All Subcategories Under {selectedCategoryName} ({activeCategorySubcategories.length} subcategories):
+                  </span>
+                  {selectedSubcategoryFilter && (
+                    <button
+                      onClick={() => setSelectedSubcategoryFilter('')}
+                      className="text-[11px] font-bold text-amber-300 hover:text-amber-200 underline cursor-pointer"
+                    >
+                      Show All Subcategories
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {/* All Subcategories Master Pill */}
+                  <button
+                    onClick={() => setSelectedSubcategoryFilter('')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-xs ${
+                      !selectedSubcategoryFilter
+                        ? 'bg-amber-400 text-slate-950 font-black ring-2 ring-amber-300 shadow-md scale-105'
+                        : 'bg-white/15 hover:bg-white/25 text-white border border-white/20'
+                    }`}
+                  >
+                    <span>⚡ All Subcategories</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                      !selectedSubcategoryFilter ? 'bg-slate-950 text-amber-400' : 'bg-white/20 text-white'
+                    }`}>
+                      {products.filter(p => isCategoryMatch(p, selectedCategoryName, categories)).length}
+                    </span>
+                  </button>
+
+                  {/* Individual Subcategory Filter Pills */}
+                  {activeCategorySubcategories.map(sub => {
+                    const isSubActive = selectedSubcategoryFilter.trim().toLowerCase() === sub.name.trim().toLowerCase();
+                    return (
+                      <button
+                        key={sub.name}
+                        onClick={() => setSelectedSubcategoryFilter(isSubActive ? '' : sub.name)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-xs ${
+                          isSubActive
+                            ? 'bg-[#0F9D8A] text-white font-black ring-2 ring-teal-300 shadow-md scale-105'
+                            : 'bg-white/10 hover:bg-white/20 text-slate-100 border border-white/15'
+                        }`}
+                      >
+                        <span>{sub.name}</span>
+                        {sub.count > 0 && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                            isSubActive ? 'bg-white text-teal-900 font-black' : 'bg-white/20 text-slate-200'
+                          }`}>
+                            {sub.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Marketplace Catalog: 2-Column Responsive Layout (Filter Sidebar + Products Grid) */}
         <section className="space-y-4">
           
@@ -1873,9 +2014,9 @@ export default function EnterpriseHomepage({
                 {/* Range Slider for Max Price */}
                 <input
                   type="range"
-                  min="5000"
-                  max="2500000"
-                  step="10000"
+                  min="0"
+                  max="1000000000"
+                  step="50000"
                   value={filterPriceMax}
                   onChange={(e) => setFilterPriceMax(Number(e.target.value))}
                   className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#0077B6]"
@@ -1899,7 +2040,7 @@ export default function EnterpriseHomepage({
                     <input
                       type="number"
                       min={filterPriceMin}
-                      max="5000000"
+                      max="1000000000"
                       value={filterPriceMax}
                       onChange={(e) => setFilterPriceMax(Number(e.target.value))}
                       className="w-full bg-[#F5F7FA] border border-slate-300 rounded-xl px-2.5 py-1.5 font-mono text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#0077B6]"
@@ -1913,8 +2054,9 @@ export default function EnterpriseHomepage({
                     { label: 'Under ₹25k', max: 25000 },
                     { label: '₹25k - ₹1L', min: 25000, max: 100000 },
                     { label: '₹1L - ₹5L', min: 100000, max: 500000 },
-                    { label: '₹5L - ₹15L', min: 500000, max: 1500000 },
-                    { label: 'All', min: 0, max: 2500000 }
+                    { label: '₹5L - ₹25L', min: 500000, max: 2500000 },
+                    { label: '₹25L - ₹1Cr', min: 2500000, max: 10000000 },
+                    { label: 'All (≤ ₹100Cr)', min: 0, max: 1000000000 }
                   ].map(preset => {
                     const isActive = (preset.min !== undefined ? filterPriceMin === preset.min : filterPriceMin === 0) && filterPriceMax === preset.max;
                     return (

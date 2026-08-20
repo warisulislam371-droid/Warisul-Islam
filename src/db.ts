@@ -655,6 +655,49 @@ const DEFAULT_CLEARANCE_REQUESTS: PaymentClearanceRequest[] = [
 ];
 
 // Database Helpers
+// Dynamic Category Icon & Image Helpers
+const DEFAULT_CATEGORY_IMAGES: Record<string, string> = {
+  'medical equipment': 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800',
+  'hospital furniture': 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=800',
+  'laboratory equipment': 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&q=80&w=800',
+  'dental equipment': 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80&w=800',
+  'surgical instruments': 'https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&q=80&w=800',
+  'diagnostic equipment': 'https://images.unsplash.com/photo-1530026405186-ed1ea0ac7a63?auto=format&fit=crop&q=80&w=800',
+  'homecare devices': 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=800',
+  'consumables': 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&q=80&w=800',
+  'icu & critical care': 'https://images.unsplash.com/photo-1581093458791-9f3c3900df4b?auto=format&fit=crop&q=80&w=800',
+  'orthopedic equipment': 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&q=80&w=800',
+  'ophthalmology': 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&q=80&w=800',
+  'physiotherapy': 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=800',
+  'veterinary equipment': 'https://images.unsplash.com/photo-1537151625747-768eb6cf92b2?auto=format&fit=crop&q=80&w=800'
+};
+
+function inferCategoryIcon(name: string): string {
+  const n = (name || '').toLowerCase();
+  if (n.includes('heart') || n.includes('cardio') || n.includes('ecg') || n.includes('defib')) return 'HeartPulse';
+  if (n.includes('monitor') || n.includes('vital') || n.includes('icu') || n.includes('pulse')) return 'Activity';
+  if (n.includes('lab') || n.includes('microscope') || n.includes('analyzer') || n.includes('diagnostic')) return 'Microscope';
+  if (n.includes('bed') || n.includes('furniture') || n.includes('chair') || n.includes('table') || n.includes('trolley')) return 'Bed';
+  if (n.includes('dental') || n.includes('oral') || n.includes('teeth')) return 'Smile';
+  if (n.includes('surg') || n.includes('forceps') || n.includes('blade') || n.includes('scissor') || n.includes('implant')) return 'Scissors';
+  if (n.includes('syringe') || n.includes('pump') || n.includes('infusion') || n.includes('inject')) return 'Syringe';
+  if (n.includes('home') || n.includes('nebulizer') || n.includes('bp') || n.includes('oximeter')) return 'Home';
+  if (n.includes('x-ray') || n.includes('mri') || n.includes('ct') || n.includes('ultrasound') || n.includes('radiology') || n.includes('imaging')) return 'ScanLine';
+  if (n.includes('ortho') || n.includes('bone') || n.includes('spine')) return 'Bone';
+  if (n.includes('eye') || n.includes('ophthal')) return 'Eye';
+  if (n.includes('rehab') || n.includes('physio')) return 'Accessibility';
+  if (n.includes('consum') || n.includes('glove') || n.includes('mask') || n.includes('bandage')) return 'ShieldPlus';
+  return 'Layers';
+}
+
+function inferCategoryImage(name: string): string {
+  const n = (name || '').toLowerCase();
+  for (const [key, url] of Object.entries(DEFAULT_CATEGORY_IMAGES)) {
+    if (n.includes(key) || key.includes(n)) return url;
+  }
+  return 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800';
+}
+
 export const dbLocal = {
   get<T>(key: string, defaultValue: T): T {
     try {
@@ -910,6 +953,14 @@ export const dbLocal = {
     const old = this.getProducts();
     this.set(STORAGE_KEYS.PRODUCTS, products);
     syncListToFirestoreWithDeletions('products', products, old);
+
+    // Auto-create category / subcategory if any product contains uncataloged categories or subcategories
+    try {
+      this.autoRegisterMissingCategoriesFromProducts(products);
+    } catch (e) {
+      console.warn('Auto category sync on saveProducts failed:', e);
+    }
+
     window.dispatchEvent(new Event('healnex_db_update'));
   },
   approveAllPendingProducts(): number {
@@ -1023,6 +1074,13 @@ export const dbLocal = {
     const isExplicitDraft = prod.status === 'Draft';
     const isExplicitRejected = prod.status === 'Rejected';
 
+    // Auto-create Category or Subcategory if it doesn't already exist
+    try {
+      this.ensureCategoryAndSubcategoryExists(prod.category, prod.subcategory);
+    } catch (e) {
+      console.warn('Auto category creation check failed in addProduct:', e);
+    }
+
     const liveProd: Product = {
       ...prod,
       status: isExplicitDraft ? 'Draft' : isExplicitRejected ? 'Rejected' : 'Approved',
@@ -1053,6 +1111,13 @@ export const dbLocal = {
     this.saveProducts(list);
   },
   updateProduct(id: string, updated: Product) {
+    // Auto-create Category or Subcategory if changed to a new one
+    try {
+      this.ensureCategoryAndSubcategoryExists(updated.category, updated.subcategory);
+    } catch (e) {
+      console.warn('Auto category creation check failed in updateProduct:', e);
+    }
+
     const oldProducts = this.getProducts();
     const oldProd = oldProducts.find(p => p.id === id);
     const list = oldProducts.map(p => p.id === id ? updated : p);
@@ -1309,6 +1374,57 @@ export const dbLocal = {
         });
       }
     }
+
+    // Self-healing & Auto-Discovery: If any active product has a category or subcategory
+    // not present in the platform categories, automatically discover and register it!
+    try {
+      const rawProducts = this.get(STORAGE_KEYS.PRODUCTS, []) as Product[];
+      if (Array.isArray(rawProducts) && rawProducts.length > 0) {
+        let hasNewDiscovered = false;
+        for (const p of rawProducts) {
+          if (!p) continue;
+          const pCat = (p.category || '').trim();
+          const pSub = (p.subcategory || '').trim();
+          if (!pCat) continue;
+          const catLower = pCat.toLowerCase();
+          if (removedSet.has(catLower)) continue;
+
+          if (!categoryMap.has(catLower)) {
+            // Auto-create category in platform
+            const catSlug = pCat.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'cat';
+            const newCat: Category = {
+              id: `cat_${catSlug}_${Date.now().toString(36)}`,
+              name: pCat,
+              description: `Certified clinical ${pCat} equipment & supplies catalog.`,
+              iconName: inferCategoryIcon(pCat),
+              image: inferCategoryImage(pCat),
+              subcategories: pSub && pSub.toLowerCase() !== 'general' && pSub.toLowerCase() !== 'other' && pSub.toLowerCase() !== catLower ? [pSub] : [],
+              isActive: true,
+              createdAt: new Date().toISOString()
+            };
+            categoryMap.set(catLower, newCat);
+            hasNewDiscovered = true;
+          } else if (pSub && pSub.toLowerCase() !== 'general' && pSub.toLowerCase() !== 'other' && pSub.toLowerCase() !== catLower) {
+            // Check subcategory
+            const existing = categoryMap.get(catLower)!;
+            const currentSubs = existing.subcategories || [];
+            if (!currentSubs.some(s => s.trim().toLowerCase() === pSub.toLowerCase())) {
+              existing.subcategories = [...currentSubs, pSub.trim()];
+              categoryMap.set(catLower, existing);
+              hasNewDiscovered = true;
+            }
+          }
+        }
+        if (hasNewDiscovered) {
+          const allDiscovered = Array.from(categoryMap.values());
+          this.set(STORAGE_KEYS.CATEGORIES, allDiscovered);
+          syncListToFirestoreWithDeletions('categories', allDiscovered, baseCategories);
+        }
+      }
+    } catch (e) {
+      console.warn('Auto category self-healing in getCategories failed:', e);
+    }
+
     baseCategories = Array.from(categoryMap.values());
 
     // Auto calculate product counts dynamically
@@ -1350,6 +1466,163 @@ export const dbLocal = {
     syncListToFirestoreWithDeletions('categories', categories, old);
     window.dispatchEvent(new Event('healnex_db_update'));
   },
+
+  /**
+   * Automatically creates a Category or Subcategory in the platform if it doesn't already exist.
+   */
+  ensureCategoryAndSubcategoryExists(rawCategory?: string, rawSubcategory?: string): {
+    category: Category | null;
+    isNewCategory: boolean;
+    isNewSubcategory: boolean;
+  } {
+    let catName = (rawCategory || '').trim();
+    let subName = (rawSubcategory || '').trim();
+
+    if (!catName && subName) {
+      catName = subName;
+    }
+
+    if (!catName) {
+      catName = 'Medical Equipment';
+    }
+
+    // Capitalize cleanly
+    const formatName = (str: string) =>
+      str.replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.substr(1));
+
+    catName = formatName(catName);
+    if (subName) {
+      subName = formatName(subName);
+    }
+
+    const currentCategories = this.getCategories();
+    const catLower = catName.toLowerCase();
+    const foundIndex = currentCategories.findIndex(c => c && c.name && c.name.trim().toLowerCase() === catLower);
+
+    let isNewCategory = false;
+    let isNewSubcategory = false;
+    let resultCategory: Category;
+
+    if (foundIndex === -1) {
+      // 1. AUTOMATICALLY CREATE NEW CATEGORY IN PLATFORM
+      isNewCategory = true;
+      const catSlug = catName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'cat';
+      const newCatId = `cat_${catSlug}_${Date.now().toString(36)}`;
+      const subcategoriesList: string[] = [];
+
+      if (subName && subName.toLowerCase() !== 'general' && subName.toLowerCase() !== 'other' && subName.toLowerCase() !== catLower) {
+        subcategoriesList.push(subName);
+        isNewSubcategory = true;
+      }
+
+      resultCategory = {
+        id: newCatId,
+        name: catName,
+        description: `Verified ${catName} clinical equipment and specialized hospital supplies on HealNex Medi Bazar.`,
+        iconName: inferCategoryIcon(catName),
+        image: inferCategoryImage(catName),
+        subcategories: subcategoriesList,
+        isActive: true,
+        createdAt: new Date().toISOString()
+      };
+
+      const updatedList = [...currentCategories, resultCategory];
+      this.saveCategories(updatedList);
+    } else {
+      // 2. CATEGORY EXISTS -> CHECK & AUTOMATICALLY ADD SUBCATEGORY
+      const existing = currentCategories[foundIndex];
+      resultCategory = existing;
+
+      if (subName && subName.toLowerCase() !== 'general' && subName.toLowerCase() !== 'other' && subName.toLowerCase() !== catLower) {
+        const existingSubs = Array.isArray(existing.subcategories) ? existing.subcategories : [];
+        const subLower = subName.toLowerCase();
+        const hasSub = existingSubs.some(s => (s || '').trim().toLowerCase() === subLower);
+
+        if (!hasSub) {
+          isNewSubcategory = true;
+          const updatedSubs = [...existingSubs, subName];
+          currentCategories[foundIndex] = {
+            ...existing,
+            subcategories: updatedSubs,
+            isActive: true
+          };
+          resultCategory = currentCategories[foundIndex];
+          this.saveCategories(currentCategories);
+        }
+      }
+    }
+
+    // Sync subcategory metadata to ai engine storage key if needed
+    if (subName && (isNewCategory || isNewSubcategory)) {
+      try {
+        const storedSubs = dbLocal.get<any[]>('healnex_subcategory_objects', []);
+        const subSlug = subName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const catSlug = catName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const subObjId = `sub_${catSlug}_${subSlug}`;
+
+        if (!storedSubs.some(s => s.id === subObjId || (s.name?.toLowerCase() === subName.toLowerCase() && s.categoryName?.toLowerCase() === catName.toLowerCase()))) {
+          storedSubs.push({
+            id: subObjId,
+            categoryId: resultCategory.id,
+            categoryName: catName,
+            name: subName,
+            slug: subSlug,
+            description: `Verified clinical ${subName} supplies under ${catName}.`,
+            keywords: [subName.toLowerCase(), catName.toLowerCase()],
+            synonyms: [subName.toLowerCase()],
+            productCount: 1,
+            createdByAi: false,
+            approved: true,
+            status: 'Active',
+            createdAt: new Date().toISOString()
+          });
+          this.set('healnex_subcategory_objects', storedSubs);
+        }
+      } catch (e) {
+        console.warn('Subcategory AI storage sync error:', e);
+      }
+    }
+
+    return { category: resultCategory, isNewCategory, isNewSubcategory };
+  },
+
+  /**
+   * Scans a list of products (or all products in database) and automatically registers
+   * any missing categories and subcategories in the platform.
+   */
+  autoRegisterMissingCategoriesFromProducts(productsList?: Product[]): {
+    newCategoriesCreated: number;
+    subcategoriesAdded: number;
+    registeredCategories: string[];
+  } {
+    const prods = productsList || this.getProducts();
+    if (!Array.isArray(prods) || prods.length === 0) {
+      return { newCategoriesCreated: 0, subcategoriesAdded: 0, registeredCategories: [] };
+    }
+
+    let newCatsCount = 0;
+    let newSubsCount = 0;
+    const regNames = new Set<string>();
+
+    for (const prod of prods) {
+      if (!prod) continue;
+      const cat = prod.category?.trim();
+      const sub = prod.subcategory?.trim();
+      if (cat || sub) {
+        const res = this.ensureCategoryAndSubcategoryExists(cat, sub);
+        if (res.isNewCategory) newCatsCount++;
+        if (res.isNewSubcategory) newSubsCount++;
+        if (res.category?.name) regNames.add(res.category.name);
+      }
+    }
+
+    return {
+      newCategoriesCreated: newCatsCount,
+      subcategoriesAdded: newSubsCount,
+      registeredCategories: Array.from(regNames)
+    };
+  },
+
   mergeDuplicateCategories(): { mergedCount: number; duplicateNames: string[]; totalUniqueRemaining: number } {
     const rawList = this.get(STORAGE_KEYS.CATEGORIES, []) as Category[];
     const removed: string[] = this.get('healnex_removed_categories', []);
@@ -1499,11 +1772,6 @@ export const dbLocal = {
         newSub = recSub || currentSub;
         needsFix = true;
         details.push(`Auto-categorized "${p.name}" -> "${newCat}" (${newSub})`);
-      } else if (!categoryNameMap.has(currentCat.toLowerCase())) {
-        newCat = recCat;
-        newSub = recSub || currentSub;
-        needsFix = true;
-        details.push(`Reassigned non-existent category for "${p.name}" -> "${newCat}"`);
       } else if (!currentSub && recSub) {
         newSub = recSub;
         needsFix = true;
@@ -1525,9 +1793,19 @@ export const dbLocal = {
       this.saveProducts(updatedProducts);
     }
 
-    // 4. Ensure all subcategories present on active products exist in parent Category subcategory list
+    // 4. Auto-register any missing categories and subcategories from products
+    const autoRegRes = this.autoRegisterMissingCategoriesFromProducts(updatedProducts);
+    if (autoRegRes.newCategoriesCreated > 0) {
+      details.push(`Auto-created ${autoRegRes.newCategoriesCreated} new platform categories from products.`);
+    }
+    if (autoRegRes.subcategoriesAdded > 0) {
+      details.push(`Auto-created ${autoRegRes.subcategoriesAdded} new subcategories across platform categories.`);
+    }
+
+    // 5. Ensure all subcategories present on active products exist in parent Category subcategory list
     const currentProds = (this.get(STORAGE_KEYS.PRODUCTS, []) as Product[]) || [];
-    const updatedCategories = categories.map(cat => {
+    const refreshedCategories = this.getCategories();
+    const updatedCategories = refreshedCategories.map(cat => {
       const catLower = (cat.name || '').trim().toLowerCase();
       const subSet = new Set((cat.subcategories || []).map(s => (s || '').trim()).filter(Boolean));
 
