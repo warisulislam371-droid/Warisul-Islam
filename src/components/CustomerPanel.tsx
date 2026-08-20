@@ -341,6 +341,25 @@ export default function CustomerPanel({
   }, [selectedProduct]);
 
   useEffect(() => {
+    const handleOpenProduct = (e: any) => {
+      if (e.detail) {
+        setSelectedProduct(e.detail);
+      }
+    };
+    const handleFilterSubcat = (e: any) => {
+      if (e.detail && typeof onCategorySelect === 'function') {
+        onCategorySelect(e.detail);
+      }
+    };
+    window.addEventListener('healnex_open_product', handleOpenProduct);
+    window.addEventListener('healnex_filter_subcategory', handleFilterSubcat);
+    return () => {
+      window.removeEventListener('healnex_open_product', handleOpenProduct);
+      window.removeEventListener('healnex_filter_subcategory', handleFilterSubcat);
+    };
+  }, [onCategorySelect]);
+
+  useEffect(() => {
     window.dispatchEvent(new CustomEvent('healnex_checkout_step', { detail: checkoutStep }));
   }, [checkoutStep]);
 

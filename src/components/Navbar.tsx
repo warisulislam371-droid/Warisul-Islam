@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { User, Notification, Category, PriceAlert, RFQ } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { User, Notification, Category, PriceAlert, RFQ, Product } from '../types';
 import { dbLocal } from '../db';
 import { MARKETPLACE_LOGO } from '../assets/logo';
 import {
@@ -33,7 +33,8 @@ import {
   ArrowRight,
   TrendingDown,
   Tag,
-  FilePlus
+  FilePlus,
+  PackageCheck
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -83,8 +84,16 @@ export default function Navbar({
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([]);
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Live search popover states
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isMobileSearchFocused, setIsMobileSearchFocused] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const mobileSearchContainerRef = useRef<HTMLDivElement>(null);
 
   const locations = [
     { city: 'Pune', pin: '411001' },
@@ -110,17 +119,209 @@ export default function Navbar({
   }, [externalSearchQuery]);
 
   useEffect(() => {
-    setNotifications(dbLocal.getNotifications());
-    setPriceAlerts(dbLocal.getPriceAlerts());
-    setRfqs(dbLocal.getRfqs());
-    const handleDbUpdate = () => {
+    const refreshData = () => {
       setNotifications(dbLocal.getNotifications());
       setPriceAlerts(dbLocal.getPriceAlerts());
       setRfqs(dbLocal.getRfqs());
+      setAllProducts(dbLocal.getProducts().filter(p => p.status !== 'Draft' && p.status !== 'Rejected' && p.published !== false && p.isActive !== false));
+      setAllCategories(dbLocal.getCategories().filter(c => c.isActive !== false));
     };
-    window.addEventListener('healnex_db_update', handleDbUpdate);
-    return () => window.removeEventListener('healnex_db_update', handleDbUpdate);
+    refreshData();
+    window.addEventListener('healnex_db_update', refreshData);
+    return () => window.removeEventListener('healnex_db_update', refreshData);
   }, []);
+
+  // Handle outside clicks to close search auto-suggest dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsSearchFocused(false);
+      }
+      if (mobileSearchContainerRef.current && !mobileSearchContainerRef.current.contains(e.target as Node)) {
+        setIsMobileSearchFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Extract all distinct subcategories with parent category and product counts
+  const distinctSubcategories = useMemo(() => {
+    const subcatMap = new Map<string, { name: string; categoryName: string; count: number }>();
+    
+    // First collect from registered Categories
+    allCategories.forEach(cat => {
+      if (Array.isArray(cat.subcategories)) {
+        cat.subcategories.forEach(sub => {
+          const trimmed = sub.trim();
+          if (trimmed && !subcatMap.has(trimmed.toLowerCase())) {
+            subcatMap.set(trimmed.toLowerCase(), {
+              name: trimmed,
+              categoryName: cat.name,
+              count: 0
+            });
+          }
+        });
+      }
+    });
+
+    // Also scan all products for any explicit subcategories
+    allProducts.forEach(prod => {
+      const sub = (prod.subcategory || '').trim();
+      if (sub) {
+        const key = sub.toLowerCase();
+        if (subcatMap.has(key)) {
+          subcatMap.get(key)!.count += 1;
+        } else {
+          subcatMap.set(key, {
+            name: sub,
+            categoryName: prod.category || 'Medical Equipment',
+            count: 1
+          });
+        }
+      }
+    });
+
+    return Array.from(subcatMap.values());
+  }, [allCategories, allProducts]);
+
+  // Word-matching search suggestions calculation
+  const searchSuggestions = useMemo(() => {
+    const rawQuery = searchQuery.trim();
+    if (!rawQuery) return { subcategories: [], products: [], categories: [], totalCount: 0 };
+
+    const queryLower = rawQuery.toLowerCase();
+    const words = queryLower.split(/\s+/).filter(w => w.length > 0);
+
+    // 1. Match Subcategories if ANY word matches
+    const matchedSubcategories = distinctSubcategories.map(sub => {
+      const subLower = sub.name.toLowerCase();
+      const catLower = sub.categoryName.toLowerCase();
+      let score = 0;
+
+      if (subLower === queryLower) score += 100;
+      else if (subLower.startsWith(queryLower)) score += 80;
+      else if (subLower.includes(queryLower)) score += 60;
+
+      // Check each word
+      let wordMatches = 0;
+      words.forEach(w => {
+        if (subLower.includes(w)) {
+          score += 30;
+          wordMatches++;
+        } else if (catLower.includes(w)) {
+          score += 15;
+        }
+      });
+
+      return {
+        ...sub,
+        score,
+        matched: score > 0 || (words.length === 1 && subLower.includes(words[0]))
+      };
+    })
+    .filter(s => s.matched && s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6);
+
+    // 2. Match Products if ANY word matches
+    const matchedProducts = allProducts.map(p => {
+      const nameLower = (p.name || '').toLowerCase();
+      const brandLower = (p.brand || '').toLowerCase();
+      const skuLower = (p.sku || '').toLowerCase();
+      const modelLower = (p.modelNumber || '').toLowerCase();
+      const subLower = (p.subcategory || '').toLowerCase();
+      const catLower = (p.category || '').toLowerCase();
+
+      let score = 0;
+      if (nameLower === queryLower) score += 120;
+      else if (nameLower.startsWith(queryLower)) score += 90;
+      else if (nameLower.includes(queryLower)) score += 70;
+
+      let matchedWordCount = 0;
+      words.forEach(w => {
+        if (nameLower.includes(w)) {
+          score += 35;
+          matchedWordCount++;
+        } else if (modelLower.includes(w) || skuLower.includes(w)) {
+          score += 30;
+          matchedWordCount++;
+        } else if (brandLower.includes(w)) {
+          score += 25;
+          matchedWordCount++;
+        } else if (subLower.includes(w)) {
+          score += 20;
+          matchedWordCount++;
+        } else if (catLower.includes(w)) {
+          score += 15;
+          matchedWordCount++;
+        }
+      });
+
+      return {
+        product: p,
+        score,
+        matched: score > 0 && (matchedWordCount > 0 || nameLower.includes(queryLower))
+      };
+    })
+    .filter(item => item.matched && item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+
+    // 3. Match Parent Categories if ANY word matches
+    const matchedCategories = allCategories.map(cat => {
+      const catLower = cat.name.toLowerCase();
+      let score = 0;
+      if (catLower === queryLower) score += 100;
+      else if (catLower.startsWith(queryLower)) score += 70;
+      else if (catLower.includes(queryLower)) score += 50;
+
+      words.forEach(w => {
+        if (catLower.includes(w)) score += 25;
+      });
+
+      return {
+        category: cat,
+        score,
+        matched: score > 0
+      };
+    })
+    .filter(c => c.matched && c.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4);
+
+    return {
+      subcategories: matchedSubcategories,
+      products: matchedProducts.map(m => m.product),
+      categories: matchedCategories.map(c => c.category),
+      totalCount: matchedSubcategories.length + matchedProducts.length + matchedCategories.length
+    };
+  }, [searchQuery, distinctSubcategories, allProducts, allCategories]);
+
+  // Highlight matched search terms
+  const highlightMatch = (text: string, query: string) => {
+    if (!query || !text) return text;
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return text;
+
+    const escapedWords = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`(${escapedWords.join('|')})`, 'gi');
+    const parts = text.split(regex);
+
+    return (
+      <span>
+        {parts.map((part, i) =>
+          words.includes(part.toLowerCase()) ? (
+            <mark key={i} className="bg-teal-100 text-teal-900 font-extrabold px-0.5 rounded">
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </span>
+    );
+  };
 
   const activeRfqsCount = rfqs.length;
 
@@ -141,6 +342,8 @@ export default function Navbar({
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSearchFocused(false);
+    setIsMobileSearchFocused(false);
     onSearch(searchQuery);
     onNavigate('marketplace');
   };
@@ -157,6 +360,7 @@ export default function Navbar({
       setSearchQuery(randomQuery);
       onSearch(randomQuery);
       setIsVoiceListening(false);
+      setIsSearchFocused(false);
       onNavigate('marketplace');
     }, 2000);
   };
@@ -282,7 +486,7 @@ export default function Navbar({
         </div>
 
         {/* Search Bar - Center */}
-        <div className="flex-1 max-w-2xl relative hidden md:block">
+        <div ref={searchContainerRef} className="flex-1 max-w-2xl relative hidden md:block">
           <form onSubmit={handleSearchSubmit} className="flex items-center bg-[#F5F7FA] rounded-2xl border border-slate-300 focus-within:border-[#0F9D8A] focus-within:bg-white transition-all shadow-sm overflow-hidden h-12">
             
             {/* Category Dropdown inside Search */}
@@ -306,14 +510,37 @@ export default function Navbar({
 
             <input
               type="text"
-              placeholder="Search Medical Equipment, Brands, Categories..."
+              placeholder="Search Medical Equipment, Subcategories, Brands..."
               value={searchQuery}
+              onFocus={() => setIsSearchFocused(true)}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 onSearch(e.target.value);
+                setIsSearchFocused(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setIsSearchFocused(false);
+                }
               }}
               className="w-full px-3 py-2 text-xs font-medium text-slate-800 outline-none bg-transparent placeholder-slate-400 font-sans"
             />
+
+            {/* Clear button when text exists */}
+            {searchQuery.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  onSearch('');
+                  setIsSearchFocused(false);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition cursor-pointer"
+                title="Clear Search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Voice & Image Search Controls */}
             <div className="flex items-center gap-1.5 px-2">
@@ -339,13 +566,229 @@ export default function Navbar({
 
               <button
                 type="submit"
-                className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5"
+                className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5 cursor-pointer"
               >
                 <Search className="w-4 h-4" />
                 <span>Search</span>
               </button>
             </div>
           </form>
+
+          {/* Auto-suggest Popover for Subcategories and Products */}
+          {isSearchFocused && searchQuery.trim().length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 animate-fade-in max-h-[75vh] flex flex-col font-sans">
+              
+              {/* Header Info */}
+              <div className="bg-gradient-to-r from-slate-50 to-teal-50/40 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between text-xs shrink-0">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-teal-600 animate-pulse" />
+                  <span className="font-bold text-slate-800">
+                    Live Matches for &ldquo;<span className="text-teal-700 font-black">{searchQuery}</span>&rdquo;
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                  {searchSuggestions.totalCount} matches
+                </span>
+              </div>
+
+              <div className="overflow-y-auto divide-y divide-slate-100 p-2 space-y-2">
+                
+                {/* 1. MATCHING SUBCATEGORIES SECTION */}
+                {searchSuggestions.subcategories.length > 0 && (
+                  <div className="space-y-1.5 p-1">
+                    <div className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-teal-700 bg-teal-50/80 rounded-lg flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Layers className="w-3 h-3 text-teal-600" />
+                        <span>Matching Subcategories</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-teal-800">{searchSuggestions.subcategories.length} found</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {searchSuggestions.subcategories.map((sub, idx) => (
+                        <button
+                          key={`${sub.name}-${idx}`}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSearchQuery(sub.name);
+                            onCategorySelect('');
+                            onSearch(sub.name);
+                            onNavigate('marketplace');
+                            setIsSearchFocused(false);
+                            window.dispatchEvent(new CustomEvent('healnex_filter_subcategory', { detail: sub.name }));
+                          }}
+                          className="flex items-center justify-between p-2 rounded-xl hover:bg-teal-50 border border-slate-100 hover:border-teal-300 text-left transition group cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-7 h-7 rounded-lg bg-teal-100/70 text-teal-700 flex items-center justify-center shrink-0 group-hover:bg-teal-600 group-hover:text-white transition">
+                              <Tag className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 group-hover:text-teal-900 truncate">
+                                {highlightMatch(sub.name, searchQuery)}
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">
+                                Category: <span className="font-semibold text-slate-600">{sub.categoryName}</span>
+                              </p>
+                            </div>
+                          </div>
+                          {sub.count > 0 && (
+                            <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full shrink-0 group-hover:bg-teal-200 group-hover:text-teal-900 ml-1">
+                              {sub.count} {sub.count === 1 ? 'item' : 'items'}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. MATCHING PRODUCT NAMES SECTION */}
+                {searchSuggestions.products.length > 0 && (
+                  <div className="space-y-1.5 p-1 pt-2">
+                    <div className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-700 bg-slate-100 rounded-lg flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Activity className="w-3 h-3 text-teal-600" />
+                        <span>Matching Products</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-500">{searchSuggestions.products.length} found</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      {searchSuggestions.products.map((prod) => (
+                        <button
+                          key={prod.id}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSearchQuery(prod.name);
+                            onSearch(prod.name);
+                            onNavigate('marketplace');
+                            setIsSearchFocused(false);
+                            window.dispatchEvent(new CustomEvent('healnex_open_product', { detail: prod }));
+                          }}
+                          className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition text-left group cursor-pointer"
+                        >
+                          <img
+                            src={prod.images?.[0] || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=800'}
+                            alt={prod.name}
+                            className="w-11 h-11 object-contain rounded-lg border border-slate-200 bg-white p-0.5 shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-slate-900 group-hover:text-teal-700 truncate leading-snug">
+                                {highlightMatch(prod.name, searchQuery)}
+                              </p>
+                              {prod.brand && (
+                                <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 shrink-0">
+                                  {prod.brand}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                              {prod.subcategory ? (
+                                <span className="text-teal-700 font-medium truncate flex items-center gap-1">
+                                  <Tag className="w-2.5 h-2.5" />
+                                  <span>{highlightMatch(prod.subcategory, searchQuery)}</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-500 font-medium truncate">
+                                  {prod.category}
+                                </span>
+                              )}
+                              {prod.modelNumber && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-mono text-[10px] text-slate-400">
+                                    Model: {highlightMatch(prod.modelNumber, searchQuery)}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="font-bold text-xs text-slate-900 font-mono block">
+                              ₹{prod.salePrice.toLocaleString('en-IN')}
+                            </span>
+                            {prod.stockQuantity !== undefined && prod.stockQuantity <= 0 ? (
+                              <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1 rounded">Out of Stock</span>
+                            ) : (
+                              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 rounded">In Stock</span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. MATCHING CATEGORIES */}
+                {searchSuggestions.categories.length > 0 && (
+                  <div className="space-y-1.5 p-1 pt-2">
+                    <div className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-slate-700 bg-slate-100 rounded-lg flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <SlidersHorizontal className="w-3 h-3 text-teal-600" />
+                        <span>Matching Department Categories</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-500">{searchSuggestions.categories.length} found</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 p-1">
+                      {searchSuggestions.categories.map(cat => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setSelectedSearchCategory(cat.name);
+                            onCategorySelect(cat.name);
+                            onSearch('');
+                            setSearchQuery('');
+                            onNavigate('marketplace');
+                            setIsSearchFocused(false);
+                          }}
+                          className="bg-slate-100 hover:bg-teal-100 text-slate-800 hover:text-teal-900 text-xs font-semibold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 border border-slate-200 hover:border-teal-300 cursor-pointer"
+                        >
+                          <Tag className="w-3 h-3 text-teal-600" />
+                          <span>{highlightMatch(cat.name, searchQuery)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* NO RESULTS STATE */}
+                {searchSuggestions.totalCount === 0 && (
+                  <div className="p-6 text-center text-slate-500">
+                    <Search className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                    <p className="text-xs font-bold text-slate-700">No instant subcategory or product matches found</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Press Enter or click Search to search across the entire clinical marketplace catalog.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer link to execute search */}
+              <div className="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex items-center justify-between text-xs shrink-0">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onSearch(searchQuery);
+                    onNavigate('marketplace');
+                    setIsSearchFocused(false);
+                  }}
+                  className="text-teal-700 hover:text-teal-900 font-extrabold flex items-center gap-1 transition cursor-pointer"
+                >
+                  <span>View all search results for &ldquo;{searchQuery}&rdquo;</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">Press Enter ↵</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Navigation & Utility Badges */}
@@ -695,21 +1138,98 @@ export default function Navbar({
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-b border-slate-200 shadow-xl p-4 space-y-4 animate-fade-in text-slate-800">
           {/* Mobile Search Bar */}
-          <form onSubmit={(e) => { handleSearchSubmit(e); setMobileMenuOpen(false); }} className="flex items-center bg-slate-100 rounded-xl p-1.5 border border-slate-200">
-            <input
-              type="text"
-              placeholder="Search medical equipment..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                onSearch(e.target.value);
-              }}
-              className="w-full bg-transparent px-2 text-xs outline-none text-slate-800"
-            />
-            <button type="submit" className="bg-[#0F9D8A] text-white p-2 rounded-lg text-xs">
-              <Search className="w-4 h-4" />
-            </button>
-          </form>
+          <div ref={mobileSearchContainerRef} className="relative">
+            <form onSubmit={(e) => { handleSearchSubmit(e); setMobileMenuOpen(false); }} className="flex items-center bg-slate-100 rounded-xl p-1.5 border border-slate-200">
+              <input
+                type="text"
+                placeholder="Search medical equipment, subcategories..."
+                value={searchQuery}
+                onFocus={() => setIsMobileSearchFocused(true)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  onSearch(e.target.value);
+                  setIsMobileSearchFocused(true);
+                }}
+                className="w-full bg-transparent px-2 text-xs outline-none text-slate-800"
+              />
+              {searchQuery.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    onSearch('');
+                    setIsMobileSearchFocused(false);
+                  }}
+                  className="p-1 text-slate-400 hover:text-slate-700 mr-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button type="submit" className="bg-[#0F9D8A] text-white p-2 rounded-lg text-xs cursor-pointer">
+                <Search className="w-4 h-4" />
+              </button>
+            </form>
+
+            {/* Mobile Auto-suggest Popover */}
+            {isMobileSearchFocused && searchQuery.trim().length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-50 max-h-80 overflow-y-auto p-2 space-y-3">
+                {searchSuggestions.subcategories.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-teal-700 px-2 flex items-center gap-1">
+                      <Layers className="w-3 h-3" /> Subcategories
+                    </p>
+                    {searchSuggestions.subcategories.map((sub, idx) => (
+                      <button
+                        key={`${sub.name}-${idx}`}
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery(sub.name);
+                          onSearch(sub.name);
+                          onNavigate('marketplace');
+                          setMobileMenuOpen(false);
+                          setIsMobileSearchFocused(false);
+                          window.dispatchEvent(new CustomEvent('healnex_filter_subcategory', { detail: sub.name }));
+                        }}
+                        className="w-full text-left p-2 rounded-lg hover:bg-teal-50 text-xs font-bold text-slate-800 flex items-center justify-between"
+                      >
+                        <span>{sub.name}</span>
+                        <span className="text-[10px] text-slate-400">{sub.categoryName}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {searchSuggestions.products.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-slate-600 px-2 flex items-center gap-1">
+                      <Activity className="w-3 h-3 text-teal-600" /> Products
+                    </p>
+                    {searchSuggestions.products.map(prod => (
+                      <button
+                        key={prod.id}
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery(prod.name);
+                          onSearch(prod.name);
+                          onNavigate('marketplace');
+                          setMobileMenuOpen(false);
+                          setIsMobileSearchFocused(false);
+                          window.dispatchEvent(new CustomEvent('healnex_open_product', { detail: prod }));
+                        }}
+                        className="w-full text-left p-2 rounded-lg hover:bg-slate-50 flex items-center gap-2"
+                      >
+                        <img src={prod.images?.[0]} alt={prod.name} className="w-8 h-8 object-contain rounded border border-slate-200" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-900 truncate">{prod.name}</p>
+                          <p className="text-[10px] text-teal-700 font-mono">₹{prod.salePrice.toLocaleString('en-IN')}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Quick Navigation Links */}
           <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
