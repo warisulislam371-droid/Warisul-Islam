@@ -1019,7 +1019,37 @@ export const dbLocal = {
   },
   addProduct(prod: Product) {
     const list = this.getProducts();
-    list.unshift(prod);
+    const now = new Date().toISOString();
+    const isExplicitDraft = prod.status === 'Draft';
+    const isExplicitRejected = prod.status === 'Rejected';
+
+    const liveProd: Product = {
+      ...prod,
+      status: isExplicitDraft ? 'Draft' : isExplicitRejected ? 'Rejected' : 'Approved',
+      published: !isExplicitDraft && !isExplicitRejected,
+      isActive: !isExplicitDraft && !isExplicitRejected,
+      approvedAt: prod.approvedAt || (!isExplicitDraft && !isExplicitRejected ? now : null),
+      publishedAt: prod.publishedAt || (!isExplicitDraft && !isExplicitRejected ? now : null),
+      approvedBy: prod.approvedBy || (!isExplicitDraft && !isExplicitRejected ? 'Auto Approved Live' : ''),
+      updatedAt: prod.updatedAt || now
+    };
+
+    // Auto-approve vendor account if needed so vendor products are not blocked
+    if (liveProd.vendorId && liveProd.status === 'Approved') {
+      try {
+        const vendors = this.getVendors();
+        const vIdx = vendors.findIndex(v => v.id === liveProd.vendorId);
+        if (vIdx !== -1 && vendors[vIdx].status !== 'Approved') {
+          vendors[vIdx].status = 'Approved';
+          vendors[vIdx].updatedAt = now;
+          this.saveVendors(vendors);
+        }
+      } catch (e) {
+        console.warn('Vendor auto-approval check failed:', e);
+      }
+    }
+
+    list.unshift(liveProd);
     this.saveProducts(list);
   },
   updateProduct(id: string, updated: Product) {

@@ -360,7 +360,7 @@ export default function VendorProductManager({
     onRefresh();
   };
 
-  const handleSaveProduct = (targetStatus: 'Draft' | 'Pending') => {
+  const handleSaveProduct = (targetStatus: 'Draft' | 'Approved' | 'Pending') => {
     setFormError('');
     if (!formName.trim() || !formSku.trim() || !formCategory || !formBrand) {
       setFormError('Please fill out Product Name, SKU, Category, and Brand.');
@@ -444,12 +444,12 @@ export default function VendorProductManager({
       vendorPayout: vendorPayout,
       
       // Default / secure workflow values
-      status: targetStatus === 'Draft' ? 'Draft' : 'Pending',
-      published: false,
-      isActive: false,
-      approvedBy: '',
-      approvedAt: null,
-      publishedAt: null,
+      status: targetStatus === 'Draft' ? 'Draft' : 'Approved',
+      published: targetStatus !== 'Draft',
+      isActive: targetStatus !== 'Draft',
+      approvedBy: targetStatus !== 'Draft' ? 'Auto-Approved Live' : '',
+      approvedAt: targetStatus !== 'Draft' ? now : null,
+      publishedAt: targetStatus !== 'Draft' ? now : null,
       rejectedAt: null,
       rejectReason: '',
       rejectionReason: '',
@@ -461,38 +461,38 @@ export default function VendorProductManager({
 
     if (editingProduct) {
       dbLocal.updateProduct(updatedProd.id, updatedProd);
-      if (updatedProd.status === 'Pending') {
+      if (updatedProd.status === 'Approved') {
         dbLocal.addNotification(
           'admin',
-          `Product Resubmitted: ${updatedProd.name}`,
-          `Vendor "${vendor.companyName}" has resubmitted their product "${updatedProd.name}" (SKU: ${updatedProd.sku}) with requested updates for audit.`,
+          `Product Updated & Live: ${updatedProd.name}`,
+          `Vendor "${vendor.companyName}" updated product "${updatedProd.name}" (SKU: ${updatedProd.sku}) and it is now live on the marketplace.`,
           'info'
         );
         dbLocal.addNotification(
           vendor.id,
-          `Product Resubmitted: ${updatedProd.name}`,
-          `Your product "${updatedProd.name}" has been resubmitted for Admin review.`,
-          'info'
+          `Product Live: ${updatedProd.name}`,
+          `Your product "${updatedProd.name}" is updated and live on the marketplace!`,
+          'success'
         );
       }
-      showToast(targetStatus === 'Draft' ? 'Product saved as Draft.' : 'Product resubmitted for Admin quality audit!');
+      showToast(targetStatus === 'Draft' ? 'Product saved as Draft.' : `Product "${updatedProd.name}" updated & published live to marketplace!`);
     } else {
       dbLocal.addProduct(updatedProd);
-      if (updatedProd.status === 'Pending') {
+      if (updatedProd.status === 'Approved') {
         dbLocal.addNotification(
           'admin',
-          `New Product Uploaded: ${updatedProd.name}`,
-          `Vendor "${vendor.companyName}" uploaded a new product "${updatedProd.name}" (SKU: ${updatedProd.sku}) for approval.`,
+          `New Product Live: ${updatedProd.name}`,
+          `Vendor "${vendor.companyName}" uploaded a new product "${updatedProd.name}" (SKU: ${updatedProd.sku}) and published it live on marketplace.`,
           'info'
         );
         dbLocal.addNotification(
           vendor.id,
-          `Product Submitted: ${updatedProd.name}`,
-          `Your product "${updatedProd.name}" has been successfully uploaded and is awaiting Admin review.`,
-          'info'
+          `Product Live: ${updatedProd.name}`,
+          `Your product "${updatedProd.name}" is now live on the HealNex Medi Bazar marketplace!`,
+          'success'
         );
       }
-      showToast(targetStatus === 'Draft' ? 'New draft product created.' : 'New product submitted for Admin approval!');
+      showToast(targetStatus === 'Draft' ? 'New draft product created.' : `New product "${updatedProd.name}" uploaded and published live on marketplace!`);
     }
 
     setShowProductModal(false);
@@ -551,29 +551,34 @@ export default function VendorProductManager({
     const now = new Date().toISOString();
     const updated: Product = {
       ...p,
-      status: 'Pending',
+      status: 'Approved',
+      published: true,
+      isActive: true,
+      approvedBy: 'Auto-Approved Live',
+      approvedAt: now,
+      publishedAt: now,
       updatedAt: now
     };
     dbLocal.updateProduct(p.id, updated);
     dbLocal.addNotification(
       'admin',
-      `Draft Product Submitted: ${p.name}`,
-      `Vendor "${vendor.companyName}" submitted draft product "${p.name}" (SKU: ${p.sku}) for quality audit & approval.`,
+      `Product Published Live: ${p.name}`,
+      `Vendor "${vendor.companyName}" published product "${p.name}" (SKU: ${p.sku}) live on marketplace.`,
       'info'
     );
     dbLocal.addNotification(
       vendor.id,
-      `Draft Submitted: ${p.name}`,
-      `Your draft product "${p.name}" has been submitted for Admin review.`,
-      'info'
+      `Product Published Live: ${p.name}`,
+      `Your product "${p.name}" is now live on the HealNex Medi Bazar marketplace!`,
+      'success'
     );
-    showToast(`Submitted "${p.name}" for Admin approval!`);
+    showToast(`Published "${p.name}" live to marketplace!`);
     onRefresh();
   };
 
   const handleSubmitSelectedDrafts = () => {
     if (selectedDraftProducts.length === 0) {
-      showToast('Please select at least one drafted product to submit.');
+      showToast('Please select at least one drafted product to publish.');
       return;
     }
 
@@ -581,27 +586,32 @@ export default function VendorProductManager({
     selectedDraftProducts.forEach(p => {
       dbLocal.updateProduct(p.id, {
         ...p,
-        status: 'Pending',
+        status: 'Approved',
+        published: true,
+        isActive: true,
+        approvedBy: 'Auto-Approved Live',
+        approvedAt: now,
+        publishedAt: now,
         updatedAt: now
       });
     });
 
     dbLocal.addNotification(
       'admin',
-      `Batch Draft Submission: ${selectedDraftProducts.length} Items`,
-      `Vendor "${vendor.companyName}" submitted ${selectedDraftProducts.length} drafted products in bulk for quality audit & approval.`,
+      `Batch Product Live Publish: ${selectedDraftProducts.length} Items`,
+      `Vendor "${vendor.companyName}" published ${selectedDraftProducts.length} products live to marketplace.`,
       'info'
     );
     dbLocal.addNotification(
       vendor.id,
-      `Drafts Submitted (${selectedDraftProducts.length})`,
-      `You have successfully submitted ${selectedDraftProducts.length} drafted products for Admin approval.`,
-      'info'
+      `Products Published Live (${selectedDraftProducts.length})`,
+      `You have successfully published ${selectedDraftProducts.length} products live to the marketplace.`,
+      'success'
     );
 
-    showToast(`Successfully submitted ${selectedDraftProducts.length} draft product(s) for Admin approval!`);
+    showToast(`Successfully published ${selectedDraftProducts.length} product(s) live to marketplace!`);
     setSelectedProductIds([]);
-    setActiveTab('Pending');
+    setActiveTab('All');
     onRefresh();
   };
 
@@ -1163,12 +1173,12 @@ export default function VendorProductManager({
           finalPrice,
           vendorPayout,
 
-          status: 'Pending',
-          published: false,
-          isActive: false,
-          approvedBy: '',
-          approvedAt: null,
-          publishedAt: null,
+          status: 'Approved',
+          published: true,
+          isActive: true,
+          approvedBy: 'Auto-Approved Bulk Upload',
+          approvedAt: now,
+          publishedAt: now,
           rejectedAt: null,
           rejectReason: '',
           rejectionReason: '',
@@ -1182,28 +1192,28 @@ export default function VendorProductManager({
 
         dbLocal.addNotification(
           'admin',
-          `Bulk Product Upload: ${newProd.name}`,
-          `Vendor "${vendor.companyName}" uploaded product "${newProd.name}" (SKU: ${newProd.sku}) via Bulk Import.`,
+          `Bulk Product Live: ${newProd.name}`,
+          `Vendor "${vendor.companyName}" uploaded and published "${newProd.name}" (SKU: ${newProd.sku}) live via Bulk Import.`,
           'info'
         );
       }
     });
 
     const summaryText = updatedCount > 0
-      ? `Bulk catalog sync complete: ${createdCount} new items created, ${updatedCount} existing SKUs updated.`
-      : `Successfully imported ${createdCount} products into your catalog.`;
+      ? `Bulk catalog sync complete: ${createdCount} new items published live, ${updatedCount} existing SKUs updated.`
+      : `Successfully imported & published ${createdCount} products live to marketplace.`;
 
     dbLocal.addNotification(
       vendor.id,
-      `Bulk Catalog Import & Sync Completed`,
-      `${summaryText} Newly created items are awaiting Admin review.`,
+      `Bulk Catalog Import & Live Publish Completed`,
+      `${summaryText} Products are now available on the live marketplace catalog.`,
       'success'
     );
 
     showToast(summaryText);
     setImportProducts([]);
     setShowBulkImportModal(false);
-    setActiveTab('Pending');
+    setActiveTab('All');
     onRefresh();
   };
 
@@ -3199,11 +3209,11 @@ export default function VendorProductManager({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleSaveProduct('Pending')}
-                  className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold px-6 py-3 rounded-xl text-xs shadow-lg transition flex items-center gap-2"
+                  onClick={() => handleSaveProduct('Approved')}
+                  className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold px-6 py-3 rounded-xl text-xs shadow-lg transition flex items-center gap-2 cursor-pointer"
                 >
-                  <ShieldCheck className="w-4 h-4" />
-                  Submit for Approval
+                  <CheckCircle className="w-4 h-4" />
+                  Save & Publish Live to Marketplace
                 </button>
               </div>
             </div>
