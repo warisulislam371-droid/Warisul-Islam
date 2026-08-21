@@ -15,7 +15,9 @@ const MEDICAL_CATEGORY_SYNONYMS: Record<string, string[]> = {
   'dental equipment': ['dental', 'dentistry', 'dental chair', 'scalers', 'curing light', 'autoclave', 'handpiece', 'apex locator'],
   'neonatal & pediatric': ['nicu', 'infant warmer', 'baby incubator', 'phototherapy', 'pediatric', 'neonatal', 'infant radiant warmer'],
   'physiotherapy & rehab': ['rehabilitation', 'physio', 'traction', 'tens', 'ultrasound therapy', 'laser therapy', 'shortwave diathermy', 'walker'],
-  'refurbished equipment': ['refurbished', 'pre-owned', 'renewed', 'certified refurbished', 'used medical', 'restored']
+  'refurbished equipment': ['refurbished', 'pre-owned', 'renewed', 'certified refurbished', 'used medical', 'restored', 'refurbished imaging', 'refurbished icu', 'refurbished imaging & icu equipment', 'refurbished equipment'],
+  'refurbished imaging & icu equipment': ['refurbished', 'pre-owned', 'renewed', 'certified refurbished', 'used medical', 'restored', 'refurbished imaging', 'refurbished icu', 'refurbished imaging & icu equipment', 'refurbished equipment'],
+  'refurbished': ['refurbished', 'pre-owned', 'renewed', 'certified refurbished', 'used medical', 'restored', 'refurbished imaging', 'refurbished icu']
 };
 
 /**
@@ -78,8 +80,11 @@ export function isCategoryMatch(
       pCat.includes('refurbished') ||
       pSub.includes('refurbished') ||
       Boolean((product as any).isRefurbished) ||
+      (product as any).condition === 'refurbished' ||
+      (product as any).condition === 'used' ||
       pName.includes('refurbished') ||
-      pTags.includes('refurbished')
+      pTags.includes('refurbished') ||
+      pDesc.includes('refurbished')
     ) {
       return true;
     }

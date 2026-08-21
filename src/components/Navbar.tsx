@@ -368,95 +368,43 @@ export default function Navbar({
   return (
     <header className="sticky top-0 z-50 bg-white font-sans text-[#1F2937] shadow-sm border-b border-slate-200">
       
-      {/* Top Value / Utilities Bar (Hidden per user focus request) */}
-      <div className="hidden bg-[#0077B6] text-white py-1 px-4 text-xs font-medium">
+      {/* Top Value / Utilities Bar */}
+      <div className="hidden bg-slate-50 border-b border-slate-200 text-slate-600 py-1.5 px-4 text-xs font-medium">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 overflow-x-auto scrollbar-none py-0.5">
-            <span className="bg-[#0F9D8A] text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-              PAN India Delivery
-            </span>
-            <span className="hidden sm:inline">100% Verified Manufacturers &amp; B2B Distributors</span>
-            <span className="hidden md:inline">•</span>
-            
-            {/* Delivery Location Picker */}
-            <div className="relative">
-              <button 
-                onClick={() => setShowLocationDropdown(!showLocationDropdown)}
-                className="hover:text-amber-200 transition flex items-center gap-1 font-semibold text-xs cursor-pointer"
-              >
-                <MapPin className="w-3.5 h-3.5 text-amber-300" />
-                <span>Deliver: <strong className="underline decoration-dashed">{deliveryLocation}</strong></span>
-                <ChevronDown className="w-3 h-3" />
-              </button>
-
-              {showLocationDropdown && (
-                <div className="absolute left-0 top-full mt-1 w-52 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-200 p-2 z-50">
-                  <p className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">Select Delivery Pincode</p>
-                  {locations.map(loc => (
-                    <button
-                      key={loc.pin}
-                      onClick={() => {
-                        setDeliveryLocation(`${loc.city} ${loc.pin}`);
-                        setShowLocationDropdown(false);
-                      }}
-                      className="w-full text-left px-2 py-1.5 text-xs font-semibold hover:bg-slate-50 rounded-lg flex items-center justify-between cursor-pointer"
-                    >
-                      <span>{loc.city}</span>
-                      <span className="text-teal-600 font-mono text-[10px] font-bold">{loc.pin}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+          <div className="flex items-center gap-2 text-slate-700 font-semibold text-xs">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>India's Trusted Medical Equipment Marketplace</span>
           </div>
 
-          <div className="flex items-center gap-4 shrink-0 text-xs">
+          <div className="flex items-center gap-4 sm:gap-6 text-xs text-slate-600">
             <button 
-              onClick={() => onNavigate('orders')} 
-              className="hover:text-teal-200 transition flex items-center gap-1 font-semibold"
+              onClick={() => {
+                if (currentUser?.role === 'vendor') onNavigate('vendor-panel');
+                else onNavigate('register_vendor');
+              }}
+              className="hover:text-[#0066CC] transition font-semibold"
             >
-              <Truck className="w-3.5 h-3.5" />
-              <span>Track Order</span>
+              Sell on HealNex
             </button>
             <button 
               onClick={() => onNavigate('register_vendor')} 
-              className="hover:text-emerald-200 transition flex items-center gap-1 font-bold text-emerald-300"
+              className="hover:text-[#0066CC] transition font-semibold"
             >
-              <Store className="w-3.5 h-3.5" />
-              <span>Vendor Login / Join</span>
+              Vendor Login
             </button>
-            
-            {/* Language & Country Selector */}
-            <div className="relative hidden lg:block">
-              <button 
-                onClick={() => setShowLangDropdown(!showLangDropdown)}
-                className="flex items-center gap-1 hover:text-teal-200 transition font-medium"
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span>{language} | {country}</span>
-                <ChevronDown className="w-3 h-3" />
-              </button>
-
-              {showLangDropdown && (
-                <div className="absolute right-0 top-full mt-1 w-44 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-200 p-2 z-50">
-                  <p className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">Currency & Region</p>
-                  <button 
-                    onClick={() => { setCountry('India (₹)'); setShowLangDropdown(false); }}
-                    className="w-full text-left px-2 py-1.5 text-xs font-semibold hover:bg-slate-50 rounded-lg flex items-center justify-between"
-                  >
-                    <span>India (INR)</span>
-                    <span className="text-teal-600 font-bold">₹</span>
-                  </button>
-                  <button 
-                    onClick={() => { setCountry('Global ($)'); setShowLangDropdown(false); }}
-                    className="w-full text-left px-2 py-1.5 text-xs font-semibold hover:bg-slate-50 rounded-lg flex items-center justify-between"
-                  >
-                    <span>Export (USD)</span>
-                    <span className="text-blue-600 font-bold">$</span>
-                  </button>
-                </div>
-              )}
-            </div>
+            <button 
+              onClick={() => onNavigate('contact')} 
+              className="hover:text-[#0066CC] transition font-semibold"
+            >
+              Customer Support
+            </button>
+            <button 
+              onClick={() => onNavigate('orders')} 
+              className="hover:text-[#0066CC] transition font-semibold flex items-center gap-1"
+            >
+              <Truck className="w-3.5 h-3.5 text-slate-500" />
+              <span>Track Order</span>
+            </button>
           </div>
         </div>
       </div>
@@ -485,6 +433,46 @@ export default function Navbar({
           </div>
         </div>
 
+        {/* Location Selector in Header */}
+        <div className="relative hidden xl:block shrink-0">
+          <button
+            onClick={() => setShowLocationDropdown(!showLocationDropdown)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
+            title="Deliver to Pincode"
+          >
+            <MapPin className="w-4 h-4 text-[#0F9D8A] shrink-0" />
+            <div className="text-left leading-tight">
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block">Deliver to</span>
+              <span className="text-xs font-bold text-slate-800 truncate max-w-[90px] block">{deliveryLocation}</span>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
+          </button>
+
+          {showLocationDropdown && (
+            <div className="absolute left-0 top-full mt-2 w-56 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 p-2.5 z-50 animate-fade-in">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-1 px-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Select City & Pincode</span>
+                <span className="text-[9px] text-[#0F9D8A] font-bold">Pan-India</span>
+              </div>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {locations.map(loc => (
+                  <button
+                    key={loc.pin}
+                    onClick={() => {
+                      setDeliveryLocation(`${loc.city} ${loc.pin}`);
+                      setShowLocationDropdown(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold hover:bg-slate-50 hover:text-[#0F9D8A] rounded-xl flex items-center justify-between transition cursor-pointer"
+                  >
+                    <span>{loc.city}</span>
+                    <span className="text-[#0F9D8A] font-mono text-[10px] font-bold bg-teal-50 px-1.5 py-0.5 rounded">{loc.pin}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Search Bar - Center */}
         <div ref={searchContainerRef} className="flex-1 max-w-2xl relative hidden md:block">
           <form onSubmit={handleSearchSubmit} className="flex items-center bg-[#F5F7FA] rounded-2xl border border-slate-300 focus-within:border-[#0F9D8A] focus-within:bg-white transition-all shadow-sm overflow-hidden h-12">
@@ -510,7 +498,7 @@ export default function Navbar({
 
             <input
               type="text"
-              placeholder="Search Medical Equipment, Subcategories, Brands..."
+              placeholder="Search medical equipment, devices, brands & more"
               value={searchQuery}
               onFocus={() => setIsSearchFocused(true)}
               onChange={(e) => {
@@ -1042,23 +1030,23 @@ export default function Navbar({
       </div>
 
       {/* Navigation Mega Menu Bar */}
-      <nav className="bg-[#1F2937] text-white border-t border-slate-700">
+      <nav className="bg-[#0B192C] text-white border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-4 lg:px-6 flex items-center justify-between">
           
           {/* Mega Menu Dropdown Toggle */}
-          <div className="relative">
+          <div className="relative py-2">
             <button
               onClick={() => setShowCategoryMegaMenu(!showCategoryMegaMenu)}
-              className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white font-bold text-xs py-3.5 px-5 flex items-center gap-2 transition cursor-pointer"
+              className="bg-[#0066CC] hover:bg-[#0055aa] text-white font-bold text-xs py-2.5 px-5 rounded-lg flex items-center gap-2 transition cursor-pointer shadow-xs"
             >
-              <Layers className="w-4 h-4" />
-              <span>All Categories Mega Menu</span>
-              <ChevronDown className="w-4 h-4" />
+              <Menu className="w-4 h-4" />
+              <span>All Categories</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showCategoryMegaMenu ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Expanded Mega Menu Panel */}
             {showCategoryMegaMenu && (
-              <div className="absolute left-0 top-full w-[850px] max-w-[90vw] bg-white text-slate-800 rounded-b-2xl shadow-2xl border border-slate-200 p-6 z-50 grid grid-cols-3 gap-4">
+              <div className="absolute left-0 top-full mt-1 w-[850px] max-w-[90vw] bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 p-6 z-50 grid grid-cols-3 gap-4">
                 {megaCategories.map((cat) => (
                   <button
                     key={cat}
@@ -1067,7 +1055,7 @@ export default function Navbar({
                       onNavigate('marketplace');
                       setShowCategoryMegaMenu(false);
                     }}
-                    className="text-left p-2.5 rounded-xl hover:bg-[#F5F7FA] transition flex items-center justify-between text-xs font-semibold text-slate-800 hover:text-[#0F9D8A]"
+                    className="text-left p-2.5 rounded-xl hover:bg-[#F5F7FA] transition flex items-center justify-between text-xs font-semibold text-slate-800 hover:text-[#0066CC]"
                   >
                     <span>{cat}</span>
                     <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
@@ -1078,48 +1066,82 @@ export default function Navbar({
           </div>
 
           {/* Horizontal Scrollable Categories Links */}
-          <div className="hidden md:flex items-center gap-6 overflow-x-auto scrollbar-none py-3 text-xs font-bold text-slate-200">
-            {megaCategories.slice(0, 8).map((cat) => {
-              const isSelected = selectedCategoryName.trim().toLowerCase() === cat.trim().toLowerCase();
+          <div className="hidden md:flex items-center gap-3 lg:gap-5 overflow-x-auto scrollbar-none py-2 text-xs font-semibold text-slate-200">
+            {[
+              { label: 'Medical Equipment', category: 'Medical Equipment' },
+              { label: 'Diagnostics', category: 'Diagnostic Equipment' },
+              { label: 'Laboratory', category: 'Laboratory Equipment' },
+              { label: 'Dental', category: 'Dental Equipment' },
+              { label: 'Surgical', category: 'Surgical Instruments' },
+              { label: 'Consumables', category: 'Medical Consumables' },
+              { label: 'Hospital Furniture', category: 'Hospital Furniture' },
+              { label: 'Refurbished', category: 'Refurbished Equipment' }
+            ].map(({ label, category }) => {
+              const isSelected = selectedCategoryName.trim().toLowerCase() === category.trim().toLowerCase() ||
+                                 selectedCategoryName.trim().toLowerCase() === label.trim().toLowerCase();
               return (
                 <button
-                  key={cat}
+                  key={label}
                   onClick={() => {
-                    onCategorySelect(isSelected ? '' : cat);
+                    onCategorySelect(isSelected ? '' : category);
                     onNavigate('marketplace');
                   }}
-                  className={`transition whitespace-nowrap px-2.5 py-1 rounded-lg ${
+                  className={`transition whitespace-nowrap px-2.5 py-1 rounded-md ${
                     isSelected
-                      ? 'bg-[#0F9D8A] text-white font-black shadow-sm'
-                      : 'hover:text-[#0F9D8A]'
+                      ? 'bg-[#0066CC] text-white font-bold shadow-xs'
+                      : 'hover:text-[#38BDF8] text-slate-300'
                   }`}
                 >
-                  {cat}
+                  {label}
                 </button>
               );
             })}
+
+            {/* Brands Link */}
+            <button
+              onClick={() => {
+                onNavigate('marketplace');
+                setTimeout(() => {
+                  const el = document.getElementById('brands-section');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
+              className="hover:text-[#38BDF8] text-slate-300 transition whitespace-nowrap px-2.5 py-1 rounded-md font-semibold"
+            >
+              Brands
+            </button>
+
+            {/* Offers Link */}
+            <button
+              onClick={() => {
+                onNavigate('marketplace');
+                setTimeout(() => {
+                  const el = document.getElementById('offers-section');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
+              className="bg-[#E63946] hover:bg-[#d62839] text-white transition whitespace-nowrap px-4 py-1.5 rounded-md font-bold text-xs uppercase shadow-xs flex items-center gap-1.5 cursor-pointer ml-1"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-white" />
+              <span>Offers</span>
+            </button>
+
+            {/* RFQ Tenders */}
             <button 
               onClick={() => onNavigate('rfqs')} 
-              className={`transition font-extrabold whitespace-nowrap flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs ${
+              className={`transition font-bold whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs ml-1 ${
                 currentView === 'rfqs'
-                  ? 'bg-amber-400 text-slate-950 shadow-md font-black'
-                  : 'bg-amber-500/20 text-amber-300 hover:bg-amber-400/30'
+                  ? 'bg-teal-600 text-white shadow-xs font-black'
+                  : 'bg-teal-500/20 text-teal-300 hover:bg-teal-400/30'
               }`}
             >
-              <FilePlus className="w-3.5 h-3.5 text-amber-300" />
-              <span>RFQ System (Tenders)</span>
+              <FilePlus className="w-3.5 h-3.5 text-teal-300" />
+              <span>RFQ Tenders</span>
               {activeRfqsCount > 0 && (
-                <span className="bg-amber-500 text-slate-950 text-[10px] font-mono font-black px-1.5 py-0.2 rounded-full">
+                <span className="bg-amber-400 text-slate-950 text-[10px] font-mono font-black px-1.5 py-0.2 rounded-full">
                   {activeRfqsCount}
                 </span>
               )}
-            </button>
-            <button 
-              onClick={() => onNavigate('orders')} 
-              className="text-teal-300 hover:text-teal-100 transition font-extrabold whitespace-nowrap flex items-center gap-1"
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              <span>My Orders</span>
             </button>
           </div>
 

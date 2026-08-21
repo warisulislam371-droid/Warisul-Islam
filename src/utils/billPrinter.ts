@@ -1,34 +1,156 @@
-import { Order } from '../types';
+import { Order, Product, OrderItem } from '../types';
+import { calculateCartTaxSummary, ComprehensiveTaxSummary } from './taxCalculator';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 /**
- * Utility functions for generating, printing, and downloading B2B Tax Invoices & POS Receipts.
+ * Interface for Pro-Forma Invoice Simulation (Pre-checkout)
  */
+export interface ProFormaInvoiceData {
+  isProForma: boolean;
+  proFormaNumber: string;
+  date: string;
+  validUntil: string;
+  customerName: string;
+  customerCompany?: string;
+  customerGstNumber?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  shippingAddress: {
+    address: string;
+    city: string;
+    state: string;
+    pincode: string;
+  };
+  vendorName: string;
+  vendorGstNumber?: string;
+  items: Array<{
+    productId: string;
+    productName: string;
+    hsnCode: string;
+    price: number;
+    quantity: number;
+    gstRate: number;
+    vendorName?: string;
+  }>;
+  taxSummary: ComprehensiveTaxSummary;
+  paymentTerms?: string;
+  poReference?: string;
+}
 
-export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): string {
-  const rawDate = order?.createdAt ? new Date(order.createdAt) : new Date();
-  const validDate = isNaN(rawDate.getTime()) ? new Date() : rawDate;
-  const dateStr = validDate.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
+/**
+ * Converts cart items & customer data into a simulated ProForma Invoice object
+ */
+export function createProFormaInvoiceFromCart(
+  cart: { product: Product; quantity: number }[],
+  customerInfo?: {
+    name?: string;
+    company?: string;
+    gstNumber?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    poReference?: string;
+    isInterstate?: boolean;
+  }
+): ProFormaInvoiceData {
+  const isInterstate = customerInfo?.isInterstate ?? true;
+  const destinationState = customerInfo?.state || (isInterstate ? 'Delhi NCR' : 'Maharashtra');
+  
+  const taxSummary = calculateCartTaxSummary(cart, {
+    isInterstate,
+    supplyState: 'Maharashtra (27)',
+    destinationState
   });
 
-  const items = Array.isArray(order?.items) ? order.items : [];
-  const subtotal = items.reduce((sum, item) => sum + ((item?.price || 0) * (item?.quantity || 1)), 0);
-  const gstTotal = order?.gstAmount ?? Math.round(subtotal * 0.12);
-  const discount = order?.discountAmount || 0;
-  const grandTotal = order?.finalAmount || Math.max(0, subtotal + gstTotal - discount);
-  const customerName = order?.customerName || 'Valued Buyer';
-  const vendorName = order?.vendorName || 'HealNex Certified Supplier';
-  const orderId = order?.id || 'ORD-HEALNEX';
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const validUntilDate = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000); // 15 days validity
+  const validUntilStr = validUntilDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  
+  // Random clean deterministic simulation ID
+  const hash = Math.abs(cart.reduce((sum, item) => sum + item.product.id.charCodeAt(0) * item.quantity, 4242));
+  const proFormaNumber = `PF-HN-${now.getFullYear()}-${(hash % 90000 + 10000)}`;
+
+  const vendorNames = Array.from(new Set(cart.map(c => c.product.vendorName).filter(Boolean)));
+  const primaryVendor = vendorNames.length > 0 ? vendorNames.join(', ') : 'HealNex Certified Suppliers';
+
+  return {
+    isProForma: true,
+    proFormaNumber,
+    date: dateStr,
+    validUntil: validUntilStr,
+    customerName: customerInfo?.name || 'Authorized Hospital / Clinical Buyer',
+    customerCompany: customerInfo?.company || 'Healthcare Procurement Dept',
+    customerGstNumber: customerInfo?.gstNumber || 'URP (Unregistered / Direct Consignment)',
+    customerEmail: customerInfo?.email || 'procurement@hospital.org',
+    customerPhone: customerInfo?.phone || '+91 98765 43210',
+    shippingAddress: {
+      address: customerInfo?.address || 'Consignment Delivery Dock, Medical Wing',
+      city: customerInfo?.city || (isInterstate ? 'New Delhi' : 'Mumbai'),
+      state: customerInfo?.state || (isInterstate ? 'Delhi' : 'Maharashtra'),
+      pincode: customerInfo?.pincode || '110001'
+    },
+    vendorName: primaryVendor,
+    vendorGstNumber: '27AAAAA1111A1Z1',
+    items: cart.map(item => ({
+      productId: item.product.id,
+      productName: item.product.name,
+      hsnCode: item.product.hsnCode || '90181100',
+      price: item.product.salePrice,
+      quantity: item.quantity,
+      gstRate: item.product.gstRate ?? 12,
+      vendorName: item.product.vendorName
+    })),
+    taxSummary,
+    paymentTerms: '100% Advance B2B Direct Bank Clearing / Escrow Verified',
+    poReference: customerInfo?.poReference || `PO-EST-${Date.now().toString().slice(-6)}`
+  };
+}
+
+/**
+ * Generates rich HTML for either a confirmed Order or a simulated ProForma Invoice
+ */
+export function generateBillHTML(
+  data: Order | ProFormaInvoiceData,
+  format: 'a4' | 'pos' = 'a4'
+): string {
+  const isProForma = 'isProForma' in data;
+  const orderId = isProForma ? data.proFormaNumber : data.id;
+  const dateStr = isProForma ? data.date : (new Date(data.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }));
+  const customerName = data.customerName || 'Valued Clinical Buyer';
+  const vendorName = data.vendorName || 'HealNex Certified Supplier';
+  
+  const items = isProForma 
+    ? data.items 
+    : (data.items || []).map(i => ({
+        productId: i.productId,
+        productName: i.productName,
+        hsnCode: i.hsnCode || '90181100',
+        price: i.price,
+        quantity: i.quantity,
+        gstRate: i.gstRate || 12,
+        vendorName: i.vendorName
+      }));
+
+  const taxSummary: ComprehensiveTaxSummary = isProForma 
+    ? data.taxSummary 
+    : calculateCartTaxSummary(data.items, {
+        isInterstate: true,
+        discountAmount: data.discountAmount || 0
+      });
+
+  const grandTotal = isProForma ? taxSummary.grandTotal : data.finalAmount;
 
   if (format === 'pos') {
-    // 80mm POS Slip Format
     return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>POS Receipt - ${orderId}</title>
+  <title>${isProForma ? 'PRO-FORMA INVOICE SLIP' : 'POS RECEIPT'} - ${orderId}</title>
   <style>
     @page { size: 80mm auto; margin: 0; }
     body {
@@ -57,18 +179,20 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
   </div>
   <div class="text-center">
     <div class="bold" style="font-size: 14px;">HEALNEX MEDI BAZAR</div>
-    <div>B2B Medical Consignments</div>
-    <div>GSTIN: 27AAAAA1111A1Z1</div>
+    <div>B2B Medical Equipment Consignments</div>
+    <div>GSTIN: 27AAAAA1111A1Z1 | PAN: AAAAA1111A</div>
     <div class="dashed-line"></div>
-    <div class="bold">TAX INVOICE SLIP</div>
-    <div>Bill No: ${orderId}</div>
+    <div class="bold">${isProForma ? 'PRO-FORMA TAX ESTIMATE' : 'TAX INVOICE SLIP'}</div>
+    <div>Doc No: ${orderId}</div>
     <div>Date: ${dateStr}</div>
+    ${isProForma ? `<div>Valid Until: ${(data as ProFormaInvoiceData).validUntil}</div>` : ''}
   </div>
 
   <div class="dashed-line"></div>
-  <div><strong>Customer:</strong> ${customerName}</div>
-  <div><strong>City:</strong> ${order?.shippingAddress?.city || 'India'}</div>
+  <div><strong>Buyer:</strong> ${customerName}</div>
+  <div><strong>City:</strong> ${data.shippingAddress?.city || 'India'}, ${data.shippingAddress?.state || ''}</div>
   <div><strong>Vendor:</strong> ${vendorName}</div>
+  ${isProForma && (data as ProFormaInvoiceData).customerGstNumber ? `<div><strong>Buyer GST:</strong> ${(data as ProFormaInvoiceData).customerGstNumber}</div>` : ''}
 
   <div class="dashed-line"></div>
   <table>
@@ -82,199 +206,313 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
     <tbody>
       ${items.map(item => `
         <tr>
-          <td colspan="3" class="bold">${(item?.productName || 'Medical Item').slice(0, 32)}</td>
+          <td colspan="3" class="bold">${(item.productName || 'Medical Item').slice(0, 32)}</td>
         </tr>
         <tr>
-          <td>HSN: ${item?.hsnCode || '9018'}</td>
-          <td class="text-center">${item?.quantity || 1} x ₹${item?.price || 0}</td>
-          <td class="text-right">₹${(item?.price || 0) * (item?.quantity || 1)}</td>
+          <td>HSN: ${item.hsnCode || '9018'} (${item.gstRate}%)</td>
+          <td class="text-center">${item.quantity} x ₹${item.price.toLocaleString('en-IN')}</td>
+          <td class="text-right">₹${(item.price * item.quantity).toLocaleString('en-IN')}</td>
         </tr>
       `).join('')}
     </tbody>
   </table>
 
   <div class="dashed-line"></div>
-  <div class="flex-between"><span>Subtotal:</span><span>₹${subtotal.toLocaleString('en-IN')}</span></div>
-  <div class="flex-between"><span>GST Tax (12-18%):</span><span>₹${gstTotal.toLocaleString('en-IN')}</span></div>
-  ${discount > 0 ? `<div class="flex-between"><span>Discount:</span><span>-₹${discount.toLocaleString('en-IN')}</span></div>` : ''}
+  <div class="flex-between"><span>Taxable Subtotal:</span><span>₹${taxSummary.taxableSubtotal.toLocaleString('en-IN')}</span></div>
+  ${taxSummary.cgstTotal > 0 ? `<div class="flex-between"><span>CGST:</span><span>₹${taxSummary.cgstTotal.toLocaleString('en-IN')}</span></div>` : ''}
+  ${taxSummary.sgstTotal > 0 ? `<div class="flex-between"><span>SGST:</span><span>₹${taxSummary.sgstTotal.toLocaleString('en-IN')}</span></div>` : ''}
+  ${taxSummary.igstTotal > 0 ? `<div class="flex-between"><span>IGST:</span><span>₹${taxSummary.igstTotal.toLocaleString('en-IN')}</span></div>` : ''}
+  <div class="flex-between"><span>Total GST Tax:</span><span>₹${taxSummary.totalGstAmount.toLocaleString('en-IN')}</span></div>
+  ${taxSummary.discountAmount > 0 ? `<div class="flex-between"><span>Discount:</span><span>-₹${taxSummary.discountAmount.toLocaleString('en-IN')}</span></div>` : ''}
+  
   <div class="dashed-line"></div>
-  <div class="flex-between bold" style="font-size:12px;"><span>TOTAL PAID:</span><span>₹${grandTotal.toLocaleString('en-IN')}</span></div>
+  <div class="flex-between bold" style="font-size:12px;"><span>TOTAL ESTIMATE:</span><span>₹${grandTotal.toLocaleString('en-IN')}</span></div>
   <div class="dashed-line"></div>
 
   <div class="text-center" style="margin-top:10px;">
-    <div>Payment: ${order?.paymentMethod || 'Online Prepaid'}</div>
-    <div>Status: PAID / VERIFIED</div>
+    <div>${isProForma ? 'Status: PRE-CHECKOUT SIMULATION' : 'Status: PAID / CLEARED'}</div>
     <br/>
     <div>Thank you for choosing HealNex!</div>
-    <div style="font-size:9px; color:#555;">Verified B2B Medical Equipment</div>
+    <div style="font-size:9px; color:#555;">Certified Medical Consignments Marketplace</div>
   </div>
 </body>
 </html>`;
   }
 
-  // A4 Standard Corporate Invoice Format
+  // A4 Standard Corporate Invoice Layout
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Tax Invoice - ${orderId}</title>
+  <title>${isProForma ? 'PRO-FORMA INVOICE' : 'TAX INVOICE'} - ${orderId}</title>
   <style>
-    @page { size: A4; margin: 15mm; }
+    @page { size: A4 portrait; margin: 12mm; }
     * { box-sizing: border-box; }
     body {
-      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      color: #1e293b;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
       background: #f8fafc;
       margin: 0;
-      padding: 20px;
+      padding: 16px;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     .container {
-      max-width: 800px;
+      max-width: 820px;
       margin: 0 auto;
       background: #ffffff;
-      padding: 40px;
+      padding: 32px 36px;
       border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      box-shadow: 0 4px 25px rgba(0,0,0,0.06);
       border: 1px solid #e2e8f0;
+    }
+    .badge-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0f766e;
+      color: #ffffff;
+      padding: 6px 14px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
     }
     .header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      border-bottom: 2px solid #0f766e;
-      padding-bottom: 20px;
-      margin-bottom: 24px;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 18px;
+      margin-bottom: 20px;
     }
-    .brand { font-size: 26px; font-weight: 800; color: #0f766e; }
-    .brand-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
-    .title { font-size: 20px; font-weight: 800; color: #0f172a; text-transform: uppercase; text-align: right; }
-    .meta { font-size: 12px; color: #475569; text-align: right; margin-top: 6px; }
+    .brand-title { font-size: 24px; font-weight: 900; color: #0f766e; letter-spacing: -0.5px; }
+    .brand-sub { font-size: 11px; color: #475569; margin-top: 4px; line-height: 1.4; }
+    .doc-title { font-size: 20px; font-weight: 900; color: #0f172a; text-transform: uppercase; text-align: right; letter-spacing: 0.5px; }
+    .doc-meta { font-size: 11px; color: #334155; text-align: right; margin-top: 6px; line-height: 1.5; }
     
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
-    .card { background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; }
-    .card-title { font-weight: 700; color: #0f766e; text-transform: uppercase; font-size: 10px; tracking: 1px; margin-bottom: 8px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .box { background: #f8fafc; padding: 14px 16px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 11.5px; line-height: 1.5; }
+    .box-heading { font-weight: 800; color: #0f766e; text-transform: uppercase; font-size: 10px; letter-spacing: 0.8px; margin-bottom: 6px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
     
-    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 12px; }
-    th { background: #0f766e; color: #ffffff; text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; }
-    td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
-    tr:nth-child(even) { background: #f8fafc; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
+    th { background: #0f766e; color: #ffffff; text-align: left; padding: 8px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+    tr:nth-child(even) td { background: #f8fafc; }
 
-    .totals { width: 280px; margin-left: auto; font-size: 12px; }
-    .row { display: flex; justify-content: space-between; padding: 4px 0; }
-    .row.grand { border-top: 2px solid #0f766e; padding-top: 8px; font-weight: 800; font-size: 15px; color: #0f766e; }
+    .hsn-table { margin-top: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
+    .hsn-table th { background: #334155; font-size: 9.5px; padding: 6px 8px; }
+    .hsn-table td { font-size: 10.5px; padding: 6px 8px; font-family: monospace; }
 
-    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: flex-end; font-size: 11px; color: #64748b; }
-    .seal { border: 1px solid #0f766e; color: #0f766e; padding: 4px 12px; border-radius: 4px; font-weight: 700; text-transform: uppercase; display: inline-block; font-size: 10px; }
+    .bottom-layout { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
+    .words-box { background: #f1f5f9; padding: 10px 12px; border-radius: 6px; font-size: 11px; margin-bottom: 12px; }
+    
+    .totals-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; font-size: 11.5px; }
+    .totals-row { display: flex; justify-content: space-between; padding: 3px 0; color: #334155; }
+    .totals-row.grand { border-top: 2px solid #0f766e; margin-top: 6px; padding-top: 8px; font-weight: 900; font-size: 14px; color: #0f766e; }
 
-    .no-print-bar {
-      text-align: right;
-      margin-bottom: 15px;
-      max-width: 800px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .btn {
-      padding: 8px 16px;
-      background: #0f766e;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-weight: 700;
-      font-size: 12px;
-      cursor: pointer;
-      margin-left: 8px;
-    }
+    .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: flex-end; font-size: 10.5px; color: #64748b; }
+    .stamp { border: 1.5px dashed #0f766e; color: #0f766e; padding: 4px 10px; border-radius: 4px; font-weight: 800; text-transform: uppercase; font-size: 9.5px; display: inline-block; }
+
+    .action-bar { text-align: right; margin-bottom: 14px; max-width: 820px; margin-left: auto; margin-right: auto; }
+    .btn { padding: 8px 16px; background: #0f766e; color: #fff; border: none; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; margin-left: 8px; }
     .btn-secondary { background: #475569; }
 
     @media print {
       body { background: #fff; padding: 0; }
       .container { box-shadow: none; border: none; padding: 0; width: 100%; max-width: 100%; }
-      .no-print-bar { display: none; }
+      .action-bar { display: none; }
     }
   </style>
 </head>
 <body>
-  <div class="no-print-bar">
-    <button class="btn btn-secondary" onclick="window.close()">Close Window</button>
-    <button class="btn" onclick="window.print()">Print / Save as PDF</button>
+  <div class="action-bar">
+    <button class="btn btn-secondary" onclick="window.close()">Close</button>
+    <button class="btn" onclick="window.print()">Print / Save PDF</button>
   </div>
 
-  <div class="container">
+  <div class="container" id="pdf-capture-root">
+    <div class="badge-bar">
+      <span>${isProForma ? 'Official B2B Pro-Forma Tax Invoice Preview' : 'Tax Invoice (Sec 31 CGST Act 2017)'}</span>
+      <span>${isProForma ? 'Simulation Only • Pre-Checkout Quotation' : 'Original for Recipient'}</span>
+    </div>
+
     <div class="header">
       <div>
-        <div class="brand">HealNex <span style="font-size:14px; color:#0284c7;">Medi Bazar</span></div>
-        <div class="brand-sub">Certified B2B Medical Equipment Marketplace<br/>GSTIN: 27AAAAA1111A1Z1 | Support: support@medbazarhealnex.shop</div>
+        <div class="brand-title">HealNex <span style="font-size:16px; color:#0284c7;">Medi Bazar</span></div>
+        <div class="brand-sub">
+          <strong>HealNex Medi Bazar Pvt Ltd</strong><br/>
+          India's Premier B2B Medical & Clinical Procurement Network<br/>
+          GSTIN: <strong>27AAAAA1111A1Z1</strong> | PAN: <strong>AAAAA1111A</strong><br/>
+          Corporate Desk: support@medbazarhealnex.shop | +91 800-HEALNEX
+        </div>
       </div>
       <div>
-        <div class="title">Tax Invoice</div>
-        <div class="meta">
-          <strong>Invoice No:</strong> ${orderId}<br/>
-          <strong>Date:</strong> ${dateStr}<br/>
-          <strong>Status:</strong> <span style="color:#16a34a; font-weight:bold;">PAID / CONFIRMED</span>
+        <div class="doc-title">${isProForma ? 'Pro-Forma Invoice' : 'Tax Invoice'}</div>
+        <div class="doc-meta">
+          <strong>Doc Ref No:</strong> ${orderId}<br/>
+          <strong>Date of Issue:</strong> ${dateStr}<br/>
+          ${isProForma ? `<strong>Valid Until:</strong> ${(data as ProFormaInvoiceData).validUntil}<br/>` : ''}
+          ${isProForma && (data as ProFormaInvoiceData).poReference ? `<strong>PO Reference:</strong> ${(data as ProFormaInvoiceData).poReference}<br/>` : ''}
+          <strong>State of Supply:</strong> Maharashtra (Code: 27)<br/>
+          <strong>Place of Supply:</strong> ${data.shippingAddress?.state || 'Delhi NCR'}
         </div>
       </div>
     </div>
 
-    <div class="grid">
-      <div class="card">
-        <div class="card-title">Seller / Authorized Supplier</div>
+    <div class="grid-2">
+      <div class="box">
+        <div class="box-heading">Details of Seller (Authorized Supplier)</div>
         <strong>${vendorName}</strong><br/>
-        HealNex Certified Medical Equipment Supplier<br/>
-        GSTIN: 27AAAAA1111A1Z1 | PAN: AAAAA1111A
+        HealNex Verified Partner Network<br/>
+        GSTIN: <strong>27AAAAA1111A1Z1</strong><br/>
+        State: Maharashtra (27)<br/>
+        Dispatch Center: HealNex Certified Logistics Hub, Mumbai
       </div>
-      <div class="card">
-        <div class="card-title">Buyer / Consignee</div>
+
+      <div class="box">
+        <div class="box-heading">Details of Buyer / Consignee (Bill To / Ship To)</div>
         <strong>${customerName}</strong><br/>
-        ${order?.shippingAddress?.address || ''}, ${order?.shippingAddress?.city || ''}<br/>
-        ${order?.shippingAddress?.state || ''} - ${order?.shippingAddress?.pincode || ''}<br/>
-        Email: ${order?.customerEmail || 'N/A'}
+        ${isProForma && (data as ProFormaInvoiceData).customerCompany ? `${(data as ProFormaInvoiceData).customerCompany}<br/>` : ''}
+        ${data.shippingAddress?.address || 'Clinical Facility'}, ${data.shippingAddress?.city || ''}<br/>
+        ${data.shippingAddress?.state || ''} - ${data.shippingAddress?.pincode || ''}<br/>
+        ${isProForma ? `GSTIN / UIN: <strong>${(data as ProFormaInvoiceData).customerGstNumber}</strong>` : `Email: ${data.customerEmail || 'N/A'}`}
       </div>
     </div>
 
+    {/* Items Grid */}
     <table>
       <thead>
         <tr>
-          <th>#</th>
-          <th>Medical Item Name</th>
-          <th>HSN Code</th>
-          <th style="text-align:right;">Price</th>
-          <th style="text-align:center;">Qty</th>
-          <th style="text-align:right;">GST Rate</th>
-          <th style="text-align:right;">Subtotal (INR)</th>
+          <th style="width: 25px;">#</th>
+          <th>Description of Medical Goods</th>
+          <th style="width: 75px;">HSN / SAC</th>
+          <th style="width: 45px; text-align: center;">Qty</th>
+          <th style="width: 80px; text-align: right;">Unit Price (₹)</th>
+          <th style="width: 55px; text-align: center;">GST %</th>
+          <th style="width: 90px; text-align: right;">Taxable Value (₹)</th>
         </tr>
       </thead>
       <tbody>
-        ${items.map((item, i) => `
+        ${items.map((item, idx) => `
           <tr>
-            <td>${i + 1}</td>
-            <td><strong>${item?.productName || 'Medical Equipment'}</strong><br/><span style="font-size:10px; color:#64748b;">SKU: ${item?.productId || 'N/A'}</span></td>
-            <td>${item?.hsnCode || '9018'}</td>
-            <td style="text-align:right;">₹${(item?.price || 0).toLocaleString('en-IN')}</td>
-            <td style="text-align:center;">${item?.quantity || 1}</td>
-            <td style="text-align:right;">${item?.gstRate || 12}%</td>
-            <td style="text-align:right; font-weight:bold;">₹${((item?.price || 0) * (item?.quantity || 1)).toLocaleString('en-IN')}</td>
+            <td>${idx + 1}</td>
+            <td>
+              <strong>${item.productName || 'Medical Equipment'}</strong><br/>
+              <span style="font-size: 9.5px; color: #64748b;">SKU: ${item.productId} | Supplier: ${item.vendorName || vendorName}</span>
+            </td>
+            <td style="font-family: monospace;">${item.hsnCode || '90181100'}</td>
+            <td style="text-align: center; font-weight: bold;">${item.quantity}</td>
+            <td style="text-align: right; font-family: monospace;">₹${item.price.toLocaleString('en-IN')}</td>
+            <td style="text-align: center; font-family: monospace;">${item.gstRate}%</td>
+            <td style="text-align: right; font-weight: bold; font-family: monospace;">₹${(item.price * item.quantity).toLocaleString('en-IN')}</td>
           </tr>
         `).join('')}
       </tbody>
     </table>
 
-    <div class="totals">
-      <div class="row"><span>Subtotal (Excl. Tax):</span><span>₹${subtotal.toLocaleString('en-IN')}</span></div>
-      <div class="row"><span>GST Amount:</span><span>₹${gstTotal.toLocaleString('en-IN')}</span></div>
-      ${discount > 0 ? `<div class="row" style="color:#e11d48;"><span>Discount:</span><span>-₹${discount.toLocaleString('en-IN')}</span></div>` : ''}
-      <div class="row grand"><span>Total Invoice Value:</span><span>₹${grandTotal.toLocaleString('en-IN')}</span></div>
+    {/* HSN Tax Summary Table */}
+    <div style="font-size: 10px; font-weight: 800; color: #0f766e; text-transform: uppercase; margin-top: 10px; letter-spacing: 0.5px;">
+      Tax & GST Calculation Breakdown (HSN / SAC Wise)
+    </div>
+    <table class="hsn-table">
+      <thead>
+        <tr>
+          <th>HSN/SAC</th>
+          <th style="text-align: right;">Taxable Amt (₹)</th>
+          <th style="text-align: center;">CGST Rate</th>
+          <th style="text-align: right;">CGST (₹)</th>
+          <th style="text-align: center;">SGST Rate</th>
+          <th style="text-align: right;">SGST (₹)</th>
+          <th style="text-align: center;">IGST Rate</th>
+          <th style="text-align: right;">IGST (₹)</th>
+          <th style="text-align: right;">Total Tax (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${taxSummary.hsnBreakdown.map(h => `
+          <tr>
+            <td>${h.hsnCode}</td>
+            <td style="text-align: right;">₹${h.taxableAmount.toLocaleString('en-IN')}</td>
+            <td style="text-align: center;">${h.cgstRate}%</td>
+            <td style="text-align: right;">₹${h.cgstAmount.toLocaleString('en-IN')}</td>
+            <td style="text-align: center;">${h.sgstRate}%</td>
+            <td style="text-align: right;">₹${h.sgstAmount.toLocaleString('en-IN')}</td>
+            <td style="text-align: center;">${h.igstRate}%</td>
+            <td style="text-align: right;">₹${h.igstAmount.toLocaleString('en-IN')}</td>
+            <td style="text-align: right; font-weight: bold;">₹${h.totalTax.toLocaleString('en-IN')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <div class="bottom-layout">
+      <div>
+        <div class="words-box">
+          <strong style="color:#0f766e;">Amount in Words:</strong><br/>
+          <em>${taxSummary.amountInWords}</em>
+        </div>
+
+        <div style="font-size: 10.5px; color: #475569; line-height: 1.4;">
+          <strong>Commercial Terms & Notes:</strong><br/>
+          1. ${isProForma ? 'This is a preliminary estimation pro-forma invoice generated dynamically from active cart items.' : 'Supply is made under formal B2B clinical trade governance.'}<br/>
+          2. Certified medical items comply with Indian MDR 2017 & CDSCO regulatory standards.<br/>
+          3. Payment: ${isProForma ? 'Escrow / Bank Clearing' : 'Online / Verified'}.
+        </div>
+      </div>
+
+      <div class="totals-card">
+        <div class="totals-row">
+          <span>Taxable Subtotal:</span>
+          <span style="font-family:monospace;">₹${taxSummary.taxableSubtotal.toLocaleString('en-IN')}</span>
+        </div>
+        ${taxSummary.cgstTotal > 0 ? `
+          <div class="totals-row">
+            <span>Central GST (CGST):</span>
+            <span style="font-family:monospace;">₹${taxSummary.cgstTotal.toLocaleString('en-IN')}</span>
+          </div>
+        ` : ''}
+        ${taxSummary.sgstTotal > 0 ? `
+          <div class="totals-row">
+            <span>State GST (SGST):</span>
+            <span style="font-family:monospace;">₹${taxSummary.sgstTotal.toLocaleString('en-IN')}</span>
+          </div>
+        ` : ''}
+        ${taxSummary.igstTotal > 0 ? `
+          <div class="totals-row">
+            <span>Integrated GST (IGST):</span>
+            <span style="font-family:monospace;">₹${taxSummary.igstTotal.toLocaleString('en-IN')}</span>
+          </div>
+        ` : ''}
+        <div class="totals-row" style="font-weight:700; color:#0f172a;">
+          <span>Total GST Value:</span>
+          <span style="font-family:monospace;">₹${taxSummary.totalGstAmount.toLocaleString('en-IN')}</span>
+        </div>
+        ${taxSummary.discountAmount > 0 ? `
+          <div class="totals-row" style="color:#e11d48;">
+            <span>B2B Discount:</span>
+            <span style="font-family:monospace;">-₹${taxSummary.discountAmount.toLocaleString('en-IN')}</span>
+          </div>
+        ` : ''}
+        <div class="totals-row grand">
+          <span>${isProForma ? 'Estimated Total:' : 'Total Invoice Value:'}</span>
+          <span style="font-family:monospace;">₹${grandTotal.toLocaleString('en-IN')}</span>
+        </div>
+      </div>
     </div>
 
     <div class="footer">
       <div>
-        <strong>Declaration:</strong><br/>
-        This is a computer-generated tax invoice issued by HealNex Medi Bazar.<br/>
-        All clinical items comply with CDSCO / ISO B2B quality standards.
+        <div class="stamp">HealNex Verification Seal</div>
+        <p style="margin-top: 4px;">Digitally simulated on HealNex Secure Procurement Gateway.</p>
       </div>
-      <div style="text-align:right;">
-        <div class="seal">HealNex Verified Gateway</div>
-        <div style="margin-top:6px; font-weight:bold;">${vendorName}</div>
-        <div style="font-size:10px;">Authorized Signatory</div>
+      <div style="text-align: right;">
+        <div style="font-weight: 800; color: #0f172a;">For ${vendorName}</div>
+        <div style="margin-top: 18px; font-size: 10px; border-top: 1px solid #94a3b8; padding-top: 2px;">
+          Authorized Signatory / E-Verification
+        </div>
       </div>
     </div>
   </div>
@@ -282,31 +520,123 @@ export function generateBillHTML(order: Order, format: 'a4' | 'pos' = 'a4'): str
 </html>`;
 }
 
-export function downloadBillAsHTML(order: Order, format: 'a4' | 'pos' = 'a4') {
-  const htmlContent = generateBillHTML(order, format);
+/**
+ * Downloads HTML invoice representation
+ */
+export function downloadBillAsHTML(
+  data: Order | ProFormaInvoiceData,
+  format: 'a4' | 'pos' = 'a4'
+) {
+  const isProForma = 'isProForma' in data;
+  const id = isProForma ? data.proFormaNumber : data.id;
+  const htmlContent = generateBillHTML(data, format);
   const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
 
   const link = document.createElement('a');
   link.href = url;
-  link.download = `HealNex_Tax_Invoice_${order.id}_${format.toUpperCase()}.html`;
+  link.download = `HealNex_${isProForma ? 'ProForma_Preview' : 'Tax_Invoice'}_${id}_${format.toUpperCase()}.html`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
 
-export function printBillInWindow(order: Order, format: 'a4' | 'pos' = 'a4') {
-  const htmlContent = generateBillHTML(order, format);
+/**
+ * Opens print preview window
+ */
+export function printBillInWindow(
+  data: Order | ProFormaInvoiceData,
+  format: 'a4' | 'pos' = 'a4'
+) {
+  const htmlContent = generateBillHTML(data, format);
   const printWindow = window.open('', '_blank', 'width=900,height=800');
   if (printWindow) {
     printWindow.document.open();
     printWindow.document.write(htmlContent);
     printWindow.document.close();
-    // Delay slightly to let styles load before invoking print
     setTimeout(() => {
       printWindow.focus();
       printWindow.print();
     }, 400);
+  }
+}
+
+/**
+ * Exports a DOM Element or Order/ProForma directly as a downloadable .pdf file using jsPDF & html2canvas
+ */
+export async function downloadInvoiceAsPDF(
+  elementOrData: HTMLElement | Order | ProFormaInvoiceData,
+  customFilename?: string
+): Promise<boolean> {
+  try {
+    let targetElement: HTMLElement;
+    let cleanup = false;
+
+    if (elementOrData instanceof HTMLElement) {
+      targetElement = elementOrData;
+    } else {
+      // Create offscreen container
+      const htmlContent = generateBillHTML(elementOrData, 'a4');
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '800px';
+      container.style.background = '#ffffff';
+      container.innerHTML = htmlContent;
+      document.body.appendChild(container);
+      
+      const captureElem = container.querySelector('#pdf-capture-root') as HTMLElement || container;
+      targetElement = captureElem;
+      cleanup = true;
+    }
+
+    const canvas = await html2canvas(targetElement, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff'
+    });
+
+    if (cleanup && targetElement.parentElement) {
+      document.body.removeChild(targetElement.parentElement);
+    }
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pdfWidth;
+    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pdfHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+    }
+
+    const filename = customFilename || `HealNex_Tax_Invoice_${Date.now()}.pdf`;
+    pdf.save(filename);
+    return true;
+  } catch (error) {
+    console.error('Failed to generate PDF:', error);
+    // Fallback to HTML download
+    if (!(elementOrData instanceof HTMLElement)) {
+      downloadBillAsHTML(elementOrData, 'a4');
+    }
+    return false;
   }
 }

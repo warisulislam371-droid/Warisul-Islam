@@ -57,12 +57,15 @@ import {
   TrendingDown,
   Smartphone,
   ArrowUpDown,
-  ZoomIn
+  ZoomIn,
+  FileDown
 } from 'lucide-react';
 import { ImageLightboxModal } from './ImageLightboxModal';
 import InvoicePDF from './InvoicePDF';
 import { PolicyType } from './PolicyModal';
 import { getSliceUpiQrDataUrl } from '../utils/sliceQrSvg';
+import { createProFormaInvoiceFromCart, downloadInvoiceAsPDF } from '../utils/billPrinter';
+import { calculateCartTaxSummary } from '../utils/taxCalculator';
 
 interface CustomerPanelProps {
   currentUser: User | null;
@@ -186,6 +189,36 @@ export default function CustomerPanel({
 
   // Active invoice view
   const [viewInvoiceOrder, setViewInvoiceOrder] = useState<Order | null>(null);
+  const [showCartInvoicePreview, setShowCartInvoicePreview] = useState<boolean>(false);
+  const [isDownloadingCartPdf, setIsDownloadingCartPdf] = useState<boolean>(false);
+
+  const handleDownloadCartInvoicePdf = async () => {
+    if (cart.length === 0) {
+      addToast('Your cart is empty. Add items to preview or download an invoice.', 'error');
+      return;
+    }
+    setIsDownloadingCartPdf(true);
+    addToast('Generating real-time Pro-Forma Tax Invoice PDF...', 'info');
+    try {
+      const proForma = createProFormaInvoiceFromCart(cart, {
+        name: currentUser?.name || 'Medical Consignee',
+        company: currentUser?.companyName || 'Healthcare Facility',
+        email: currentUser?.email,
+        phone: currentUser?.phone || currentUser?.mobileNumber,
+        address: shippingAddress.address,
+        city: shippingAddress.city,
+        state: shippingAddress.state,
+        pincode: shippingAddress.pincode
+      });
+      await downloadInvoiceAsPDF(proForma, `HealNex_ProForma_${proForma.proFormaNumber}.pdf`);
+      addToast('Downloaded Pro-Forma PDF Invoice!', 'success');
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to download PDF invoice.', 'error');
+    } finally {
+      setIsDownloadingCartPdf(false);
+    }
+  };
 
   // RFQ review comparator state
   const [activeRfqReview, setActiveRfqReview] = useState<RFQ | null>(null);
@@ -1445,43 +1478,94 @@ export default function CustomerPanel({
                 )}
               </div>
 
-              {/* pricing summary */}
+              {/* pricing summary & Real-Time Invoice Simulation */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-fit space-y-4">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
-                  Procurement Quote Summary
-                </h3>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                    Procurement Quote Summary
+                  </h3>
+                  <span className="bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    GST & CDSCO Verified
+                  </span>
+                </div>
 
                 <div className="space-y-2 text-xs font-semibold text-slate-600">
                   <div className="flex justify-between">
-                    <span>Clinical Subtotal:</span>
+                    <span>Clinical Subtotal (Excl. Tax):</span>
                     <span className="font-mono">₹{getSubtotal().toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Integrated GST taxes:</span>
+                    <span className="flex items-center gap-1">
+                      <span>GST Taxes (12-18%):</span>
+                      <span className="text-[10px] text-slate-400 font-normal">(HSN itemized)</span>
+                    </span>
                     <span className="font-mono">₹{getGstTotal().toLocaleString('en-IN')}</span>
                   </div>
                   <div className="border-t border-slate-100 pt-3 flex justify-between text-slate-900 font-bold text-sm">
                     <span>Estimated Final Quote:</span>
-                    <span className="font-mono text-teal-800">₹{getCheckoutTotal().toLocaleString('en-IN')}</span>
+                    <span className="font-mono text-teal-800 text-base">₹{getCheckoutTotal().toLocaleString('en-IN')}</span>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => {
-                    if (!currentUser) {
-                      addToast('Please sign in or select a profile to proceed with clinical procurement.', 'error');
-                      onNavigate('login');
-                      return;
-                    }
-                    if (cart.length === 0) return;
-                    setSelectedPayMethod('');
-                    setCheckoutStep('checkout');
-                  }}
-                  disabled={cart.length === 0}
-                  className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wide transition text-center cursor-pointer disabled:opacity-50"
-                >
-                  Proceed with Order Placement
-                </button>
+                {/* Real-time Invoice Preview Actions in Cart */}
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-500 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-teal-700" />
+                        Live Invoice Simulation
+                      </span>
+                      <span className="text-[9px] font-bold text-teal-700">Pre-Checkout</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-snug">
+                      Inspect complete tax calculation, HSN summaries, and download PDF for PO budget approval before placing your order.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowCartInvoicePreview(true)}
+                        disabled={cart.length === 0}
+                        className="w-full bg-white hover:bg-teal-50 border border-teal-200 text-teal-800 font-bold py-2 px-2.5 rounded-lg text-[10px] uppercase tracking-wide transition flex items-center justify-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
+                        title="Open interactive Pro-Forma Invoice Modal"
+                      >
+                        <FileText className="w-3 h-3 text-teal-700" />
+                        Preview Invoice
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadCartInvoicePdf}
+                        disabled={cart.length === 0 || isDownloadingCartPdf}
+                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-2.5 rounded-lg text-[10px] uppercase tracking-wide transition flex items-center justify-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
+                        title="Download instantaneous Vector PDF"
+                      >
+                        {isDownloadingCartPdf ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-teal-300" />
+                        ) : (
+                          <FileDown className="w-3 h-3 text-teal-300" />
+                        )}
+                        <span>{isDownloadingCartPdf ? 'PDF...' : 'Download PDF'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (!currentUser) {
+                        addToast('Please sign in or select a profile to proceed with clinical procurement.', 'error');
+                        onNavigate('login');
+                        return;
+                      }
+                      if (cart.length === 0) return;
+                      setSelectedPayMethod('');
+                      setCheckoutStep('checkout');
+                    }}
+                    disabled={cart.length === 0}
+                    className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wide transition text-center cursor-pointer disabled:opacity-50 shadow-md flex items-center justify-center gap-2"
+                  >
+                    <span>Proceed with Order Placement</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -1949,8 +2033,8 @@ export default function CustomerPanel({
                     </div>
                   </div>
 
-                {/* Checkout summary panel info */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-1">
+                {/* Checkout summary panel info & Invoice Preview */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
                   <div className="flex justify-between text-slate-500">
                     <span>Clinical Subtotal</span>
                     <span className="font-mono">₹{getSubtotal().toLocaleString()}</span>
@@ -1961,7 +2045,18 @@ export default function CustomerPanel({
                   </div>
                   <div className="flex justify-between border-t border-slate-200 pt-2 text-slate-800 font-bold">
                     <span>Procurement Grand Total</span>
-                    <span className="font-mono text-teal-700">₹{getCheckoutTotal().toLocaleString()}</span>
+                    <span className="font-mono text-teal-700 text-base">₹{getCheckoutTotal().toLocaleString()}</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-500 font-semibold">Pro-Forma Tax Breakdown</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowCartInvoicePreview(true)}
+                      className="text-[10px] text-teal-800 font-extrabold hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <FileText className="w-3 h-3" />
+                      View Invoice PDF Preview
+                    </button>
                   </div>
                 </div>
 
@@ -3375,6 +3470,25 @@ export default function CustomerPanel({
       {/* Invoice modal visual overlay */}
       {viewInvoiceOrder && (
         <InvoicePDF order={viewInvoiceOrder} onClose={() => setViewInvoiceOrder(null)} addToast={addToast} />
+      )}
+
+      {/* Cart Pro-Forma Invoice Preview Modal */}
+      {showCartInvoicePreview && cart.length > 0 && (
+        <InvoicePDF 
+          proFormaData={createProFormaInvoiceFromCart(cart, {
+            name: currentUser?.name || 'Medical Consignee',
+            company: currentUser?.companyName || 'Healthcare Facility',
+            email: currentUser?.email,
+            phone: currentUser?.phone || currentUser?.mobileNumber,
+            address: shippingAddress.address,
+            city: shippingAddress.city,
+            state: shippingAddress.state,
+            pincode: shippingAddress.pincode
+          })}
+          cartItems={cart}
+          onClose={() => setShowCartInvoicePreview(false)}
+          addToast={addToast}
+        />
       )}
 
       {/* Vendor Rating / Product Review Modal Overlay */}

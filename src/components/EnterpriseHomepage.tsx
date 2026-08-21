@@ -33,6 +33,7 @@ import {
   ChevronUp,
   Info,
   FileText,
+  MessageCircle,
   Percent,
   Check,
   Download,
@@ -49,7 +50,10 @@ import {
   RefreshCw,
   CheckSquare,
   Square,
-  ArrowUpDown
+  ArrowUpDown,
+  Lock,
+  Package,
+  Phone
 } from 'lucide-react';
 import { ImageLightboxModal } from './ImageLightboxModal';
 import { motion, AnimatePresence } from 'motion/react';
@@ -148,6 +152,24 @@ export default function EnterpriseHomepage({
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState<boolean>(false);
   const [brandSearchQuery, setBrandSearchQuery] = useState<string>('');
   const [selectedSubcategoryFilter, setSelectedSubcategoryFilter] = useState<string>('');
+  // Catalog View Mode: 'category_wise' (Category-Wise Products Grid) vs 'grid' (Unified Single Grid)
+  const [catalogViewMode, setCatalogViewMode] = useState<'category_wise' | 'grid'>('category_wise');
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [categorySubFilter, setCategorySubFilter] = useState<Record<string, string>>({});
+
+  const toggleCategoryCollapse = (catName: string) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [catName]: !prev[catName]
+    }));
+  };
+
+  const handleSetCategorySubFilter = (catName: string, subName: string) => {
+    setCategorySubFilter(prev => ({
+      ...prev,
+      [catName]: prev[catName] === subName ? '' : subName
+    }));
+  };
 
   // Reset active subcategory sub-filter whenever the parent selectedCategoryName changes
   useEffect(() => {
@@ -468,18 +490,18 @@ export default function EnterpriseHomepage({
   const defaultHeroSlides = [
     {
       id: 'default-1',
-      headline: "India's Trusted Medical Equipment Marketplace",
-      subtitle: "Buy directly from verified manufacturers and distributors with GST invoices and PAN India installation support.",
+      headline: "Everything Healthcare. One Marketplace.",
+      subtitle: "Medical equipment, devices and healthcare products from verified sellers.",
       bgImage: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=1200",
-      badgeText: "⚡ INDIA'S #1 B2B MEDICAL MARKETPLACE",
-      buttonText: "Shop Catalog",
+      badgeText: "⚡ INDIA'S TRUSTED MEDICAL MARKETPLACE",
+      buttonText: "Shop Now",
       linkUrl: "#catalog-anchor",
       promoOfferName: undefined,
-      promoOfferValue: undefined,
+      promoOfferValue: "GST Verified",
       purchaseProductId: undefined,
       purchaseButtonText: undefined,
       purchaseButtonPrice: undefined,
-      featuredItems: ["ECG Machine", "Patient Monitor", "Ultrasound", "Ventilator", "Defibrillator"]
+      featuredItems: ["ECG Machines", "Patient Monitors", "Ultrasound", "Ventilators", "Defibrillators"]
     },
     {
       id: 'default-2',
@@ -490,11 +512,11 @@ export default function EnterpriseHomepage({
       buttonText: "Request Quote",
       linkUrl: "#catalog-anchor",
       promoOfferName: undefined,
-      promoOfferValue: undefined,
+      promoOfferValue: "Bulk Pricing",
       purchaseProductId: undefined,
       purchaseButtonText: undefined,
       purchaseButtonPrice: undefined,
-      featuredItems: ["ICU Beds", "Anaesthesia Workstation", "C-Arm Image Intensifier", "Multipara Monitor"]
+      featuredItems: ["ICU Beds", "Anaesthesia Workstations", "C-Arm Image Intensifier", "Multipara Monitors"]
     },
     {
       id: 'default-3',
@@ -505,11 +527,11 @@ export default function EnterpriseHomepage({
       buttonText: "View Systems",
       linkUrl: "#catalog-anchor",
       promoOfferName: undefined,
-      promoOfferValue: undefined,
+      promoOfferValue: "Up to 50% OFF",
       purchaseProductId: undefined,
       purchaseButtonText: undefined,
       purchaseButtonPrice: undefined,
-      featuredItems: ["1.5T MRI Machine", "64-Slice CT Scanner", "3D/4D Ultrasound", "High-Flow Oxygen Concentrator"]
+      featuredItems: ["1.5T MRI Machines", "64-Slice CT Scanners", "3D/4D Ultrasound", "High-Flow Oxygen Concentrators"]
     }
   ];
 
@@ -578,6 +600,7 @@ export default function EnterpriseHomepage({
     const subSet = new Set((subcategories || []).map(s => s.trim().toLowerCase()));
 
     return products.filter(p => {
+      if (isCategoryMatch(p, catName, categories)) return true;
       const pCat = (p.category || '').trim().toLowerCase();
       const pSub = (p.subcategory || '').trim().toLowerCase();
 
@@ -588,7 +611,7 @@ export default function EnterpriseHomepage({
 
       return false;
     }).length;
-  }, [products]);
+  }, [products, categories]);
 
   const sidebarCategories = useMemo(() => {
     return rawSidebarCategories
@@ -753,6 +776,260 @@ export default function EnterpriseHomepage({
     });
   }, [products]);
 
+  // Real-time Refurbished Products matcher
+  const refurbishedEquipmentProducts = useMemo(() => {
+    return (products || []).filter(p => {
+      const pCat = (p.category || '').toLowerCase();
+      const pSub = (p.subcategory || '').toLowerCase();
+      const pName = (p.name || '').toLowerCase();
+      const pTags = Array.isArray((p as any).tags) 
+        ? ((p as any).tags as string[]).map(t => String(t).toLowerCase()).join(' ')
+        : String((p as any).tags || '').toLowerCase();
+      const isRefurb = Boolean((p as any).isRefurbished) || (p as any).condition === 'refurbished' || (p as any).condition === 'used';
+
+      return (
+        pCat.includes('refurbished') ||
+        pSub.includes('refurbished') ||
+        pName.includes('refurbished') ||
+        pTags.includes('refurbished') ||
+        isRefurb ||
+        isCategoryMatch(p, 'Refurbished Equipment', categories) ||
+        isCategoryMatch(p, 'Refurbished', categories) ||
+        isCategoryMatch(p, 'Refurbished Imaging & ICU Equipment', categories)
+      );
+    });
+  }, [products, categories]);
+
+  // Fallback featured products in case catalog is loading or has 0 products
+  const fallbackFeaturedProducts: Product[] = useMemo(() => [
+    {
+      id: 'mindray-dc70-exp',
+      sku: 'MED-ULTRA-DC70',
+      name: 'Mindray DC-70 Exp Diagnostic Ultrasound System',
+      brand: 'Mindray',
+      price: 1450000,
+      salePrice: 1245000,
+      stock: 5,
+      category: 'Diagnostic Equipment',
+      subcategory: 'Ultrasound',
+      rating: 4.8,
+      reviewsCount: 128,
+      images: ['https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=500'],
+      vendorId: 'vendor-1',
+      description: 'High-performance X-Insight radiology & cardiology color Doppler ultrasound.',
+      specifications: { 'Channels': '128-Channel', 'Screen': '21.5-inch LED HD', 'Probes': 'Convex + Linear Included' },
+      moq: 1,
+      warranty: '2 Years Comprehensive',
+      condition: 'new',
+      isRefurbished: false,
+      auditStatus: 'approved'
+    },
+    {
+      id: 'bpl-cardiocare-ecg',
+      sku: 'MED-ECG-BPL-12',
+      name: 'BPL Cardiart 12-Channel Clinical ECG Machine',
+      brand: 'BPL Medical',
+      price: 34000,
+      salePrice: 28999,
+      stock: 12,
+      category: 'Medical Equipment',
+      subcategory: 'ECG Machines',
+      rating: 4.7,
+      reviewsCount: 96,
+      images: ['https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=500'],
+      vendorId: 'vendor-2',
+      description: 'High-resolution simultaneous 12-lead acquisition with built-in thermal printer.',
+      specifications: { 'Leads': '12 Lead Simultaneous', 'Display': '7-inch Touchscreen', 'Battery': 'Li-ion Rechargeable' },
+      moq: 1,
+      warranty: '1 Year Onsite',
+      condition: 'new',
+      isRefurbished: false,
+      auditStatus: 'approved'
+    },
+    {
+      id: 'mindray-benevision-n1',
+      sku: 'MED-MON-BENE-N1',
+      name: 'Mindray BeneVision N1 Multi-Para Patient Monitor',
+      brand: 'Mindray',
+      price: 52000,
+      salePrice: 45000,
+      stock: 8,
+      category: 'Medical Equipment',
+      subcategory: 'Patient Monitoring',
+      rating: 4.9,
+      reviewsCount: 74,
+      images: ['https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=500'],
+      vendorId: 'vendor-1',
+      description: 'Compact transportable vital signs patient monitor with ECG, SpO2, NIBP, Temp.',
+      specifications: { 'Parameters': 'ECG/SpO2/NIBP/Resp/Temp', 'Screen': '5.5-inch Capacitive Touch', 'Weight': '0.95 kg' },
+      moq: 1,
+      warranty: '2 Years Warranty',
+      condition: 'new',
+      isRefurbished: false,
+      auditStatus: 'approved'
+    },
+    {
+      id: 'drager-savina-300',
+      sku: 'MED-VENT-SAVINA-300',
+      name: 'Dräger Savina 300 Intensive Care Ventilator',
+      brand: 'Dräger',
+      price: 380000,
+      salePrice: 325000,
+      stock: 4,
+      category: 'Medical Equipment',
+      subcategory: 'ICU Ventilators',
+      rating: 4.8,
+      reviewsCount: 65,
+      images: ['https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=500'],
+      vendorId: 'vendor-3',
+      description: 'High-end turbine-driven invasive and non-invasive ICU critical care ventilator.',
+      specifications: { 'Drive': 'Integrated Turbine', 'Patient Type': 'Adult & Pediatric', 'Modes': 'VCV, PCV, PSV, CPAP' },
+      moq: 1,
+      warranty: '3 Years Comprehensive',
+      condition: 'new',
+      isRefurbished: false,
+      auditStatus: 'approved'
+    }
+  ], []);
+
+  // 10-Minute Auto-Updating Random 4 Featured Products
+  const [featuredRotationTick, setFeaturedRotationTick] = useState<number>(0);
+  const [featuredRandomProducts, setFeaturedRandomProducts] = useState<Product[]>([]);
+
+  // Function to pick 4 random products
+  const pickRandomFeaturedProducts = useCallback((allProducts: Product[]): Product[] => {
+    const pool = (allProducts && allProducts.length > 0) ? allProducts : fallbackFeaturedProducts;
+    if (!pool || pool.length === 0) return [];
+    if (pool.length <= 4) return [...pool];
+    
+    // Fisher-Yates shuffle
+    const shuffled = [...pool];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, 4);
+  }, [fallbackFeaturedProducts]);
+
+  // Update random 4 products on mount, when products change, and on every 10-minute rotation tick
+  useEffect(() => {
+    setFeaturedRandomProducts(pickRandomFeaturedProducts(products));
+  }, [products, pickRandomFeaturedProducts, featuredRotationTick]);
+
+  // 10-minute timer (600,000 ms) to automatically change the 4 random featured products
+  useEffect(() => {
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
+    const interval = setInterval(() => {
+      setFeaturedRotationTick(prev => prev + 1);
+    }, TEN_MINUTES_MS);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleManualFeaturedShuffle = () => {
+    setFeaturedRandomProducts(pickRandomFeaturedProducts(products));
+    setFeaturedRotationTick(prev => prev + 1);
+    if (addToast) {
+      addToast('Featured spotlight rotated with 4 fresh equipment items!', 'info');
+    }
+  };
+
+  // Group filtered products dynamically into Category-Wise product collections
+  const categoryWiseProductGroups = useMemo(() => {
+    const groups: {
+      id: string;
+      name: string;
+      displayName: string;
+      icon: string;
+      image: string;
+      rawCount: number;
+      products: Product[];
+      subcategories: { name: string; count: number }[];
+    }[] = [];
+
+    // Target categories pool
+    const targetCategories = selectedCategoryName
+      ? allCategoryCards.filter(c => c.name.toLowerCase() === selectedCategoryName.toLowerCase())
+      : allCategoryCards;
+
+    targetCategories.forEach(catCard => {
+      // Find all products matching this category among the filtered catalog
+      let matchingProds = filteredMarketplaceProducts.filter(p => isCategoryMatch(p, catCard.name, categories));
+
+      // Check if there is an in-category subcategory filter active
+      const inCatSub = categorySubFilter[catCard.name];
+      if (inCatSub) {
+        const subLower = inCatSub.toLowerCase();
+        matchingProds = matchingProds.filter(p => 
+          (p.subcategory || '').toLowerCase() === subLower || 
+          (p.name || '').toLowerCase().includes(subLower) ||
+          isCategoryMatch(p, inCatSub, categories)
+        );
+      }
+
+      if (matchingProds.length > 0 || (selectedCategoryName && catCard.name.toLowerCase() === selectedCategoryName.toLowerCase())) {
+        // Collect subcategories from products in this department
+        const allCategoryProdsForSubs = filteredMarketplaceProducts.filter(p => isCategoryMatch(p, catCard.name, categories));
+        const subcatMap = new Map<string, number>();
+        allCategoryProdsForSubs.forEach(p => {
+          if (p.subcategory && p.subcategory.trim()) {
+            const sub = p.subcategory.trim();
+            subcatMap.set(sub, (subcatMap.get(sub) || 0) + 1);
+          }
+        });
+
+        // Also add defined subcategories from category metadata
+        const catObj = categories?.find(c => c.name.toLowerCase() === catCard.name.toLowerCase());
+        (catObj?.subcategories || []).forEach(sub => {
+          if (!subcatMap.has(sub)) {
+            const subCount = allCategoryProdsForSubs.filter(p => 
+              (p.subcategory || '').toLowerCase() === sub.toLowerCase() || 
+              (p.name || '').toLowerCase().includes(sub.toLowerCase())
+            ).length;
+            if (subCount > 0) {
+              subcatMap.set(sub, subCount);
+            }
+          }
+        });
+
+        const subcategoryList = Array.from(subcatMap.entries())
+          .map(([name, count]) => ({ name, count }))
+          .sort((a, b) => b.count - a.count);
+
+        groups.push({
+          id: catCard.name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase(),
+          name: catCard.name,
+          displayName: catCard.displayName,
+          icon: catCard.icon,
+          image: catCard.image,
+          rawCount: matchingProds.length,
+          products: matchingProds,
+          subcategories: subcategoryList
+        });
+      }
+    });
+
+    // Unassigned products fallback
+    const categorizedProductIds = new Set<string>();
+    groups.forEach(g => g.products.forEach(p => categorizedProductIds.add(p.id)));
+    const unassignedProds = filteredMarketplaceProducts.filter(p => !categorizedProductIds.has(p.id));
+
+    if (unassignedProds.length > 0 && !selectedCategoryName) {
+      groups.push({
+        id: 'general-specialty-equipment',
+        name: "General Hospital & Clinical Supplies",
+        displayName: "General Hospital & Clinical Supplies",
+        icon: "🏥",
+        image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=400",
+        rawCount: unassignedProds.length,
+        products: unassignedProds,
+        subcategories: []
+      });
+    }
+
+    return groups;
+  }, [allCategoryCards, filteredMarketplaceProducts, selectedCategoryName, categories, categorySubFilter]);
+
   const brandLogos = [
     { name: "Mindray", logo: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=200", desc: "Leading Patient Monitors & Ultrasound" },
     { name: "Philips", logo: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=200", desc: "Global Healthcare Solutions" },
@@ -772,9 +1049,14 @@ export default function EnterpriseHomepage({
     const isVerified = checkIsVerifiedVendor(product);
 
     return (
-      <div 
+      <motion.div 
+        layout
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
         key={product.id}
-        className={`bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col justify-between group relative ${
+        className={`bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:shadow-xl transition-shadow duration-300 flex flex-col justify-between group relative ${
           isGrid ? 'w-full h-full' : 'min-w-[260px] max-w-[280px] shrink-0'
         }`}
       >
@@ -1167,367 +1449,387 @@ export default function EnterpriseHomepage({
             <span>Quick Buy</span>
           </button>
         </div>
-      </div>
+      </motion.div>
     );
   };
 
   return (
     <div className="space-y-12 font-sans bg-white text-[#1F2937] pb-12">
       
-      {/* 1. HERO SECTION: Left Sidebar + 550px Hero Slider */}
-      <section className="max-w-7xl mx-auto px-4 lg:px-6 pt-4 grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
-        {/* Left Vertical Category Sidebar */}
-        <aside className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 hidden lg:block h-[550px] overflow-y-auto scrollbar-thin">
-          <h3 className="text-xs font-black text-[#1F2937] uppercase tracking-wider pb-3 border-b border-slate-100 flex items-center justify-between">
-            <span>Medical Categories</span>
-            <span className="text-[10px] text-[#0077B6]">20+ Divisions</span>
-          </h3>
-          <ul className="space-y-1 mt-2">
-            {sidebarCategories.map((cat) => {
-              const isSelected = selectedCategoryName.trim().toLowerCase() === cat.name.trim().toLowerCase();
-              const isExpanded = sidebarExpandedCategory?.trim().toLowerCase() === cat.name.trim().toLowerCase();
-              const subcategories = getSidebarSubcategories(cat.name);
-
-              return (
-                <li
-                  key={cat.name}
-                  onMouseEnter={() => handleSidebarCategoryMouseEnter(cat.name)}
-                  onMouseLeave={() => handleSidebarCategoryMouseLeave(cat.name)}
-                  className="rounded-xl transition-all duration-200"
-                >
-                  <button
-                    onClick={(e) => handleSidebarCategoryClick(e, cat.name)}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between group cursor-pointer ${
-                      isSelected
-                        ? 'bg-[#0F9D8A]/15 text-[#0F9D8A] font-extrabold border-l-4 border-[#0F9D8A] shadow-xs'
-                        : isExpanded
-                        ? 'bg-[#F0FDF4] text-[#0F9D8A] font-bold border-l-2 border-[#0F9D8A]/60'
-                        : 'text-slate-700 hover:bg-[#F5F7FA]'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <span className="shrink-0">{cat.icon}</span>
-                      <span className="truncate">{cat.name}</span>
-                    </span>
-                    <div className="flex items-center gap-1.5 shrink-0 ml-1">
-                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition ${
-                        isSelected
-                          ? 'bg-[#0F9D8A] text-white font-black'
-                          : 'bg-slate-100 group-hover:bg-[#0F9D8A]/20 group-hover:text-[#0F9D8A] text-slate-500'
-                      }`}>
-                        {isSelected ? '✓' : cat.count}
-                      </span>
-                      <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                        isExpanded ? 'rotate-90 text-[#0F9D8A]' : isSelected ? 'text-[#0F9D8A]' : 'text-slate-400 group-hover:text-[#0F9D8A]'
-                      }`} />
-                    </div>
-                  </button>
-
-                  {/* Auto-expanded Subcategories List */}
-                  {isExpanded && subcategories.length > 0 && (
-                    <div className="ml-5 pl-2.5 my-1.5 border-l-2 border-[#0F9D8A]/30 space-y-1 animate-fade-in">
-                      <div className="text-[10px] font-extrabold text-[#0F9D8A] uppercase tracking-wider px-2 py-0.5 flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-[#0F9D8A]" />
-                        <span>Subcategories ({subcategories.length})</span>
-                      </div>
-                      {subcategories.map(sub => {
-                        const isSubSelected = selectedCategoryName.trim().toLowerCase() === sub.trim().toLowerCase();
-                        const subCount = getSubcategoryCount(sub, cat.name);
-
-                        return (
-                          <button
-                            key={sub}
-                            onClick={(e) => handleSubcategoryClick(e, sub)}
-                            className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition flex items-center justify-between group cursor-pointer ${
-                              isSubSelected
-                                ? 'bg-[#0F9D8A] text-white font-bold shadow-2xs'
-                                : 'text-slate-600 hover:text-[#0F9D8A] hover:bg-[#0F9D8A]/10 font-medium'
-                            }`}
-                          >
-                            <span className="truncate flex items-center gap-1.5">
-                              <span className={`w-1.5 h-1.5 rounded-full ${isSubSelected ? 'bg-white' : 'bg-[#0F9D8A]'}`} />
-                              <span>{sub}</span>
-                            </span>
-                            {subCount > 0 && (
-                              <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full ${
-                                isSubSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
-                              }`}>
-                                {subCount}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </aside>
-
-        {/* Large Hero Banner Slider (550px) */}
-        <div className="lg:col-span-3 h-[550px] rounded-2xl overflow-hidden relative shadow-lg border border-slate-200 group">
-          <img
-            src={currentSlide.bgImage}
-            alt={currentSlide.headline}
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-cover transition-all duration-700"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#1F2937]/90 via-[#1F2937]/75 to-transparent flex items-center px-8 sm:px-14">
-            <div className="max-w-xl text-white space-y-6">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="inline-block bg-[#0F9D8A] text-white text-[11px] font-black px-3.5 py-1.5 rounded-full uppercase tracking-widest shadow-md">
-                  {currentSlide.badgeText}
-                </span>
+      {/* 1. HERO SECTION - Clean Light Sky-Blue Healthcare Canvas with Live Admin Banners */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-[#EBF5FB] via-[#F4F9FD] to-white border-b border-slate-200/80 py-8 lg:py-14">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+            
+            {/* Left Content Column */}
+            <div className="lg:col-span-7 space-y-6">
+              {/* Promotional Badge & Banner Position Counter */}
+              <div className="flex items-center gap-2.5 flex-wrap">
+                {currentSlide.badgeText ? (
+                  <span className="bg-[#0066CC] text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-xs">
+                    {currentSlide.badgeText}
+                  </span>
+                ) : (
+                  <span className="bg-[#0066CC] text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-xs">
+                    ⚡ INDIA'S TRUSTED MEDICAL MARKETPLACE
+                  </span>
+                )}
                 {currentSlide.promoOfferValue && (
-                  <span className="inline-block bg-amber-400 text-slate-950 text-[11px] font-black px-3 py-1 rounded-full uppercase font-mono shadow-md">
+                  <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">
                     {currentSlide.promoOfferValue}
                   </span>
                 )}
+                {slidesToDisplay.length > 1 && (
+                  <span className="text-[10px] font-bold text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-full font-mono">
+                    Banner {currentSlideIdx + 1} / {slidesToDisplay.length}
+                  </span>
+                )}
               </div>
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight">
-                {currentSlide.headline}
-              </h1>
-              <p className="text-sm sm:text-base text-slate-200 leading-relaxed font-medium">
-                {currentSlide.subtitle}
-              </p>
-              <div className="flex flex-wrap gap-3 pt-2">
+
+              <div className="space-y-3">
+                <h1 className="text-4xl sm:text-5xl lg:text-[50px] font-black tracking-tight leading-[1.12] text-slate-900">
+                  {currentSlide.headline || "Everything Healthcare. One Marketplace."}
+                </h1>
+                <p className="text-sm sm:text-base text-slate-600 font-medium max-w-xl leading-relaxed">
+                  {currentSlide.subtitle || "Medical equipment, devices and healthcare products from verified sellers."}
+                </p>
+              </div>
+
+              {/* Action Buttons & Slide Controls */}
+              <div className="flex flex-wrap items-center gap-3.5 pt-1">
                 <button
                   onClick={() => {
-                    if (currentSlide.linkUrl && currentSlide.linkUrl.startsWith('#')) {
-                      const el = document.getElementById(currentSlide.linkUrl.substring(1));
+                    if (currentSlide.linkUrl?.startsWith('#')) {
+                      const el = document.getElementById(currentSlide.linkUrl.replace('#', ''));
                       el?.scrollIntoView({ behavior: 'smooth' });
+                    } else if (currentSlide.linkUrl) {
+                      window.location.hash = currentSlide.linkUrl;
                     } else {
                       const el = document.getElementById('catalog-anchor');
                       el?.scrollIntoView({ behavior: 'smooth' });
                     }
                   }}
-                  className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white font-bold text-xs sm:text-sm px-8 py-3.5 rounded-xl transition shadow-xl flex items-center gap-2 cursor-pointer"
+                  className="bg-[#0066CC] hover:bg-[#0055aa] text-white font-bold text-sm px-8 py-3.5 rounded-lg transition shadow-sm flex items-center gap-2 cursor-pointer"
                 >
-                  <span>{currentSlide.buttonText}</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ShoppingCart className="w-4 h-4" />
+                  <span>{currentSlide.buttonText || "Shop Now"}</span>
                 </button>
-
-                {currentSlide.purchaseProductId && (
-                  <button
-                    onClick={() => {
-                      const p = products.find(prod => prod.id === currentSlide.purchaseProductId);
-                      if (p) {
-                        onAddToCart(p, p.moq || 1);
-                        onNavigate('cart');
-                      }
-                    }}
-                    className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs sm:text-sm px-6 py-3.5 rounded-xl transition shadow-xl flex items-center gap-2 cursor-pointer"
-                  >
-                    <ShoppingCart className="w-4 h-4" />
-                    <span>{currentSlide.purchaseButtonText || 'Buy Promo Deal'} {currentSlide.purchaseButtonPrice ? `(₹${currentSlide.purchaseButtonPrice.toLocaleString()})` : ''}</span>
-                  </button>
-                )}
 
                 <button
                   onClick={() => {
-                    if (onBecomeSeller) onBecomeSeller();
-                    else onNavigate('register_vendor');
+                    const el = document.getElementById('categories-section');
+                    el?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="bg-white text-[#1F2937] hover:bg-slate-100 font-bold text-xs sm:text-sm px-6 py-3.5 rounded-xl transition shadow-md flex items-center gap-2 cursor-pointer"
+                  className="bg-white hover:bg-slate-50 text-[#0066CC] border border-[#0066CC] font-bold text-sm px-7 py-3.5 rounded-lg transition shadow-2xs flex items-center gap-2 cursor-pointer"
                 >
-                  <Store className="w-4 h-4 text-[#0077B6]" />
-                  <span>Become Vendor</span>
+                  <span>Explore Categories</span>
                 </button>
+
+                {/* Banner Carousel Controls if multiple banners exist */}
+                {slidesToDisplay.length > 1 && (
+                  <div className="flex items-center gap-1.5 ml-auto sm:ml-2 bg-white/80 backdrop-blur-xs border border-slate-200 rounded-xl p-1 shadow-2xs">
+                    <button
+                      onClick={() => setHeroSlide((prev) => (prev - 1 + slidesToDisplay.length) % slidesToDisplay.length)}
+                      className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition cursor-pointer"
+                      title="Previous Banner"
+                      aria-label="Previous Banner"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    
+                    <div className="flex items-center gap-1 px-1">
+                      {slidesToDisplay.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setHeroSlide(idx)}
+                          className={`h-2 rounded-full transition-all cursor-pointer ${
+                            idx === currentSlideIdx ? 'w-5 bg-[#0066CC]' : 'w-2 bg-slate-300 hover:bg-slate-400'
+                          }`}
+                          title={`Go to Banner ${idx + 1}`}
+                          aria-label={`Go to Banner ${idx + 1}`}
+                        />
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => setHeroSlide((prev) => (prev + 1) % slidesToDisplay.length)}
+                      className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition cursor-pointer"
+                      title="Next Banner"
+                      aria-label="Next Banner"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Featured Equipment List */}
-              <div className="flex flex-wrap gap-2 pt-4 border-t border-white/10 text-[11px] text-slate-300">
-                <span className="font-bold text-white">Popular:</span>
-                {currentSlide.featuredItems.map(item => (
-                  <span key={item} className="bg-white/10 px-2.5 py-0.5 rounded-md backdrop-blur-sm border border-white/10 font-medium">
-                    {item}
-                  </span>
-                ))}
+              {/* 4 Trust Badges Strip */}
+              <div className="pt-6 border-t border-slate-200/80 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-semibold text-slate-700">
+                <div className="flex items-center gap-2">
+                  <span className="text-base text-[#0066CC]">🛡️</span>
+                  <span>Verified Sellers</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base text-[#0066CC]">🚚</span>
+                  <span>Pan-India Delivery</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base text-[#0066CC]">✨</span>
+                  <span>Genuine Products</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base text-[#0066CC]">🔒</span>
+                  <span>Secure &amp; Reliable</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Controls */}
-          {slidesToDisplay.length > 1 && (
-            <>
-              <button
-                onClick={() => setHeroSlide((prev) => (prev - 1 + slidesToDisplay.length) % slidesToDisplay.length)}
-                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-3 rounded-full backdrop-blur-md opacity-0 group-hover:opacity-100 transition cursor-pointer"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setHeroSlide((prev) => (prev + 1) % slidesToDisplay.length)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-3 rounded-full backdrop-blur-md opacity-0 group-hover:opacity-100 transition cursor-pointer"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-
-              {/* Indicators */}
-              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-2">
-                {slidesToDisplay.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setHeroSlide(idx)}
-                    className={`h-2.5 rounded-full transition-all cursor-pointer ${idx === currentSlideIdx ? 'w-8 bg-[#0F9D8A]' : 'w-2.5 bg-white/50'}`}
+            {/* Right Visual Column: Admin Uploaded Banner Visual & Slide Indicator */}
+            <div className="lg:col-span-5 relative flex items-center justify-center">
+              {/* Soft glowing backdrop platform */}
+              <div className="absolute w-72 h-72 sm:w-96 sm:h-96 rounded-full bg-gradient-to-tr from-sky-200/50 via-blue-100/40 to-teal-100/30 blur-2xl pointer-events-none -z-0"></div>
+              
+              <div className="relative z-10 w-full max-w-md bg-gradient-to-b from-white/95 to-sky-50/90 rounded-3xl p-4 border border-sky-100 shadow-xl backdrop-blur-xs group">
+                <div className="relative overflow-hidden rounded-2xl bg-slate-100">
+                  <img
+                    key={currentSlide.id || currentSlideIdx}
+                    src={currentSlide.bgImage || 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=700'}
+                    alt={currentSlide.headline || "HealNex Medical Equipment Banner"}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      // Fallback if image link is invalid
+                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=700';
+                    }}
+                    className="w-full h-72 sm:h-80 object-cover rounded-2xl shadow-inner border border-white transition-transform duration-500 hover:scale-102"
                   />
-                ))}
+
+                  {/* Banner Overlay Controls on Hover */}
+                  {slidesToDisplay.length > 1 && (
+                    <div className="absolute inset-x-0 bottom-2 px-3 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHeroSlide((prev) => (prev - 1 + slidesToDisplay.length) % slidesToDisplay.length);
+                        }}
+                        className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition cursor-pointer"
+                        aria-label="Previous Slide"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHeroSlide((prev) => (prev + 1) % slidesToDisplay.length);
+                        }}
+                        className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition cursor-pointer"
+                        aria-label="Next Slide"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Floating Live Tag */}
+                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md px-4 py-2 rounded-full border border-sky-200 shadow-md flex items-center gap-2 text-xs font-bold text-slate-800 whitespace-nowrap">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>{currentSlide.promoOfferName || "5,000+ Verified Hospital Systems Live"}</span>
+                </div>
               </div>
-            </>
-          )}
+            </div>
+
+          </div>
         </div>
       </section>
 
-      {/* Active Promo Banners Showcase Grid */}
-      {activeBanners.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 lg:px-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-              <h3 className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#0F9D8A]" />
-                Active Promotional Offers &amp; Banners
-              </h3>
-              <span className="text-[10px] font-extrabold text-[#0F9D8A] bg-[#0F9D8A]/10 px-2.5 py-1 rounded-full border border-[#0F9D8A]/20">
-                {activeBanners.length} Live Banners
+      {/* 2. SHOP BY CATEGORY (10 Cards Grid) */}
+      <section id="categories-section" className="max-w-7xl mx-auto px-4 lg:px-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-black text-slate-900">Shop by Category</h2>
+          <button
+            onClick={() => {
+              const el = document.getElementById('catalog-anchor');
+              el?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="text-xs font-bold text-[#0066CC] hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <span>View All Categories</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-3">
+          {[
+            { name: 'Medical Equipment', category: 'Medical Equipment', image: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Diagnostic Equipment', category: 'Diagnostic Equipment', image: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Laboratory', category: 'Laboratory Equipment', image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Dental', category: 'Dental Equipment', image: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Surgical', category: 'Surgical Instruments', image: 'https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Consumables', category: 'Medical Consumables', image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Hospital Furniture', category: 'Hospital Furniture', image: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Patient Care', category: 'Patient Care Devices', image: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Imaging', category: 'Diagnostic Imaging', image: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Physiotherapy', category: 'Physiotherapy & Rehab', image: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&q=80&w=200' }
+          ].map((cat) => (
+            <button
+              key={cat.name}
+              onClick={() => handleCategoryClick(cat.category)}
+              className="bg-white hover:bg-sky-50/50 border border-slate-200 hover:border-[#0066CC] rounded-2xl p-3 text-center transition-all duration-200 shadow-2xs hover:shadow-sm flex flex-col items-center justify-between h-36 group cursor-pointer"
+            >
+              <div className="w-full h-18 rounded-xl bg-slate-50 flex items-center justify-center overflow-hidden p-1">
+                <img
+                  src={cat.image}
+                  alt={cat.name}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover rounded-lg group-hover:scale-105 transition duration-300"
+                />
+              </div>
+              <span className="text-[11px] font-bold text-slate-800 group-hover:text-[#0066CC] leading-tight mt-2 line-clamp-2">
+                {cat.name}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 3. FEATURED MEDICAL EQUIPMENT (Auto-Updating 4 Random Products every 10 min) */}
+      <section className="max-w-7xl mx-auto px-4 lg:px-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b border-slate-100">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-sky-100 text-[#0066CC] text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-[#0066CC]" />
+                Spotlight Selection
+              </span>
+              <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                <Clock className="w-3 h-3 text-slate-400" />
+                Auto-rotates every 10 min
               </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {activeBanners.map(b => (
-                <div
-                  key={b.id}
-                  className="bg-slate-900 rounded-2xl overflow-hidden shadow-md border border-slate-800 text-white relative min-h-[180px] flex flex-col justify-between p-5 group hover:border-[#0F9D8A] transition"
-                >
-                  <img
-                    src={b.imageUrl}
-                    alt={b.title}
-                    referrerPolicy="no-referrer"
-                    className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-50 group-hover:scale-105 transition-all duration-500 pointer-events-none"
-                  />
-                  <div className="relative z-10 space-y-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {b.badgeText && (
-                        <span className="bg-[#0F9D8A]/20 text-teal-300 border border-[#0F9D8A]/40 text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase">
-                          {b.badgeText}
-                        </span>
-                      )}
-                      {b.promoOfferValue && (
-                        <span className="bg-amber-400 text-slate-950 font-mono text-[9px] font-black px-2 py-0.5 rounded-full">
-                          {b.promoOfferValue}
-                        </span>
-                      )}
-                    </div>
-                    <h4 className="text-base font-black tracking-tight leading-snug line-clamp-2">
-                      {b.title}
-                    </h4>
-                    {b.subtitle && (
-                      <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed font-medium">
-                        {b.subtitle}
-                      </p>
-                    )}
-                  </div>
-                  <div className="relative z-10 pt-4 flex items-center justify-between gap-3 border-t border-white/10 mt-2">
-                    <button
-                      onClick={() => {
-                        if (b.linkUrl && b.linkUrl.startsWith('#')) {
-                          const el = document.getElementById(b.linkUrl.substring(1));
-                          el?.scrollIntoView({ behavior: 'smooth' });
-                        } else {
-                          const el = document.getElementById('catalog-anchor');
-                          el?.scrollIntoView({ behavior: 'smooth' });
-                        }
-                      }}
-                      className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <span>{b.buttonText || 'Explore Offer'}</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                    {b.purchaseProductId && (
-                      <button
-                        onClick={() => {
-                          const p = products.find(prod => prod.id === b.purchaseProductId);
-                          if (p) {
-                            onAddToCart(p, p.moq || 1);
-                            onNavigate('cart');
-                          }
-                        }}
-                        className="bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black px-3.5 py-2 rounded-xl transition shadow flex items-center gap-1 cursor-pointer"
-                      >
-                        <ShoppingCart className="w-3.5 h-3.5" />
-                        <span>Buy {b.purchaseButtonPrice ? `₹${b.purchaseButtonPrice.toLocaleString()}` : 'Now'}</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <h2 className="text-2xl font-black text-slate-900">Featured Medical Equipment</h2>
           </div>
-        </section>
-      )}
 
-      {/* 2. TRUST BADGES STRIP */}
-      <section className="max-w-7xl mx-auto px-4 lg:px-6">
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 bg-[#F5F7FA] p-6 rounded-2xl border border-slate-200 text-center">
-          <div className="space-y-1.5 p-2">
-            <div className="w-10 h-10 rounded-2xl bg-[#0077B6]/10 text-[#0077B6] mx-auto flex items-center justify-center font-bold">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <h4 className="text-xs font-bold text-[#1F2937]">Genuine Products</h4>
-            <p className="text-[10px] text-slate-500">100% Factory Certified</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleManualFeaturedShuffle}
+              className="text-xs font-bold text-slate-600 hover:text-[#0066CC] bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Shuffle 4 Random Products Now"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+              <span>Shuffle Selection</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const el = document.getElementById('catalog-anchor');
+                el?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="text-xs font-bold text-[#0066CC] hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span>View Full Catalog</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
-          <div className="space-y-1.5 p-2 border-l border-slate-200/60">
-            <div className="w-10 h-10 rounded-2xl bg-[#0F9D8A]/10 text-[#0F9D8A] mx-auto flex items-center justify-center font-bold">
-              <CheckCircle className="w-5 h-5" />
-            </div>
-            <h4 className="text-xs font-bold text-[#1F2937]">Verified Vendors</h4>
-            <p className="text-[10px] text-slate-500">GST &amp; ISO Compliant</p>
-          </div>
-          <div className="space-y-1.5 p-2 border-l border-slate-200/60">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 mx-auto flex items-center justify-center font-bold">
-              <Truck className="w-5 h-5" />
-            </div>
-            <h4 className="text-xs font-bold text-[#1F2937]">PAN India Delivery</h4>
-            <p className="text-[10px] text-slate-500">19,000+ Pincodes</p>
-          </div>
-          <div className="space-y-1.5 p-2 border-l border-slate-200/60">
-            <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 mx-auto flex items-center justify-center font-bold">
-              <BadgeDollarSign className="w-5 h-5" />
-            </div>
-            <h4 className="text-xs font-bold text-[#1F2937]">Secure Payments</h4>
-            <p className="text-[10px] text-slate-500">Escrow Protected</p>
-          </div>
-          <div className="space-y-1.5 p-2 border-l border-slate-200/60">
-            <div className="w-10 h-10 rounded-2xl bg-rose-500/10 text-rose-600 mx-auto flex items-center justify-center font-bold">
-              <Award className="w-5 h-5" />
-            </div>
-            <h4 className="text-xs font-bold text-[#1F2937]">Installation Support</h4>
-            <p className="text-[10px] text-slate-500">Biomedical Engineers</p>
-          </div>
-          <div className="space-y-1.5 p-2 border-l border-slate-200/60">
-            <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 mx-auto flex items-center justify-center font-bold">
-              <RotateCcw className="w-5 h-5" />
-            </div>
-            <h4 className="text-xs font-bold text-[#1F2937]">Service Warranty</h4>
-            <p className="text-[10px] text-slate-500">Pan-India Support</p>
-          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <AnimatePresence mode="popLayout">
+            {featuredRandomProducts.map((product) => renderProductCard(product, true))}
+          </AnimatePresence>
         </div>
       </section>
 
-      {/* 4. FEATURED BRANDS MARQUEE */}
-      <section className="max-w-7xl mx-auto px-4 lg:px-6 space-y-4">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">Top Medical Equipment Brands</h3>
+      {/* 4. PROMOTIONAL BANNER: UPGRADE YOUR HEALTHCARE FACILITY */}
+      <section className="max-w-7xl mx-auto px-4 lg:px-6">
+        <div className="bg-gradient-to-r from-[#0a192f] via-[#0d2847] to-[#103a63] rounded-3xl p-8 sm:p-12 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
+          
+          {/* Left Content */}
+          <div className="space-y-4 max-w-xl z-10">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-tight">
+              Upgrade Your Healthcare Facility
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+              Discover quality medical equipment at competitive prices.
+            </p>
+            <div className="pt-2">
+              <button
+                onClick={() => {
+                  const el = document.getElementById('catalog-anchor');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="bg-white hover:bg-slate-100 text-[#0a192f] font-bold text-xs sm:text-sm px-7 py-3.5 rounded-lg transition shadow-lg cursor-pointer inline-flex items-center gap-2"
+              >
+                <span>Explore Equipment</span>
+                <ArrowRight className="w-4 h-4 text-[#0066CC]" />
+              </button>
+            </div>
+          </div>
+
+          {/* Right Image: Modern Surgical Operating Room */}
+          <div className="z-10 shrink-0 w-full md:w-80 lg:w-96 rounded-2xl overflow-hidden shadow-2xl border border-white/20">
+            <img
+              src="https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&q=80&w=600"
+              alt="Healthcare Facility Modern Equipment Setup"
+              referrerPolicy="no-referrer"
+              className="w-full h-48 sm:h-56 object-cover"
+            />
+          </div>
+
+        </div>
+      </section>
+
+      {/* 5. POPULAR CATEGORIES (8 Cards Grid) */}
+      <section className="max-w-7xl mx-auto px-4 lg:px-6 space-y-5">
+        <h2 className="text-2xl font-black text-slate-900">Popular Categories</h2>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3.5">
+          {[
+            { name: 'Ultrasound', category: 'Diagnostic Equipment', image: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=200' },
+            { name: 'ECG', category: 'Medical Equipment', image: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Patient Monitor', category: 'Medical Equipment', image: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Ventilator', category: 'Medical Equipment', image: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Defibrillator', category: 'Medical Equipment', image: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=200' },
+            { name: 'X-Ray', category: 'Diagnostic Imaging', image: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Autoclave', category: 'Laboratory Equipment', image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&q=80&w=200' },
+            { name: 'Dental Chair', category: 'Dental Equipment', image: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&q=80&w=200' }
+          ].map((cat) => (
+            <button
+              key={cat.name}
+              onClick={() => handleCategoryClick(cat.category)}
+              className="bg-white hover:bg-slate-50 border border-slate-200 hover:border-[#0066CC] rounded-2xl p-3 text-center transition-all duration-200 shadow-2xs hover:shadow-sm flex flex-col items-center justify-between h-32 group cursor-pointer"
+            >
+              <div className="w-full h-16 rounded-xl bg-slate-50 flex items-center justify-center overflow-hidden p-1">
+                <img
+                  src={cat.image}
+                  alt={cat.name}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover rounded-lg group-hover:scale-105 transition duration-300"
+                />
+              </div>
+              <span className="text-xs font-bold text-slate-800 group-hover:text-[#0066CC] leading-tight mt-1 truncate w-full">
+                {cat.name}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 6. BRANDS CAROUSEL */}
+      <section id="brands-section" className="max-w-7xl mx-auto px-4 lg:px-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">Top Medical Equipment Brands</h3>
+          <span className="text-xs font-bold text-[#0066CC]">Official OEM &amp; Distributor Network</span>
+        </div>
         <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
           {brandLogos.map((brd) => (
             <button 
               key={brd.name}
               onClick={() => handleCategoryClick(brd.name)}
-              className="bg-[#F5F7FA] hover:bg-white border border-slate-200 hover:border-[#0077B6] rounded-2xl p-3 px-5 shrink-0 flex items-center gap-3 transition cursor-pointer shadow-sm min-w-[200px] text-left"
+              className="bg-white hover:bg-slate-50 border border-slate-200 hover:border-[#0066CC] rounded-2xl p-3 px-5 shrink-0 flex items-center gap-3 transition cursor-pointer shadow-2xs min-w-[200px] text-left"
             >
               <img src={brd.logo} alt={brd.name} className="w-8 h-8 rounded-lg object-cover" />
               <div>
-                <h4 className="text-xs font-bold text-[#1F2937]">{brd.name}</h4>
+                <h4 className="text-xs font-bold text-slate-900">{brd.name}</h4>
                 <p className="text-[9px] text-slate-500 font-medium truncate max-w-[120px]">{brd.desc}</p>
               </div>
             </button>
@@ -1535,87 +1837,121 @@ export default function EnterpriseHomepage({
         </div>
       </section>
 
-      {/* 5. DEAL OF THE DAY / FLASH SALE BANNER */}
-      {dealOfDay.isActive && (
-        <section className="max-w-7xl mx-auto px-4 lg:px-6">
-          <div className="bg-gradient-to-r from-[#0077B6] via-[#0F9D8A] to-indigo-900 rounded-3xl p-6 sm:p-10 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="space-y-4 max-w-xl z-10">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="bg-rose-500 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-sm">
-                  {dealOfDay.badgeText || '⚡ DEAL OF THE DAY • LIMITED STOCK'}
-                </span>
-                {dealOfDay.discountText && (
-                  <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-full uppercase font-mono shadow-sm">
-                    {dealOfDay.discountText}
-                  </span>
-                )}
+      {/* 7. DUAL PROMOTIONAL CARDS (CERTIFIED REFURBISHED & BULK PROCUREMENT) */}
+      <section className="max-w-7xl mx-auto px-4 lg:px-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          {/* Left Card: Certified Refurbished Equipment */}
+          <div className="bg-gradient-to-r from-[#0a192f] to-[#122e4c] rounded-3xl p-6 sm:p-8 text-white shadow-md flex flex-col justify-between relative overflow-hidden group">
+            <div className="space-y-3 z-10 max-w-sm">
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight leading-snug">
+                Certified Refurbished Equipment
+              </h3>
+              <div className="flex items-center gap-3 text-xs font-semibold text-teal-300 flex-wrap">
+                <span>🛡️ Certified</span>
+                <span>📋 Tested</span>
+                <span>🛡️ Warranty Available</span>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight">
-                {dealOfDay.title}
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-200">
-                {dealOfDay.subtitle}
-              </p>
-
-              {/* Countdown Timer */}
-              <div className="flex items-center gap-3 text-center pt-2">
-                <div className="bg-white/20 backdrop-blur-md px-3 py-2 rounded-xl font-mono border border-white/20">
-                  <span className="text-lg font-bold block">{String(countdown.hours).padStart(2, '0')}</span>
-                  <span className="text-[9px] uppercase font-sans text-slate-200">Hours</span>
-                </div>
-                <span className="text-xl font-bold">:</span>
-                <div className="bg-white/20 backdrop-blur-md px-3 py-2 rounded-xl font-mono border border-white/20">
-                  <span className="text-lg font-bold block">{String(countdown.mins).padStart(2, '0')}</span>
-                  <span className="text-[9px] uppercase font-sans text-slate-200">Mins</span>
-                </div>
-                <span className="text-xl font-bold">:</span>
-                <div className="bg-white/20 backdrop-blur-md px-3 py-2 rounded-xl font-mono border border-white/20">
-                  <span className="text-lg font-bold block">{String(countdown.secs).padStart(2, '0')}</span>
-                  <span className="text-[9px] uppercase font-sans text-slate-200">Secs</span>
-                </div>
-              </div>
-
-              {/* Stock Progress Bar */}
-              <div className="space-y-1.5 pt-2 max-w-xs">
-                <div className="flex justify-between text-[10px] font-bold">
-                  <span>Claimed: {dealOfDay.claimedPercentage || 78}%</span>
-                  <span>{dealOfDay.unitsLeft || 12} Units Left</span>
-                </div>
-                <div className="w-full bg-white/20 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-amber-400 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.max(0, dealOfDay.claimedPercentage || 78))}%` }}
-                  />
-                </div>
+              <div className="pt-2">
+                <button
+                  onClick={() => handleCategoryClick('Refurbished Equipment')}
+                  className="bg-white hover:bg-slate-100 text-[#0a192f] font-bold text-xs px-5 py-2.5 rounded-lg transition shadow-md cursor-pointer"
+                >
+                  Explore Refurbished
+                </button>
               </div>
             </div>
-
-            <div className="z-10 shrink-0 text-center">
-              <button
-                onClick={() => {
-                  if (dealOfDay.productId) {
-                    const matchedProd = products.find(p => p.id === dealOfDay.productId);
-                    if (matchedProd) {
-                      onQuickView(matchedProd);
-                      return;
-                    }
-                  }
-                  if (dealOfDay.linkUrl && dealOfDay.linkUrl.startsWith('#')) {
-                    const el = document.getElementById(dealOfDay.linkUrl.substring(1));
-                    el?.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    const el = document.getElementById('catalog-anchor');
-                    el?.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
-                className="bg-white text-[#1F2937] hover:bg-slate-100 font-extrabold text-sm px-8 py-4 rounded-2xl transition shadow-2xl transform hover:scale-105 cursor-pointer"
-              >
-                {dealOfDay.buttonText || 'Claim Flash Offer Now'}
-              </button>
+            <div className="absolute right-4 bottom-4 w-32 h-32 rounded-2xl overflow-hidden opacity-80 group-hover:opacity-100 transition hidden sm:block border border-white/20 shadow-xl">
+              <img
+                src="https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=250"
+                alt="Refurbished Medical Device"
+                className="w-full h-full object-cover"
+              />
             </div>
           </div>
-        </section>
-      )}
+
+          {/* Right Card: Need Equipment in Bulk? */}
+          <div className="bg-[#EAF4FB] border border-blue-100 rounded-3xl p-6 sm:p-8 text-slate-900 shadow-md flex flex-col justify-between relative overflow-hidden group">
+            <div className="space-y-3 z-10 max-w-sm">
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight leading-snug text-slate-900">
+                Need Equipment in Bulk?
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-600 font-medium">
+                Get competitive quotations from verified medical suppliers.
+              </p>
+              <div className="pt-2">
+                <button
+                  onClick={() => onNavigate('rfqs')}
+                  className="bg-[#0066CC] hover:bg-[#0055aa] text-white font-bold text-xs px-5 py-2.5 rounded-lg transition shadow-md cursor-pointer"
+                >
+                  Request Bulk Quote
+                </button>
+              </div>
+            </div>
+            <div className="absolute right-4 bottom-4 w-32 h-32 rounded-2xl overflow-hidden opacity-80 group-hover:opacity-100 transition hidden sm:block border border-blue-200 shadow-xl">
+              <img
+                src="https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&q=80&w=250"
+                alt="Bulk Medical Procurement Cartons"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* 8. TRUST BADGES (6 VALUE PROPOSITIONS) */}
+      <section className="max-w-7xl mx-auto px-4 lg:px-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs text-center">
+          <div className="space-y-1.5 p-2">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#0066CC] mx-auto flex items-center justify-center font-bold">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-bold text-slate-900">Verified Sellers</h4>
+            <p className="text-[10px] text-slate-500">Only verified and trusted sellers</p>
+          </div>
+
+          <div className="space-y-1.5 p-2 border-l border-slate-100">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#0066CC] mx-auto flex items-center justify-center font-bold">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-bold text-slate-900">Genuine Products</h4>
+            <p className="text-[10px] text-slate-500">100% authentic products</p>
+          </div>
+
+          <div className="space-y-1.5 p-2 border-l border-slate-100">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#0066CC] mx-auto flex items-center justify-center font-bold">
+              <Truck className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-bold text-slate-900">Pan-India Delivery</h4>
+            <p className="text-[10px] text-slate-500">Fast and reliable delivery</p>
+          </div>
+
+          <div className="space-y-1.5 p-2 border-l border-slate-100">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#0066CC] mx-auto flex items-center justify-center font-bold">
+              <Lock className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-bold text-slate-900">Secure Ordering</h4>
+            <p className="text-[10px] text-slate-500">Safe and secure transactions</p>
+          </div>
+
+          <div className="space-y-1.5 p-2 border-l border-slate-100">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#0066CC] mx-auto flex items-center justify-center font-bold">
+              <Package className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-bold text-slate-900">Bulk Procurement</h4>
+            <p className="text-[10px] text-slate-500">Best deals for bulk requirements</p>
+          </div>
+
+          <div className="space-y-1.5 p-2 border-l border-slate-100">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#0066CC] mx-auto flex items-center justify-center font-bold">
+              <Phone className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-bold text-slate-900">Customer Support</h4>
+            <p className="text-[10px] text-slate-500">Dedicated support whenever you need</p>
+          </div>
+        </div>
+      </section>
 
       {/* 6. CURATED CATEGORY PRODUCT CATALOG WITH FILTER SIDEBAR */}
       <div id="catalog-anchor" className="space-y-8 max-w-7xl mx-auto px-4 lg:px-6">
@@ -1822,26 +2158,61 @@ export default function EnterpriseHomepage({
                 </div>
               </div>
 
-              {/* Sort By Dropdown */}
-              <div className="flex items-center gap-2 ml-auto">
-                <span className="text-xs font-bold text-slate-600 flex items-center gap-1 hidden sm:inline-flex">
-                  <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
-                  Sort By:
-                </span>
-                <select
-                  value={catalogSortBy}
-                  onChange={(e) => setCatalogSortBy(e.target.value as any)}
-                  className="bg-[#F5F7FA] border border-slate-300 hover:border-slate-400 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-[#0077B6] cursor-pointer"
-                >
-                  <option value="relevance">⚡ Featured &amp; Relevance</option>
-                  <option value="price_asc">💰 Price: Low to High</option>
-                  <option value="price_desc">💎 Price: High to Low</option>
-                  <option value="rating_desc">⭐ Highest Clinical Rating</option>
-                  <option value="warranty_desc">🛡️ Longest Warranty Period</option>
-                  <option value="moq_asc">📦 MOQ: Low to High</option>
-                  <option value="brand_asc">🏷️ Brand: A to Z</option>
-                  <option value="newest">✨ Newest Arrivals</option>
-                </select>
+              {/* View Mode Toggle & Sort By Dropdown */}
+              <div className="flex flex-wrap items-center gap-3 ml-auto">
+                {/* View Mode Switcher */}
+                <div className="flex items-center bg-[#F5F7FA] p-1 rounded-xl border border-slate-200 gap-1 shadow-2xs">
+                  <button
+                    onClick={() => setCatalogViewMode('category_wise')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      catalogViewMode === 'category_wise'
+                        ? 'bg-white text-teal-800 shadow-xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Display equipment grouped into category-wise department grids"
+                  >
+                    <span>📑 Category-Wise Grid</span>
+                    <span className="bg-teal-100 text-teal-800 text-[10px] px-1.5 py-0.2 rounded-md font-mono">
+                      {categoryWiseProductGroups.length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setCatalogViewMode('grid')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      catalogViewMode === 'grid'
+                        ? 'bg-white text-[#0077B6] shadow-xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Display all equipment in a single flat grid"
+                  >
+                    <span>🔲 All Products Grid</span>
+                    <span className="bg-slate-200 text-slate-700 text-[10px] px-1.5 py-0.2 rounded-md font-mono">
+                      {filteredMarketplaceProducts.length}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-600 flex items-center gap-1 hidden sm:inline-flex">
+                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+                    Sort By:
+                  </span>
+                  <select
+                    value={catalogSortBy}
+                    onChange={(e) => setCatalogSortBy(e.target.value as any)}
+                    className="bg-[#F5F7FA] border border-slate-300 hover:border-slate-400 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-[#0077B6] cursor-pointer"
+                  >
+                    <option value="relevance">⚡ Featured &amp; Relevance</option>
+                    <option value="price_asc">💰 Price: Low to High</option>
+                    <option value="price_desc">💎 Price: High to Low</option>
+                    <option value="rating_desc">⭐ Highest Clinical Rating</option>
+                    <option value="warranty_desc">🛡️ Longest Warranty Period</option>
+                    <option value="moq_asc">📦 MOQ: Low to High</option>
+                    <option value="brand_asc">🏷️ Brand: A to Z</option>
+                    <option value="newest">✨ Newest Arrivals</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -1859,10 +2230,10 @@ export default function EnterpriseHomepage({
                   </span>
                 )}
 
-                {(filterPriceMin > 0 || filterPriceMax < 2500000) && (
+                {(filterPriceMin > 0 || filterPriceMax < 1000000000) && (
                   <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full font-bold text-[11px]">
                     Price: ₹{filterPriceMin.toLocaleString()} - ₹{filterPriceMax.toLocaleString()}
-                    <button onClick={() => { setFilterPriceMin(0); setFilterPriceMax(2500000); }} className="hover:text-rose-600 cursor-pointer ml-0.5">
+                    <button onClick={() => { setFilterPriceMin(0); setFilterPriceMax(1000000000); }} className="hover:text-rose-600 cursor-pointer ml-0.5">
                       <X className="w-3 h-3" />
                     </button>
                   </span>
@@ -2220,9 +2591,193 @@ export default function EnterpriseHomepage({
               
               {/* Product Grid */}
               {filteredMarketplaceProducts.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-                  {filteredMarketplaceProducts.map(p => renderProductCard(p, true))}
-                </div>
+                catalogViewMode === 'category_wise' ? (
+                  <div className="space-y-6">
+                    {/* Category Quick Jump Sticky Bar */}
+                    {categoryWiseProductGroups.length > 1 && (
+                      <div className="bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl p-3 shadow-xs space-y-2 sticky top-3 z-20">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                            <span className="text-[#0F9D8A]">⚡ Quick Jump:</span>
+                            <span className="text-teal-700 font-bold">({categoryWiseProductGroups.length} Specialty Departments)</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">Click department to scroll directly</span>
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                          {categoryWiseProductGroups.map(group => (
+                            <button
+                              key={group.id}
+                              onClick={() => {
+                                const el = document.getElementById(`cat-grid-${group.id}`);
+                                el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              }}
+                              className="shrink-0 bg-[#F5F7FA] hover:bg-teal-50 border border-slate-200 hover:border-teal-400 text-slate-700 hover:text-teal-900 text-xs font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-2xs cursor-pointer group"
+                            >
+                              <span>{group.icon}</span>
+                              <span>{group.displayName}</span>
+                              <span className="bg-slate-200 group-hover:bg-teal-100 text-slate-700 group-hover:text-teal-800 text-[10px] px-1.5 py-0.2 rounded-md font-mono">
+                                {group.products.length}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Department-wise Product Sections with motion animations */}
+                    <div className="space-y-6">
+                      <AnimatePresence>
+                        {categoryWiseProductGroups.map((group) => {
+                          const isCollapsed = collapsedCategories[group.name];
+                          const activeSub = categorySubFilter[group.name];
+
+                          return (
+                            <motion.section
+                              key={group.id}
+                              id={`cat-grid-${group.id}`}
+                              layout
+                              initial={{ opacity: 0, y: 15 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -15 }}
+                              transition={{ duration: 0.25 }}
+                              className="bg-white rounded-3xl border border-slate-200/90 shadow-xs hover:shadow-md transition-shadow duration-300 overflow-hidden scroll-mt-28"
+                            >
+                              {/* Department Header */}
+                              <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-50 via-teal-50/20 to-white border-b border-slate-200/80 space-y-3">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-teal-500/10 text-teal-700 flex items-center justify-center text-xl shadow-inner border border-teal-500/20 shrink-0">
+                                      {group.icon}
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <h4 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                                          {group.displayName}
+                                        </h4>
+                                        <span className="bg-teal-100 text-teal-800 text-[10px] font-black px-2.5 py-0.5 rounded-full font-mono shadow-2xs">
+                                          {group.products.length} {group.products.length === 1 ? 'Product' : 'Products'}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                        Verified clinical systems &amp; healthcare supplies
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 ml-auto">
+                                    <button
+                                      onClick={() => handleCategoryClick(group.name)}
+                                      className="bg-white hover:bg-slate-50 text-[#0077B6] hover:text-[#005f92] border border-slate-200 hover:border-[#0077B6] text-xs font-bold px-3 py-1.5 rounded-xl transition shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                                      title={`Filter catalog strictly to ${group.displayName}`}
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>Focus Department</span>
+                                    </button>
+                                    <button
+                                      onClick={() => toggleCategoryCollapse(group.name)}
+                                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold p-2 rounded-xl transition cursor-pointer"
+                                      title={isCollapsed ? "Expand section" : "Collapse section"}
+                                    >
+                                      {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Subcategory In-Group Filter Pills */}
+                                {group.subcategories.length > 0 && (
+                                  <div className="pt-2 border-t border-slate-200/60 flex flex-wrap items-center gap-1.5 text-xs">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
+                                      <Layers className="w-3 h-3" /> Subcategories:
+                                    </span>
+                                    <button
+                                      onClick={() => handleSetCategorySubFilter(group.name, '')}
+                                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                                        !activeSub
+                                          ? 'bg-teal-700 text-white font-black shadow-2xs'
+                                          : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                                      }`}
+                                    >
+                                      <span>All</span>
+                                      <span className="text-[9px] opacity-80 font-mono">({group.rawCount})</span>
+                                    </button>
+                                    {group.subcategories.map(sub => {
+                                      const isSubActive = activeSub?.toLowerCase() === sub.name.toLowerCase();
+                                      return (
+                                        <button
+                                          key={sub.name}
+                                          onClick={() => handleSetCategorySubFilter(group.name, sub.name)}
+                                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                                            isSubActive
+                                              ? 'bg-teal-700 text-white font-black shadow-2xs'
+                                              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                                          }`}
+                                        >
+                                          <span>{sub.name}</span>
+                                          <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                                            isSubActive ? 'bg-teal-800 text-teal-100' : 'bg-slate-100 text-slate-500'
+                                          }`}>
+                                            {sub.count}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Responsive Category Product Grid with layout transition */}
+                              {!isCollapsed ? (
+                                <div className="p-4 sm:p-5 bg-slate-50/30 space-y-4">
+                                  <motion.div 
+                                    layout
+                                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"
+                                  >
+                                    <AnimatePresence>
+                                      {group.products.map(p => renderProductCard(p, true))}
+                                    </AnimatePresence>
+                                  </motion.div>
+
+                                  <div className="pt-2 flex justify-between items-center text-xs">
+                                    <span className="text-slate-400 font-medium">
+                                      Showing {group.products.length} {group.products.length === 1 ? 'equipment' : 'equipment items'} in {group.displayName}
+                                    </span>
+                                    <button
+                                      onClick={() => handleCategoryClick(group.name)}
+                                      className="text-teal-700 hover:text-teal-900 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                                    >
+                                      <span>Browse Full {group.displayName} Catalog ({group.rawCount})</span>
+                                      <ArrowRight className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="p-4 text-center text-xs text-slate-500 bg-slate-50/50">
+                                  <button
+                                    onClick={() => toggleCategoryCollapse(group.name)}
+                                    className="text-teal-700 font-bold hover:underline cursor-pointer flex items-center gap-1 mx-auto"
+                                  >
+                                    <span>{group.products.length} products hidden. Click to expand {group.displayName} grid</span>
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </motion.section>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                ) : (
+                  /* Unified Single Grid with layout transitions */
+                  <motion.div 
+                    layout
+                    className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"
+                  >
+                    <AnimatePresence>
+                      {filteredMarketplaceProducts.map(p => renderProductCard(p, true))}
+                    </AnimatePresence>
+                  </motion.div>
+                )
               ) : (
                 /* Empty Search/Filter State */
                 <div className="w-full py-16 px-6 text-center bg-white border border-slate-200 rounded-3xl space-y-4 shadow-xs">
@@ -2284,43 +2839,176 @@ export default function EnterpriseHomepage({
 
       </div>
 
+      {/* PROMOTIONAL BANNER 1: Upgrade Your Healthcare Facility */}
+      <section className="max-w-7xl mx-auto px-4 lg:px-6">
+        <div className="bg-gradient-to-r from-[#1F2937] via-[#0f2e46] to-[#0077B6] rounded-3xl p-8 sm:p-12 text-white shadow-xl relative overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-8">
+          <div className="space-y-4 max-w-2xl z-10">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-[#0F9D8A] text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                HEALTHCARE EXPANSION PROGRAM
+              </span>
+              <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2.5 py-1 rounded-full uppercase font-mono shadow-sm">
+                0% EMI Available
+              </span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-tight">
+              Upgrade Your Healthcare Facility
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+              Equip your hospital, ICU, OT, Diagnostic Lab, or Specialty Clinic with flexible institutional financing, certified biomedical installation &amp; calibration, and Pan-India logistics.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs font-bold text-teal-200">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-[#0F9D8A] shrink-0" />
+                <span>0% EMI Schemes</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-[#0F9D8A] shrink-0" />
+                <span>Biomedical Demo</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-[#0F9D8A] shrink-0" />
+                <span>GST Tax Invoice</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-[#0F9D8A] shrink-0" />
+                <span>PAN-India Logistics</span>
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-3 pt-3">
+              <button
+                onClick={() => onNavigate('rfqs')}
+                className="bg-[#0F9D8A] hover:bg-[#0c8272] text-white font-black text-xs sm:text-sm px-7 py-3.5 rounded-xl transition shadow-lg flex items-center gap-2 cursor-pointer"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Book Procurement Consultation</span>
+              </button>
+              <button
+                onClick={() => {
+                  const el = document.getElementById('catalog-anchor');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm px-6 py-3.5 rounded-xl transition backdrop-blur-sm border border-white/20 flex items-center gap-2 cursor-pointer"
+              >
+                <span>Explore Turnkey Packages</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="z-10 shrink-0 hidden lg:block">
+            <div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 text-center space-y-3 w-72 shadow-2xl">
+              <div className="w-16 h-16 bg-[#0077B6] text-white rounded-2xl flex items-center justify-center mx-auto text-2xl font-bold shadow-lg">
+                🏥
+              </div>
+              <h4 className="text-sm font-black text-white">Institutional Procurement Desk</h4>
+              <p className="text-[11px] text-slate-200">Instant quotation within 2 hours for verified medical directors</p>
+              <div className="pt-2 border-t border-white/20">
+                <span className="text-[11px] font-mono font-bold text-teal-300">Helpline: +91 9103500592</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* 7. REFURBISHED MEDICAL EQUIPMENT */}
       <section className="max-w-7xl mx-auto px-4 lg:px-6">
         <div className="bg-[#F5F7FA] rounded-3xl p-6 sm:p-8 border border-slate-200 space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="bg-[#0077B6] text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="bg-[#0077B6] text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                   Certified Refurbished
                 </span>
                 <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">
                   1-Year Pan-India Service Warranty
                 </span>
+                <span className="bg-teal-100 text-teal-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
+                  {refurbishedEquipmentProducts.length} {refurbishedEquipmentProducts.length === 1 ? 'Product' : 'Products'} Available
+                </span>
               </div>
               <h2 className="text-xl font-black text-[#1F2937] mt-1">Refurbished Imaging &amp; ICU Equipment</h2>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                OEM-calibrated clinical diagnostic imaging systems &amp; critical care ventilators tested to original factory specifications
+              </p>
             </div>
-            <button onClick={() => handleCategoryClick('Refurbished Equipment')} className="text-xs font-bold text-[#0F9D8A] hover:underline cursor-pointer">
-              Explore Refurbished Catalog
+            <button 
+              onClick={() => handleCategoryClick('Refurbished Equipment')} 
+              className="text-xs font-bold text-[#0F9D8A] hover:underline cursor-pointer flex items-center gap-1 shrink-0"
+            >
+              <span>Explore Refurbished Catalog ({refurbishedEquipmentProducts.length})</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {["1.5T MRI Machine", "64-Slice CT Scanner", "3D Color Doppler Ultrasound", "Digital X-Ray System"].map((title, i) => (
-              <div key={title} className="bg-white rounded-2xl p-4 border border-slate-200 space-y-2 text-center shadow-sm hover:shadow-md transition">
-                <div className="h-28 rounded-xl bg-slate-100 flex items-center justify-center p-2">
-                  <Activity className="w-8 h-8 text-[#0077B6]" />
+          {refurbishedEquipmentProducts.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+              {refurbishedEquipmentProducts.map(p => renderProductCard(p, true))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { title: "1.5T MRI Machine", spec: "Superconducting Magnet • 16-Ch RF Coils", sub: "Diagnostic Imaging" },
+                { title: "64-Slice CT Scanner", spec: "0.33s Rotation • Ultra Low-Dose ASiR", sub: "Radiology Systems" },
+                { title: "3D Color Doppler Ultrasound", spec: "Convex + Linear + Cardiac Probes", sub: "Ultrasound & Sonography" },
+                { title: "Digital X-Ray System", spec: "High-Frequency 50kW Generator • Wireless FPD", sub: "Digital Radiography" }
+              ].map((item) => (
+                <div key={item.title} className="bg-white rounded-2xl p-4 border border-slate-200 space-y-2 text-center shadow-xs hover:shadow-md transition">
+                  <div className="h-28 rounded-xl bg-slate-100 flex flex-col items-center justify-center p-2 text-center">
+                    <Activity className="w-8 h-8 text-[#0077B6] mb-1" />
+                    <span className="text-[10px] text-teal-700 font-bold">{item.sub}</span>
+                  </div>
+                  <h4 className="text-xs font-bold text-[#1F2937] leading-tight">{item.title}</h4>
+                  <p className="text-[10px] text-slate-500 line-clamp-1">{item.spec}</p>
+                  <p className="text-xs font-black text-[#0F9D8A] font-mono">Up to 50% OFF OEM Price</p>
+                  <button 
+                    onClick={() => onNavigate('rfqs')}
+                    className="w-full bg-[#0077B6] hover:bg-[#005f92] text-white font-bold text-[11px] py-1.5 rounded-xl transition mt-1 cursor-pointer"
+                  >
+                    Request Quote / RFQ
+                  </button>
                 </div>
-                <h4 className="text-xs font-bold text-[#1F2937]">{title}</h4>
-                <p className="text-[10px] text-slate-500">Fully Calibrated &amp; Tested</p>
-                <p className="text-xs font-black text-[#0F9D8A] font-mono">Up to 50% OFF</p>
-                <button 
-                  onClick={() => onNavigate('rfqs')}
-                  className="w-full bg-[#0077B6] hover:bg-[#005f92] text-white font-bold text-[11px] py-1.5 rounded-xl transition mt-1"
-                >
-                  Request Quote
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* PROMOTIONAL BANNER 2: Bulk Purchase / Hospital Procurement Banner */}
+      <section className="max-w-7xl mx-auto px-4 lg:px-6">
+        <div className="bg-gradient-to-r from-[#0077B6] via-[#0F9D8A] to-emerald-800 rounded-3xl p-8 sm:p-12 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-8">
+          <div className="space-y-4 max-w-xl">
+            <span className="bg-white/20 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider">
+              BULK PURCHASE &amp; RFQ TENDERS
+            </span>
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight">
+              Procuring for Hospitals &amp; Clinics? Get Custom Institutional Pricing &amp; RFQ Support
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-100 leading-relaxed font-medium">
+              Dedicated biomedical account managers, consolidated GST tax invoicing, and direct factory volume discounts for multi-bed hospitals, nursing homes, and diagnostic centers.
+            </p>
+            <div className="flex flex-wrap gap-4 text-xs font-bold pt-1">
+              <span>✓ Verified OEM Pricing</span>
+              <span>✓ Escrow Payment Safety</span>
+              <span>✓ Turnkey Setup &amp; Training</span>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 shrink-0">
+            <button
+              onClick={() => onNavigate('rfqs')}
+              className="bg-white text-[#1F2937] hover:bg-slate-100 font-extrabold text-xs sm:text-sm px-7 py-4 rounded-2xl transition shadow-xl cursor-pointer"
+            >
+              Submit RFQ Tender
+            </button>
+            <a
+              href="https://wa.me/919103500592"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm px-6 py-4 rounded-2xl transition shadow-xl text-center flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4 text-emerald-400" />
+              <span>Talk to Specialist</span>
+            </a>
           </div>
         </div>
       </section>
